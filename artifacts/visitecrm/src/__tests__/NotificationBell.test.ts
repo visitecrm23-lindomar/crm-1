@@ -190,4 +190,24 @@ describe("NotificationBell — SSE wiring", () => {
 
     expect(es.closeCount).toBe(1);
   });
+
+  it("does not open a new stream when unmounted before the 5s reconnect fires", async () => {
+    const handle = await renderComponent(createElement(NotificationBell));
+    const first = MockEventSource.last();
+
+    // A network hiccup schedules a reconnect 5s out.
+    await flushAct(() => first.emitError());
+    expect(first.closeCount).toBe(1);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    // User navigates away before the reconnect timer fires.
+    await handle.unmount();
+
+    // Advancing past the reconnect window must NOT create a leaked connection.
+    await flushAct(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
 });

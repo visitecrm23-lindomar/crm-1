@@ -45,10 +45,12 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef = useRef(false);
   const { toast } = useToast();
 
   const openStream = useCallback(() => {
-    if (esRef.current) return;
+    if (unmountedRef.current || esRef.current) return;
 
     const url = clientPortalApi.getNotificationStreamUrl();
     const es = new EventSource(url, { withCredentials: true });
@@ -101,13 +103,20 @@ export function NotificationBell({ primaryColor = "#2563eb" }: Props) {
     es.onerror = () => {
       es.close();
       esRef.current = null;
-      setTimeout(openStream, 5_000);
+      if (unmountedRef.current) return;
+      reconnectRef.current = setTimeout(openStream, 5_000);
     };
   }, [toast]);
 
   useEffect(() => {
+    unmountedRef.current = false;
     openStream();
     return () => {
+      unmountedRef.current = true;
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
+      }
       esRef.current?.close();
       esRef.current = null;
     };
