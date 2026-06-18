@@ -740,6 +740,91 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // Warning: when discountReferralCode is set but the primary lookup finds no
+  // matching COMPLETED referral record (e.g. referral row has no reservation_id
+  // due to an incomplete backfill), a warn must be emitted with reservationId
+  // and discountReferralCode so the issue is visible in production logs.
+  it("emits a warn when discountReferralCode is set but no referral record is found by reservationId", async () => {
+    const warnArgs: unknown[][] = [];
+
+    const app = express();
+    app.use(express.json());
+    app.use(
+      (
+        req: express.Request & { log?: Record<string, unknown> },
+        _res: express.Response,
+        next: express.NextFunction,
+      ) => {
+        const noop = (..._a: unknown[]) => {};
+        req.log = {
+          trace: noop,
+          debug: noop,
+          info: noop,
+          warn: (...args: unknown[]) => { warnArgs.push(args); },
+          error: noop,
+          fatal: noop,
+        } as never;
+        next();
+      },
+    );
+    app.use("/api", reservationsRouter);
+    app.use(errorHandler);
+
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "50",
+      clientId: "client-001",
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] Reversal 3 — primary lookup by reservationId → [] (no matching record)
+    //   [1] Reversal 4 — payments lookup (empty)
+    //   [2] Reversal 4 — loyalty member lookup → not found, skip clawback
+    //   [3] re-fetch updated reservation
+    const tx = buildTxMock([
+      [], // primary lookup → no record found (missing reservation_id scenario)
+      [], // no payments
+      [], // Reversal 4 loyalty member lookup → not found
+      [cancelled],
+    ]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // A warn must have been emitted
+    expect(warnArgs.length).toBeGreaterThan(0);
+
+    // The warn must include reservationId and discountReferralCode
+    const referralWarn = warnArgs.find(
+      (call) =>
+        typeof call[0] === "object" &&
+        call[0] !== null &&
+        "reservationId" in (call[0] as Record<string, unknown>) &&
+        "discountReferralCode" in (call[0] as Record<string, unknown>),
+    );
+    expect(referralWarn).toBeDefined();
+    expect((referralWarn![0] as Record<string, unknown>)["reservationId"]).toBe("res-001");
+    expect((referralWarn![0] as Record<string, unknown>)["discountReferralCode"]).toBe("REF-XYZ");
+
+    // No referral or client update must have run (reversal was skipped)
+    const referralUpdate = capturedUpdates.find(
+      (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
+    );
+    expect(referralUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   it("claws back loyalty points earned from payments when reservation is cancelled", async () => {
     const app = buildReservationsApp();
     const existing = makeReservation({ clientId: "client-001" });

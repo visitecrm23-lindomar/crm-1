@@ -1204,6 +1204,11 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
 
           if (byReservation) {
             referralRecord = byReservation;
+          } else {
+            req.log.warn(
+              { reservationId: req.params.id, discountReferralCode: existing.discountReferralCode },
+              "Referral reversal skipped: discountReferralCode is set but no COMPLETED referral record found by reservationId — possible missing reservation_id on referral row",
+            );
           }
 
           if (referralRecord) {
