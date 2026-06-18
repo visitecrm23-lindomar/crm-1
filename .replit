@@ -123,12 +123,12 @@ isValidation = true
 name = "artifacts/cliente-app: expo"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/cliente-app run dev"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=19000 pnpm --filter @workspace/cliente-app run dev"
 
   [agent]
 stack = "BEST_EFFORT_FALLBACK"
