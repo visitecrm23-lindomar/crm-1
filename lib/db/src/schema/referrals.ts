@@ -44,6 +44,7 @@ export const referralsTable = pgTable("referrals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   isActive: boolean("is_active").notNull().default(true),
   reservationId: text("reservation_id"),
+  source: text("source"),
   notes: text("notes"),
   fraudFlag: boolean("fraud_flag").notNull().default(false),
   fraudReason: text("fraud_reason"),

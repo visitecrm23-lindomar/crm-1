@@ -107,6 +107,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     referrerId,
     code: referralCode,
     status: REFERRAL_STATUS.COMPLETED,
+    source: "store",
     referredId: referredClientId,
     referredEmail: customerEmail,
     referredName: customerName,

@@ -889,6 +889,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
           referrerId: serverReferralReferrerId,
           code: serverReferralCode,
           status: REFERRAL_STATUS.COMPLETED,
+          source: "crm",
           referredId: parsed.data.clientId,
           reservationId: id,
           discountApplied: true,
