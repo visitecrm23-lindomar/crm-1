@@ -571,7 +571,7 @@ router.post("/referrals/:id/resend-bonus-release", async (req, res, next: NextFu
       .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
       .limit(1);
 
-    if (!row) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
+    if (!row) { next(new AppError("Indicação não encontrada", 422, "NOT_FOUND")); return; }
     if (row.status !== REFERRAL_STATUS.COMPLETED) {
       next(new ValidationError("Reenvio disponível apenas para indicações com status 'concluído'", "UNPROCESSABLE"));
       return;

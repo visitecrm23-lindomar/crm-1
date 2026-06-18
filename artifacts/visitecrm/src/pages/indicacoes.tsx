@@ -2133,7 +2133,7 @@ export default function Indicacoes() {
                 }}
               >
                 <Mail className="w-4 h-4 mr-2" />
-                Reenviar notif. de bônus
+                Reenviar notificação de bônus
               </Button>
             )}
             {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && !selectedReferral.bonusPaid && (
