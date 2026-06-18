@@ -2,6 +2,8 @@ import { ROLES } from "@workspace/permissions";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 
 const { selectQueue, mockSelect, mockUpdate } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
@@ -18,7 +20,7 @@ vi.mock("@workspace/db", () => ({
     delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })),
     transaction: vi.fn(),
   },
-  tripsTable: {},
+  tripsTable: { id: "tripsTable.id", tenantId: "tripsTable.tenantId" },
   reservationsTable: {},
   tenantsTable: {},
   plansTable: {},
@@ -144,6 +146,8 @@ vi.mock("../routes/payments.js", () => ({
 }));
 
 import { requireAuth } from "../lib/tenant.js";
+import { addSeatClient, removeSeatClient } from "../lib/seat-sse.js";
+import { eq } from "drizzle-orm";
 import tripsRouter from "../routes/trips.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
 
@@ -399,5 +403,131 @@ describe("PATCH /api/trips/:id — free passenger seat conflict rule", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe("trip-001");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/trips/:id/seats/stream (admin seat-availability SSE)
+//
+// The authenticated admin seat map subscribes to this stream so staff see seats
+// fill in live. Task #38 covered the public storefront stream and Task #40 the
+// broadcast itself (emitSeatUpdate); this covers the admin endpoint's HTTP
+// lifecycle: it must reject unauthenticated callers, scope the trip lookup to
+// the caller's tenant, register the client only on success, and clean up on
+// disconnect. A regression here would either leak the stream to anonymous
+// callers or strand dead connections / stop staff from seeing live updates.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/trips/:id/seats/stream — admin seat-availability SSE", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+  const addSeatClientMock = vi.mocked(addSeatClient);
+  const removeSeatClientMock = vi.mocked(removeSeatClient);
+  const eqMock = vi.mocked(eq);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    selectQueue.length = 0;
+    requireAuthMock.mockResolvedValue(FAKE_USER as never);
+    mockSelect.mockImplementation(() => makeChain(selectQueue.shift() ?? []));
+  });
+
+  it("rejects an unauthenticated request with 401 and registers no client", async () => {
+    const app = buildApp();
+    // Model requireAuth's real unauthenticated behavior: it sends the 401 itself
+    // and returns null, after which the handler returns before any registration.
+    requireAuthMock.mockImplementationOnce(async (_req, res) => {
+      res.status(401).json({ code: "UNAUTHORIZED" });
+      return null;
+    });
+
+    const res = await request(app).get("/api/trips/trip-001/seats/stream");
+
+    expect(res.status).toBe(401);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
+    expect(addSeatClientMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 and registers no client when the trip does not exist", async () => {
+    const app = buildApp();
+    selectQueue.push([]); // trip lookup → no row
+
+    const res = await request(app).get("/api/trips/missing/seats/stream");
+
+    expect(res.status).toBe(404);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
+    expect(addSeatClientMock).not.toHaveBeenCalled();
+  });
+
+  it("scopes the trip lookup to the caller's tenant so cross-tenant trips are not streamable", async () => {
+    const app = buildApp();
+    // A trip owned by another tenant is filtered out by the WHERE clause, so the
+    // tenant-scoped lookup returns no row → 404, never an SSE upgrade.
+    selectQueue.push([]); // tenant-scoped lookup → no row for a foreign trip
+
+    const res = await request(app).get("/api/trips/foreign-trip/seats/stream");
+
+    expect(res.status).toBe(404);
+    expect(addSeatClientMock).not.toHaveBeenCalled();
+    // What makes this a *cross-tenant* guard (not just a missing-trip one): the
+    // handler must have filtered by the caller's tenantId. If the tenant
+    // predicate were dropped, eq would never be called with this value and a
+    // foreign trip could be streamed.
+    expect(eqMock).toHaveBeenCalledWith("tripsTable.tenantId", FAKE_USER.tenantId);
+  });
+
+  it("upgrades to SSE, registers the client via addSeatClient, and removes it on req close", async () => {
+    const app = buildApp();
+    selectQueue.push([{ id: "trip-001" }]); // tenant-scoped lookup → found
+
+    // The SSE handler never ends the response, so supertest would hang. Drive a
+    // real http client against a listening server and close the socket to
+    // trigger the req "close" cleanup path.
+    const server = app.listen(0);
+    await new Promise<void>((resolve) => server.on("listening", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      await new Promise<void>((resolve) => {
+        let poll: ReturnType<typeof setInterval> | undefined;
+        let fallback: ReturnType<typeof setTimeout> | undefined;
+        const finish = () => {
+          if (poll) clearInterval(poll);
+          if (fallback) clearTimeout(fallback);
+          resolve();
+        };
+
+        const clientReq = http.request(
+          {
+            host: "127.0.0.1",
+            port,
+            path: "/api/trips/trip-001/seats/stream",
+            method: "GET",
+          },
+          (res) => {
+            expect(res.statusCode).toBe(200);
+            expect(res.headers["content-type"]).toContain("text/event-stream");
+            res.on("data", () => {});
+            // Headers flushed → client is registered; now close the connection.
+            setImmediate(() => clientReq.destroy());
+          },
+        );
+        clientReq.on("error", () => {}); // ignore ECONNRESET from destroy()
+        clientReq.end();
+
+        // Resolve as soon as the cleanup path runs (avoids fixed-timeout flake);
+        // the fallback bounds the wait if cleanup never fires.
+        poll = setInterval(() => {
+          if (removeSeatClientMock.mock.calls.length > 0) finish();
+        }, 10);
+        fallback = setTimeout(finish, 2000);
+      });
+
+      expect(addSeatClientMock).toHaveBeenCalledTimes(1);
+      expect(addSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+      expect(removeSeatClientMock).toHaveBeenCalledTimes(1);
+      expect(removeSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
