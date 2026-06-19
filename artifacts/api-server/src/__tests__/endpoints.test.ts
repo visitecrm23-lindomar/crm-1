@@ -773,6 +773,74 @@ describe("POST /api/public/store/:slug/referral/validate — suspended attempt t
 });
 
 // ---------------------------------------------------------------------------
+// Tests: GET /api/public/store/:slug/referral/info — suspended attempt tracking
+//
+// The public referral-info lookup writes the same best-effort
+// `db.update(clientsTable).set({ referralSuspendedAttemptAt })` and rejects with
+// REFERRAL_CODE_SUSPENDED when the referrer's code is not "active". This mirrors
+// the POST /referral/validate path; both write paths must stay covered so a
+// regression in either is caught.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/public/store/:slug/referral/info — suspended attempt tracking", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLimit.mockReset();
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+  });
+
+  it("records referralSuspendedAttemptAt and returns REFERRAL_CODE_SUSPENDED for a blocked code", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                       // getActiveStore
+      .mockResolvedValueOnce([{ settings: {} }])                 // tenant settings
+      .mockResolvedValueOnce([{                                  // referrer lookup
+        id: "client-001",
+        name: "Maria Souza",
+        referralCodeStatus: "blocked",
+      }]);
+
+    const res = await request(app)
+      .get("/api/public/store/minha-loja/referral/info?code=MARIA2026");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "REFERRAL_CODE_SUSPENDED", valid: false });
+
+    // The fire-and-forget suspended-attempt update must have been triggered.
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
+    );
+    expect(mockUpdateExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT record a suspended attempt for an active code (passes the status gate)", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                       // getActiveStore
+      .mockResolvedValueOnce([{ settings: {} }])                 // tenant settings
+      .mockResolvedValueOnce([{                                  // referrer lookup
+        id: "client-001",
+        name: "Maria Souza",
+        referralCodeStatus: "active",
+      }])
+      .mockResolvedValueOnce([]);                                // referral settings lookup
+
+    const res = await request(app)
+      .get("/api/public/store/minha-loja/referral/info?code=MARIA2026");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ code: "MARIA2026", referrerName: "Maria Souza" });
+    // No suspended-attempt timestamp update for active codes.
+    expect(mockUpdateSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: reservation/passenger mutation authorization (RBAC)
 //
 // The `suporte` (SUPPORT) role has RESERVATIONS: [VIEW] only in the permissions
