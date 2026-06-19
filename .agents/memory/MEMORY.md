@@ -27,3 +27,4 @@
 - [Endpoint test db mock exports](endpoint-test-db-mock-exports.md) — endpoints.test.ts mocks @workspace/db with a hand-listed table set; a handler touching an unlisted table throws → 500 (not the expected 4xx). Add the table when a positive control reaches new DB reads.
 - [Clerk dev proxy](clerk-dev-proxy.md) — dev frontend MUST route Clerk FAPI via same-origin /api/__clerk (https-only guard) or iframe third-party cookies → 401 loop; prod uses no proxy unless VITE_CLERK_PROXY_URL is real.
 - [Post-merge build check](post-merge-build-check.md) — green tests ≠ working deploy; vitest mocks hide wrong-module imports that esbuild's static export check (api-server prod build) rejects. Run `pnpm --filter @workspace/api-server run build` after any merge.
+- [Post-merge timeout](post-merge-timeout.md) — post-merge.sh (install+migrate+seed) + workflow reconciliation naturally ~2min; lockfile-changing merges make install ~90s. Timeout raised 180s→300s; don't lower it.
