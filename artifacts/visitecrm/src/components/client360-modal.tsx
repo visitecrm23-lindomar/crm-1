@@ -452,20 +452,19 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
 
   const isAdmin = ADMIN_ROLES.includes(me?.role ?? "");
 
-  async function handleToggleCodeStatus() {
+  async function handleSetCodeStatus(newStatus: "active" | "blocked" | "cancelled") {
     if (!data?.referralCode) return;
-    const currentStatus = data?.referralCodeStatus ?? "active";
-    const newStatus = currentStatus === "active" ? "suspended" : "active";
     setTogglingStatus(true);
     try {
-      const res = await fetch(`${API_BASE_ADMIN}/api/clients/${clientId}/referral-code-status`, {
+      const res = await fetch(`${API_BASE_ADMIN}/api/clients/${clientId}/referral-code`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error("Failed");
-      toast({ title: newStatus === "active" ? "Código de indicação ativado" : "Código de indicação suspenso" });
+      const labels: Record<string, string> = { active: "ativado", blocked: "bloqueado", cancelled: "cancelado" };
+      toast({ title: `Código de indicação ${labels[newStatus] ?? newStatus}` });
       refetch();
     } catch {
       toast({ title: "Erro ao alterar status do código", variant: "destructive" });
@@ -530,22 +529,54 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
                     <ShieldCheck className="w-3 h-3" /> Ativo
                   </span>
+                ) : (data?.referralCodeStatus) === "blocked" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+                    <Ban className="w-3 h-3" /> Bloqueado
+                  </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                    <Ban className="w-3 h-3" /> Suspenso
+                    <XCircle className="w-3 h-3" /> Cancelado
                   </span>
                 )}
                 {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={`h-7 text-xs ${(data?.referralCodeStatus ?? "active") === "active" ? "text-red-600 border-red-300 hover:bg-red-50" : "text-green-700 border-green-300 hover:bg-green-50"}`}
-                    onClick={handleToggleCodeStatus}
-                    disabled={togglingStatus}
-                  >
-                    {togglingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : (data?.referralCodeStatus ?? "active") === "active" ? <Ban className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
-                    {(data?.referralCodeStatus ?? "active") === "active" ? "Suspender" : "Ativar"}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {(data?.referralCodeStatus ?? "active") !== "active" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50"
+                        onClick={() => handleSetCodeStatus("active")}
+                        disabled={togglingStatus}
+                      >
+                        {togglingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
+                        Ativar
+                      </Button>
+                    )}
+                    {(data?.referralCodeStatus ?? "active") === "active" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs text-yellow-700 border-yellow-300 hover:bg-yellow-50"
+                        onClick={() => handleSetCodeStatus("blocked")}
+                        disabled={togglingStatus}
+                      >
+                        {togglingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3 mr-1" />}
+                        Bloquear
+                      </Button>
+                    )}
+                    {(data?.referralCodeStatus ?? "active") !== "cancelled" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleSetCodeStatus("cancelled")}
+                        disabled={togglingStatus}
+                      >
+                        {togglingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3 mr-1" />}
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (

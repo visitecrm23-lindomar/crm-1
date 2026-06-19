@@ -2499,7 +2499,7 @@ export interface UpdateReferralSettingsBody {
 export interface ClientReferralInfo {
   /** @nullable */
   referralCode: string | null;
-  referralCodeStatus: string;
+  referralCodeStatus: "active" | "blocked" | "cancelled";
   totalReferrals: number;
   successfulReferrals: number;
   referralEarnings: number;

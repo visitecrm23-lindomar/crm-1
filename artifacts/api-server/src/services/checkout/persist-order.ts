@@ -443,7 +443,8 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     const nameParts = args.data.customerName.trim().split(/\s+/);
     const namePart = nameParts[0] ?? "CLI";
     const year = new Date().getFullYear();
-    generateAndAssignReferralCode(reservationClientId, args.store.tenantId, undefined, namePart, year).catch((err: unknown) => {
+    const baseCode = `${namePart.toUpperCase().slice(0, 6)}${year}`;
+    generateAndAssignReferralCode(reservationClientId, args.store.tenantId, baseCode, namePart, year).catch((err: unknown) => {
       console.error("[checkout/persist-order] Failed to generate referral code for new client:", err);
     });
   }
