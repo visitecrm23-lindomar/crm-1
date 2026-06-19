@@ -29,7 +29,15 @@ router.get("/referrals/validate/:code", async (req, res, next: NextFunction): Pr
     if (!me) return;
     const { code } = req.params;
 
-    const [referral] = await db.select().from(referralsTable)
+    const [referral] = await db
+      .select({
+        id: referralsTable.id,
+        bonusAmount: referralsTable.bonusAmount,
+        referrerId: referralsTable.referrerId,
+        referrerCodeStatus: clientsTable.referralCodeStatus,
+      })
+      .from(referralsTable)
+      .leftJoin(clientsTable, eq(referralsTable.referrerId, clientsTable.id))
       .where(and(
         eq(referralsTable.tenantId, me.tenantId),
         eq(referralsTable.code, code),
@@ -38,6 +46,11 @@ router.get("/referrals/validate/:code", async (req, res, next: NextFunction): Pr
 
     if (!referral) {
       res.json({ valid: false, bonusAmount: 0, message: "Código de indicação inválido ou já utilizado" });
+      return;
+    }
+
+    if (referral.referrerCodeStatus && referral.referrerCodeStatus !== "active") {
+      res.json({ valid: false, bonusAmount: 0, message: "Código do indicador bloqueado ou cancelado" });
       return;
     }
 

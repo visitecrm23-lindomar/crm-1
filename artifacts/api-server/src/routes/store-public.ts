@@ -1198,7 +1198,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     }
 
     if (referrer.referralCodeStatus !== "active") {
-      next(new ValidationError("Código de indicação suspenso", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
+      next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
     // Get discount % from referral settings
@@ -1209,6 +1209,8 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       expirationDays: referralSettingsTable.expirationDays,
       allowSelfReferral: referralSettingsTable.allowSelfReferral,
       requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
+      minPurchaseAmount: referralSettingsTable.minPurchaseAmount,
+      maxReferralsPerUser: referralSettingsTable.maxReferralsPerUser,
     }).from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, store.tenantId)).limit(1);
 
@@ -1256,6 +1258,36 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     const discountLabel = discountType === "fixed"
       ? `R$ ${discountValue.toFixed(2).replace(".", ",")}`
       : `${discountValue}%`;
+
+    // Enforce minPurchaseAmount: reject if cart total is below the configured minimum
+    const minPurchaseAmount = settings?.minPurchaseAmount != null ? Number(settings.minPurchaseAmount) : 0;
+    if (minPurchaseAmount > 0 && cartTotal > 0 && cartTotal < minPurchaseAmount) {
+      next(new ValidationError(
+        `Valor mínimo para indicação: R$ ${minPurchaseAmount.toFixed(2).replace(".", ",")}`,
+        "REFERRAL_MIN_PURCHASE",
+        { valid: false },
+      ));
+      return;
+    }
+
+    // Enforce maxReferralsPerUser: reject if referrer has already hit their limit
+    const maxReferralsPerUser = settings?.maxReferralsPerUser != null ? Number(settings.maxReferralsPerUser) : 0;
+    if (maxReferralsPerUser > 0) {
+      const [countRow] = await db
+        .select({ cnt: sql<string>`COALESCE(successful_referrals, 0)` })
+        .from(clientsTable)
+        .where(eq(clientsTable.id, referrer.id))
+        .limit(1);
+      const currentCount = countRow ? Number(countRow.cnt) : 0;
+      if (currentCount >= maxReferralsPerUser) {
+        next(new ValidationError(
+          "Este indicador atingiu o limite máximo de indicações",
+          "REFERRAL_LIMIT_REACHED",
+          { valid: false },
+        ));
+        return;
+      }
+    }
 
     const validatorIp = getClientIp(req);
     const validatorCookieId = parsed.data.cookieId;

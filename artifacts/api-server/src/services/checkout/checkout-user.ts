@@ -17,7 +17,12 @@ export interface UpsertCheckoutClientArgs {
   createdById: string;
 }
 
-export async function upsertCheckoutClient(tx: Tx, args: UpsertCheckoutClientArgs): Promise<string> {
+export interface UpsertCheckoutClientResult {
+  clientId: string;
+  isNew: boolean;
+}
+
+export async function upsertCheckoutClient(tx: Tx, args: UpsertCheckoutClientArgs): Promise<UpsertCheckoutClientResult> {
   const { tenantId, email, name, phone, cpf, birthDate, createdById } = args;
 
   const [existing] = await tx
@@ -40,7 +45,7 @@ export async function upsertCheckoutClient(tx: Tx, args: UpsertCheckoutClientArg
     if (Object.keys(updateFields).length > 0) {
       await tx.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existing.id));
     }
-    return existing.id;
+    return { clientId: existing.id, isNew: false };
   }
 
   const newClientId = generateId();
@@ -63,5 +68,5 @@ export async function upsertCheckoutClient(tx: Tx, args: UpsertCheckoutClientArg
     ...(cpfToInsert ? { cpf: cpfToInsert } : {}),
     ...(birthDate ? { birthDate } : {}),
   });
-  return newClientId;
+  return { clientId: newClientId, isNew: true };
 }

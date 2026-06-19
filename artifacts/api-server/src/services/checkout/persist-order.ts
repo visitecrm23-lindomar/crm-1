@@ -23,6 +23,7 @@ import {
   buildReservationNumber,
 } from "../../lib/reservation-number";
 import { upsertCheckoutClient } from "./checkout-user";
+import { generateAndAssignReferralCode } from "../../lib/referral-code";
 import { lockTripsForCheckout, lockProductsForCheckout } from "./order-locks";
 import { recordReferralConversion, type ReferralConversionResult } from "./referral-conversion";
 import type { Tx } from "./tx";
@@ -321,8 +322,9 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       quantityByProductId: args.quantityByProductId,
     });
 
+    let checkoutClientIsNew = false;
     if (args.reservationCreatedById) {
-      reservationClientId = await upsertCheckoutClient(tx, {
+      const checkoutClientResult = await upsertCheckoutClient(tx, {
         tenantId: args.store.tenantId,
         email: args.data.customerEmail,
         name: args.data.customerName,
@@ -331,6 +333,8 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         birthDate: args.parsedBirthDate,
         createdById: args.reservationCreatedById,
       });
+      reservationClientId = checkoutClientResult.clientId;
+      checkoutClientIsNew = checkoutClientResult.isNew;
     }
 
     await writeOrderAndItems(tx, args, reservationClientId);
@@ -431,6 +435,16 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       tenantId: args.store.tenantId,
     }).catch((err) => {
       console.error("[checkout/persist-order] Failed to dispatch referral WhatsApp:", err);
+    });
+  }
+
+  // Auto-generate referral code for new checkout clients (fire-and-forget, post-commit)
+  if (checkoutClientIsNew && reservationClientId) {
+    const nameParts = args.data.customerName.trim().split(/\s+/);
+    const namePart = nameParts[0] ?? "CLI";
+    const year = new Date().getFullYear();
+    generateAndAssignReferralCode(reservationClientId, args.store.tenantId, undefined, namePart, year).catch((err: unknown) => {
+      console.error("[checkout/persist-order] Failed to generate referral code for new client:", err);
     });
   }
 

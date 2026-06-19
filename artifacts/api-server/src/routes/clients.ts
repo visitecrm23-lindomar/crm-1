@@ -726,14 +726,14 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
   }
 });
 
-router.patch("/clients/:id/referral-code-status", async (req, res, next: NextFunction): Promise<void> => {
+router.patch("/clients/:id/referral-code", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const client = await requireClientAccess(me, req.params.id);
     const parsed = z.object({
-      status: z.enum(["active", "suspended"]),
+      status: z.enum(["active", "blocked", "cancelled"]),
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const [updated] = await db.update(clientsTable)

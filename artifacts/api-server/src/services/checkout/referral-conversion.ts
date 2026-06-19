@@ -60,12 +60,15 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       tiersConfig: referralSettingsTable.tiersConfig,
       expirationDays: referralSettingsTable.expirationDays,
       pointsPerReferral: referralSettingsTable.pointsPerReferral,
+      discountExpirationDays: referralSettingsTable.discountExpirationDays,
+      maxReferralsPerUser: referralSettingsTable.maxReferralsPerUser,
     })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.tenantId, tenantId))
     .limit(1);
 
   const baseBonusValue = refSettings ? Number(refSettings.bonusValue) : 10;
+  const maxReferralsPerUser = refSettings?.maxReferralsPerUser != null ? Number(refSettings.maxReferralsPerUser) : 0;
   const conversionAt = new Date();
 
   // Apply active campaign bonus using the same timestamp that will be
@@ -83,12 +86,19 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
     .limit(1);
 
   const currentCompleted = referrer?.successfulReferrals ?? 0;
+
+  // Enforce maxReferralsPerUser cap — if limit is reached (and > 0), skip conversion gracefully
+  if (maxReferralsPerUser > 0 && currentCompleted >= maxReferralsPerUser) {
+    return { tierUpgraded: false, newTierLevel: "bronze", newTierLabel: "Bronze", bonusMultiplier: 1 };
+  }
+
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
   const bonusAmount = roundMoney(adjustedBase * tier.bonusMultiplier + fixedExtra);
 
   const referralId = generateId();
 
-  const expirationDays = refSettings?.expirationDays ?? 30;
+  const discountExpirationDays = refSettings?.discountExpirationDays != null ? Number(refSettings.discountExpirationDays) : null;
+  const expirationDays = discountExpirationDays ?? (refSettings?.expirationDays != null ? Number(refSettings.expirationDays) : 30);
   const expiresAt = new Date(conversionAt);
   expiresAt.setDate(expiresAt.getDate() + expirationDays);
 

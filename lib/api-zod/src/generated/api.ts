@@ -1165,7 +1165,7 @@ export const GetClientReferralParams = zod.object({
 
 export const GetClientReferralResponse = zod.object({
   referralCode: zod.string().nullable(),
-  referralCodeStatus: zod.string(),
+  referralCodeStatus: zod.enum(["active", "blocked", "cancelled"]),
   totalReferrals: zod.number(),
   successfulReferrals: zod.number(),
   referralEarnings: zod.number(),
