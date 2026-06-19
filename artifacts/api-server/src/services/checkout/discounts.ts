@@ -72,7 +72,6 @@ export async function resolveCheckoutDiscounts(
       id: clientsTable.id,
       name: clientsTable.name,
       email: clientsTable.email,
-      referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
       referralCodeStatus: clientsTable.referralCodeStatus,
       successfulReferrals: clientsTable.successfulReferrals,
     }).from(clientsTable)
@@ -86,8 +85,6 @@ export async function resolveCheckoutDiscounts(
         discountValue: referralSettingsTable.discountValue,
         discountType: referralSettingsTable.discountType,
         isEnabled: referralSettingsTable.isEnabled,
-        expirationDays: referralSettingsTable.expirationDays,
-        discountExpirationDays: referralSettingsTable.discountExpirationDays,
         allowSelfReferral: referralSettingsTable.allowSelfReferral,
         requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
         bonusValue: referralSettingsTable.bonusValue,
@@ -116,13 +113,6 @@ export async function resolveCheckoutDiscounts(
           if (maxReferrals > 0 && (referrer.successfulReferrals ?? 0) >= maxReferrals) {
             referralEligible = false;
           }
-        }
-
-        if (referrer.referralCodeGeneratedAt && refSettings) {
-          const expirationDays = refSettings.discountExpirationDays ?? refSettings.expirationDays ?? 30;
-          const cutoff = new Date(referrer.referralCodeGeneratedAt);
-          cutoff.setDate(cutoff.getDate() + expirationDays);
-          if (new Date() > cutoff) referralEligible = false;
         }
 
         if (referralEligible && !refSettings?.allowSelfReferral && referrer.email && customerEmail) {

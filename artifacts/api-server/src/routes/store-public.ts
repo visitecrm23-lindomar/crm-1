@@ -1188,8 +1188,8 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       name: clientsTable.name,
       email: clientsTable.email,
       referralCode: clientsTable.referralCode,
-      referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
       referralCodeStatus: clientsTable.referralCodeStatus,
+      successfulReferrals: clientsTable.successfulReferrals,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, store.tenantId),
@@ -1219,16 +1219,6 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
 
     if (settings && !settings.isEnabled) {
       next(new ValidationError("Programa de indicação inativo", "REFERRAL_PROGRAM_INACTIVE", { valid: false })); return;
-    }
-
-    // Enforce expiration based on when the code was generated (not account age)
-    const expirationDays = settings?.expirationDays ?? 30;
-    if (referrer.referralCodeGeneratedAt) {
-      const cutoff = new Date(referrer.referralCodeGeneratedAt);
-      cutoff.setDate(cutoff.getDate() + expirationDays);
-      if (new Date() > cutoff) {
-        next(new ValidationError("Código de indicação expirado", "REFERRAL_CODE_EXPIRED", { valid: false })); return;
-      }
     }
 
     // Self-referral check when customer email is provided
