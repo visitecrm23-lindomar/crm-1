@@ -1151,7 +1151,7 @@ router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<
         tx.update(storeReviewsTable).set({ clientId: primaryId }).where(eq(storeReviewsTable.clientId, secondaryId)),
         tx.update(notesTable).set({ clientId: primaryId }).where(eq(notesTable.clientId, secondaryId)),
         tx.update(calendarEventsTable).set({ clientId: primaryId }).where(eq(calendarEventsTable.clientId, secondaryId)),
-        tx.update(referralsTable).set({ clientId: primaryId }).where(and(eq(referralsTable.clientId, secondaryId), eq(referralsTable.tenantId, me.tenantId))),
+        tx.update(referralsTable).set({ referrerId: primaryId }).where(and(eq(referralsTable.referrerId, secondaryId), eq(referralsTable.tenantId, me.tenantId))),
         tx.update(loyaltyMembersTable).set({ clientId: primaryId }).where(and(eq(loyaltyMembersTable.clientId, secondaryId), eq(loyaltyMembersTable.tenantId, me.tenantId))),
         tx.update(clientNpsResponsesTable).set({ clientId: primaryId }).where(eq(clientNpsResponsesTable.clientId, secondaryId)),
       ]);
