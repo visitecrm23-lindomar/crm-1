@@ -22,3 +22,5 @@ export { ReferralExpiringSoonEmail } from './templates/referral-expiring-soon';
 export type { ReferralExpiringSoonEmailProps } from './templates/referral-expiring-soon';
 export { ReferralWelcomeEmail } from './templates/referral-welcome';
 export type { ReferralWelcomeEmailProps as ReferralWelcomeEmailTemplateProps } from './templates/referral-welcome';
+export { sendReferralCodeSuspendedEmail } from './service';
+export type { SendReferralCodeSuspendedEmailProps } from './service';

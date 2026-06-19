@@ -3,7 +3,7 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
@@ -1533,4 +1533,64 @@ export async function sendPriceDropAlertEmail(opts: PriceDropEmailOpts): Promise
     }
     return false;
   }
+}
+
+export async function dispatchReferralCodeSuspendedEmail(opts: {
+  clientId: string;
+  tenantId: string;
+  status: "blocked" | "cancelled";
+}): Promise<void> {
+  const { clientId, tenantId, status } = opts;
+
+  const [client] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email, referralCode: clientsTable.referralCode })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, clientId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!client?.email) {
+    logger.warn({ clientId, tenantId }, "[email-queue] referral-code-suspended: client has no email — skipping");
+    return;
+  }
+
+  if (!client.referralCode) {
+    logger.warn({ clientId, tenantId }, "[email-queue] referral-code-suspended: client has no referral code — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const agencyName = tenant?.name ?? "Agência";
+  const statusCapitalized = status === "blocked" ? "Bloqueado" : "Cancelado";
+  const subject = `Código de indicação ${statusCapitalized} — ${agencyName}`;
+
+  const sendResult = await sendReferralCodeSuspendedEmail({
+    clientName: client.name ?? client.email,
+    clientEmail: client.email,
+    referralCode: client.referralCode,
+    status,
+    agencyName,
+    agencyLogo: tenant?.logoUrl ?? null,
+  });
+
+  const emailLogId = generateId();
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: client.email,
+    subject,
+    status: sendResult.success ? "sent" : "failed",
+    messageId: sendResult.messageId ?? null,
+    errorMessage: sendResult.error ?? null,
+  });
+
+  logger.info(
+    { emailLogId, clientId, tenantId, success: sendResult.success },
+    "[email-queue] referral-code-suspended email dispatched"
+  );
 }

@@ -5,7 +5,7 @@ import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTa
 import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
-import { dispatchReferralWelcomeEmail } from "../queues/email-helpers";
+import { dispatchReferralWelcomeEmail, dispatchReferralCodeSuspendedEmail } from "../queues/email-helpers";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { validateCPF, cleanCPF } from "../lib/cpf";
 import { checkPlanLimit } from "../lib/planLimits";
@@ -741,6 +741,11 @@ router.patch("/clients/:id/referral-code", async (req, res, next: NextFunction):
       .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)))
       .returning({ id: clientsTable.id, referralCodeStatus: clientsTable.referralCodeStatus });
     res.json({ id: updated.id, referralCodeStatus: updated.referralCodeStatus });
+    if (parsed.data.status === "blocked" || parsed.data.status === "cancelled") {
+      dispatchReferralCodeSuspendedEmail({ clientId: client.id, tenantId: me.tenantId, status: parsed.data.status }).catch((err) => {
+        req.log?.warn({ err, clientId: client.id }, "[clients] referral-code-suspended email dispatch failed");
+      });
+    }
   } catch (err) {
     next(err);
   }

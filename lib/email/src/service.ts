@@ -755,6 +755,55 @@ ${balanceLine}
   }
 }
 
+export interface SendReferralCodeSuspendedEmailProps {
+  clientName: string;
+  clientEmail: string;
+  referralCode: string;
+  status: "blocked" | "cancelled";
+  agencyName: string;
+  agencyLogo?: string | null;
+}
+
+export async function sendReferralCodeSuspendedEmail(
+  props: SendReferralCodeSuspendedEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const firstName = props.clientName.split(' ')[0];
+    const statusLabel = props.status === "blocked" ? "bloqueado temporariamente" : "cancelado";
+    const statusCapitalized = props.status === "blocked" ? "Bloqueado" : "Cancelado";
+    const subject = `Código de indicação ${statusCapitalized} — ${props.agencyName}`;
+
+    const htmlBody = `<p>Olá, <strong>${firstName}</strong>!</p>
+<p>Informamos que seu código de indicação <strong>${props.referralCode}</strong> foi <strong>${statusLabel}</strong> pela agência <strong>${props.agencyName}</strong>.</p>
+<p>Durante este período, seu código não poderá ser compartilhado nem utilizado por novos indicados.</p>
+<p>Caso tenha dúvidas ou acredite que isso foi um engano, entre em contato diretamente com a agência.</p>
+<p>— ${props.agencyName}</p>`;
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.clientEmail],
+      subject,
+      html: htmlBody,
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral code suspended email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral code suspended email:', message);
+    return { success: false, error: message };
+  }
+}
+
 export async function sendNpsSurveyEmail(props: NpsSurveyEmailProps): Promise<SendEmailResult> {
   try {
     const resend = getResend();
