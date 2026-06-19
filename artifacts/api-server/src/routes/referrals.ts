@@ -1415,6 +1415,9 @@ router.get("/referral-settings", async (req, res, next: NextFunction): Promise<v
         expiryWarning1DayEnabled: true,
         bonusReleaseEmailEnabled: true,
         pointsPerReferral: 0,
+        discountExpirationDays: 30,
+        minPurchaseAmount: "0.00",
+        maxReferralsPerUser: 0,
       };
       await db.insert(referralSettingsTable).values(defaults);
       res.json(defaults);

@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { scheduleCalendarSyncBirthday } from "../lib/google-calendar/schedule-sync";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
 import { clerkClient } from "@clerk/express";
 import { calculateScoresForClient } from "../lib/client-scores";
@@ -730,7 +730,7 @@ router.patch("/clients/:id/referral-code", async (req, res, next: NextFunction):
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const client = await requireClientAccess(me, req.params.id);
     const parsed = z.object({
       status: z.enum(["active", "blocked", "cancelled"]),

@@ -20,7 +20,7 @@ import {
   useGenerateClientReferralCode,
   useGetMe,
 } from "@workspace/api-client-react";
-import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS, ADMIN_ROLES } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, PAYMENT_STATUS, ADMIN_ROLES, MANAGEMENT_ROLES } from "@workspace/permissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -450,7 +450,7 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
 
-  const isAdmin = ADMIN_ROLES.includes(me?.role ?? "");
+  const isAdmin = MANAGEMENT_ROLES.includes(me?.role ?? "");
 
   async function handleSetCodeStatus(newStatus: "active" | "blocked" | "cancelled") {
     if (!data?.referralCode) return;
@@ -1180,7 +1180,7 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                   )}
                 </div>
 
-                {ADMIN_ROLES.includes(me?.role ?? "") && (
+                {MANAGEMENT_ROLES.includes(me?.role ?? "") && (
                   <div className="pt-2 border-t">
                     <Button variant="outline" size="sm" onClick={handleRecalculate} disabled={recalculating}>
                       {recalculating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}

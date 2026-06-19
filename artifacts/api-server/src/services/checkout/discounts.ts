@@ -73,6 +73,8 @@ export async function resolveCheckoutDiscounts(
       name: clientsTable.name,
       email: clientsTable.email,
       referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
+      referralCodeStatus: clientsTable.referralCodeStatus,
+      successfulReferrals: clientsTable.successfulReferrals,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, tenantId),
@@ -85,17 +87,39 @@ export async function resolveCheckoutDiscounts(
         discountType: referralSettingsTable.discountType,
         isEnabled: referralSettingsTable.isEnabled,
         expirationDays: referralSettingsTable.expirationDays,
+        discountExpirationDays: referralSettingsTable.discountExpirationDays,
         allowSelfReferral: referralSettingsTable.allowSelfReferral,
         requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
         bonusValue: referralSettingsTable.bonusValue,
+        minPurchaseAmount: referralSettingsTable.minPurchaseAmount,
+        maxReferralsPerUser: referralSettingsTable.maxReferralsPerUser,
       }).from(referralSettingsTable)
         .where(eq(referralSettingsTable.tenantId, tenantId)).limit(1);
 
       if (!refSettings || refSettings.isEnabled !== false) {
         let referralEligible = true;
 
+        // Block codes with status blocked/cancelled
+        if (referrer.referralCodeStatus && referrer.referralCodeStatus !== "active") {
+          referralEligible = false;
+        }
+
+        // Enforce minPurchaseAmount
+        if (referralEligible && refSettings?.minPurchaseAmount != null) {
+          const minAmount = Number(refSettings.minPurchaseAmount);
+          if (minAmount > 0 && subtotal < minAmount) referralEligible = false;
+        }
+
+        // Enforce maxReferralsPerUser
+        if (referralEligible && refSettings?.maxReferralsPerUser != null) {
+          const maxReferrals = Number(refSettings.maxReferralsPerUser);
+          if (maxReferrals > 0 && (referrer.successfulReferrals ?? 0) >= maxReferrals) {
+            referralEligible = false;
+          }
+        }
+
         if (referrer.referralCodeGeneratedAt && refSettings) {
-          const expirationDays = refSettings.expirationDays ?? 30;
+          const expirationDays = refSettings.discountExpirationDays ?? refSettings.expirationDays ?? 30;
           const cutoff = new Date(referrer.referralCodeGeneratedAt);
           cutoff.setDate(cutoff.getDate() + expirationDays);
           if (new Date() > cutoff) referralEligible = false;
