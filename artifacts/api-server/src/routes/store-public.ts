@@ -1123,6 +1123,40 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
   }
 });
 
+/**
+ * Records a best-effort, fire-and-forget "suspended referral attempt" signal when
+ * a customer tries to use a blocked/cancelled referral code on a public storefront.
+ *
+ * Shared by BOTH public lookup paths (POST /referral/validate and GET /referral/info)
+ * so the two abuse-tracking writes can never silently drift apart. Performs two
+ * independent fire-and-forget writes and never throws:
+ *  1. Bumps `referralSuspendedAttemptAt` / `referralSuspendedAttemptCount` on the client.
+ *  2. Appends a per-attempt row to `referral_attempt_logs`.
+ */
+function recordSuspendedReferralAttempt(params: {
+  clientId: string;
+  tenantId: string;
+  storeSlug: string;
+  ipAddress: string | null;
+}): void {
+  const { clientId, tenantId, storeSlug, ipAddress } = params;
+  db.update(clientsTable)
+    .set({
+      referralSuspendedAttemptAt: new Date(),
+      referralSuspendedAttemptCount: sql`${clientsTable.referralSuspendedAttemptCount} + 1`,
+    })
+    .where(eq(clientsTable.id, clientId))
+    .execute()
+    .catch((err: unknown) => {
+      console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
+    });
+  db.insert(referralAttemptLogsTable)
+    .values({ id: generateId(), tenantId, clientId, storeSlug, ipAddress })
+    .catch((err: unknown) => {
+      console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
+    });
+}
+
 router.post("/public/store/:slug/referral/validate", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const store = await getActiveStore(req.params.slug);
@@ -1161,21 +1195,12 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     }
 
     if (referrer.referralCodeStatus !== "active") {
-      db.update(clientsTable)
-        .set({
-          referralSuspendedAttemptAt: new Date(),
-          referralSuspendedAttemptCount: sql`${clientsTable.referralSuspendedAttemptCount} + 1`,
-        })
-        .where(eq(clientsTable.id, referrer.id))
-        .execute()
-        .catch((err: unknown) => {
-          console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
-        });
-      db.insert(referralAttemptLogsTable)
-        .values({ id: generateId(), tenantId: store.tenantId, clientId: referrer.id, storeSlug: req.params.slug, ipAddress: getClientIp(req) ?? null })
-        .catch((err: unknown) => {
-          console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
-        });
+      recordSuspendedReferralAttempt({
+        clientId: referrer.id,
+        tenantId: store.tenantId,
+        storeSlug: req.params.slug,
+        ipAddress: getClientIp(req) ?? null,
+      });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
@@ -1305,21 +1330,12 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
     }
 
     if (referrer.referralCodeStatus !== "active") {
-      db.update(clientsTable)
-        .set({
-          referralSuspendedAttemptAt: new Date(),
-          referralSuspendedAttemptCount: sql`${clientsTable.referralSuspendedAttemptCount} + 1`,
-        })
-        .where(eq(clientsTable.id, referrer.id))
-        .execute()
-        .catch((err: unknown) => {
-          console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
-        });
-      db.insert(referralAttemptLogsTable)
-        .values({ id: generateId(), tenantId: store.tenantId, clientId: referrer.id, storeSlug: req.params.slug, ipAddress: getClientIp(req) ?? null })
-        .catch((err: unknown) => {
-          console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
-        });
+      recordSuspendedReferralAttempt({
+        clientId: referrer.id,
+        tenantId: store.tenantId,
+        storeSlug: req.params.slug,
+        ipAddress: getClientIp(req) ?? null,
+      });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
