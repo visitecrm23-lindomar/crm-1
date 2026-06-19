@@ -6,7 +6,7 @@ import {
   referralSettingsTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import { ValidationError } from "../../lib/errors";
+import { AppError, ValidationError } from "../../lib/errors";
 import { roundMoney } from "../../lib/pricing";
 
 export interface ResolvedDiscounts {
@@ -104,14 +104,24 @@ export async function resolveCheckoutDiscounts(
         // Enforce minPurchaseAmount
         if (referralEligible && refSettings?.minPurchaseAmount != null) {
           const minAmount = Number(refSettings.minPurchaseAmount);
-          if (minAmount > 0 && subtotal < minAmount) referralEligible = false;
+          if (minAmount > 0 && subtotal < minAmount) {
+            throw new AppError(
+              `Valor mínimo para indicação: R$ ${minAmount.toFixed(2).replace(".", ",")}`,
+              422,
+              "REFERRAL_MINIMUM_NOT_MET",
+            );
+          }
         }
 
         // Enforce maxReferralsPerUser
         if (referralEligible && refSettings?.maxReferralsPerUser != null) {
           const maxReferrals = Number(refSettings.maxReferralsPerUser);
           if (maxReferrals > 0 && (referrer.successfulReferrals ?? 0) >= maxReferrals) {
-            referralEligible = false;
+            throw new AppError(
+              "Este indicador atingiu o limite máximo de indicações",
+              422,
+              "REFERRAL_CODE_LIMIT_REACHED",
+            );
           }
         }
 

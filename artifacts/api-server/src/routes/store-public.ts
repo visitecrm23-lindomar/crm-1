@@ -1255,9 +1255,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     // Enforce minPurchaseAmount: reject if cart total is below the configured minimum
     const minPurchaseAmount = settings?.minPurchaseAmount != null ? Number(settings.minPurchaseAmount) : 0;
     if (minPurchaseAmount > 0 && cartTotal > 0 && cartTotal < minPurchaseAmount) {
-      next(new ValidationError(
+      next(new AppError(
         `Valor mínimo para indicação: R$ ${minPurchaseAmount.toFixed(2).replace(".", ",")}`,
-        "REFERRAL_MIN_PURCHASE",
+        422,
+        "REFERRAL_MINIMUM_NOT_MET",
         { valid: false },
       ));
       return;
@@ -1273,9 +1274,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
         .limit(1);
       const currentCount = countRow ? Number(countRow.cnt) : 0;
       if (currentCount >= maxReferralsPerUser) {
-        next(new ValidationError(
+        next(new AppError(
           "Este indicador atingiu o limite máximo de indicações",
-          "REFERRAL_LIMIT_REACHED",
+          422,
+          "REFERRAL_CODE_LIMIT_REACHED",
           { valid: false },
         ));
         return;
