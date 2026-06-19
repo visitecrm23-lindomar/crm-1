@@ -46,7 +46,7 @@ export async function initStripeSync(): Promise<void> {
       stripeSecretKey,
       poolConfig: {
         connectionString: databaseUrl,
-        ssl: process.env["NODE_ENV"] === "production" ? { rejectUnauthorized: false } : undefined,
+        ssl: process.env["NODE_ENV"] === "production" ? true : undefined,
       },
       logger,
     });

@@ -416,7 +416,7 @@ router.patch("/accommodations/:id", async (req, res, next: NextFunction): Promis
       .limit(1);
     if (!accommodation) { next(new NotFoundError("Accommodation not found", "NOT_FOUND")); return; }
     if (parsed.data.galleryUrls != null) {
-      await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log);
+      await deleteOrphanedImages(existing.gallery ?? [], parsed.data.galleryUrls, req.log, me.tenantId);
     }
     res.json(formatAccommodation(accommodation));
   } catch (err) {
@@ -435,7 +435,7 @@ router.delete("/accommodations/:id", async (req, res, next: NextFunction): Promi
     if (!existing) { next(new NotFoundError("Accommodation not found", "NOT_FOUND")); return; }
     await db.delete(accommodationsTable)
       .where(and(eq(accommodationsTable.id, req.params.id), eq(accommodationsTable.tenantId, me.tenantId)));
-    await deleteOrphanedImages(existing.gallery ?? [], [], req.log);
+    await deleteOrphanedImages(existing.gallery ?? [], [], req.log, me.tenantId);
     res.json({ success: true });
   } catch (err) {
     next(err);

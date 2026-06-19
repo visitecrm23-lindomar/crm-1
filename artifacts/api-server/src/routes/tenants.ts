@@ -210,7 +210,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     const [tenant] = await db.select().from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (!tenant) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     if ("logoUrl" in parsed.data) {
-      await deleteOrphanedFile(oldLogoUrl, parsed.data.logoUrl, req.log);
+      await deleteOrphanedFile(oldLogoUrl, parsed.data.logoUrl, req.log, req.params.id);
     }
     res.json(tenant);
   } catch (err) {

@@ -354,11 +354,11 @@ router.put("/store/settings", async (req, res, next: NextFunction): Promise<void
 
     const d = parsed.data;
     await Promise.all([
-      d.logo !== undefined ? deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log) : Promise.resolve(),
-      d.logoDark !== undefined ? deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log) : Promise.resolve(),
-      d.favicon !== undefined ? deleteOrphanedFile(existingStore.favicon, d.favicon ?? null, req.log) : Promise.resolve(),
-      d.bannerHome !== undefined ? deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log) : Promise.resolve(),
-      d.bannerMobile !== undefined ? deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log) : Promise.resolve(),
+      d.logo !== undefined ? deleteOrphanedFile(existingStore.logo, d.logo ?? null, req.log, me.tenantId) : Promise.resolve(),
+      d.logoDark !== undefined ? deleteOrphanedFile(existingStore.logoDark, d.logoDark ?? null, req.log, me.tenantId) : Promise.resolve(),
+      d.favicon !== undefined ? deleteOrphanedFile(existingStore.favicon, d.favicon ?? null, req.log, me.tenantId) : Promise.resolve(),
+      d.bannerHome !== undefined ? deleteOrphanedFile(existingStore.bannerHome, d.bannerHome ?? null, req.log, me.tenantId) : Promise.resolve(),
+      d.bannerMobile !== undefined ? deleteOrphanedFile(existingStore.bannerMobile, d.bannerMobile ?? null, req.log, me.tenantId) : Promise.resolve(),
     ]);
 
     const [updated] = await db.select().from(storesTable)
@@ -569,13 +569,13 @@ router.put("/store/products/:id", async (req, res, next: NextFunction): Promise<
     const d = parsed.data;
     await Promise.all([
       d.images !== undefined
-        ? deleteOrphanedImages(existingProduct.images as string[] | null, d.images, req.log)
+        ? deleteOrphanedImages(existingProduct.images as string[] | null, d.images, req.log, me.tenantId)
         : Promise.resolve(),
       d.thumbnail !== undefined
-        ? deleteOrphanedFile(existingProduct.thumbnail as string | null, d.thumbnail, req.log)
+        ? deleteOrphanedFile(existingProduct.thumbnail as string | null, d.thumbnail, req.log, me.tenantId)
         : Promise.resolve(),
       d.gallery !== undefined
-        ? deleteOrphanedImages(existingProduct.gallery as string[] | null, d.gallery, req.log)
+        ? deleteOrphanedImages(existingProduct.gallery as string[] | null, d.gallery, req.log, me.tenantId)
         : Promise.resolve(),
     ]);
 
@@ -617,8 +617,8 @@ router.delete("/store/products/:id", async (req, res, next: NextFunction): Promi
     await db.delete(storeProductsTable)
       .where(and(eq(storeProductsTable.id, req.params.id), eq(storeProductsTable.storeId, store.id)));
     if (existing) {
-      await deleteOrphanedImages(existing.images as string[] ?? [], [], req.log);
-      await deleteOrphanedImages(existing.gallery as string[] ?? [], [], req.log);
+      await deleteOrphanedImages(existing.images as string[] ?? [], [], req.log, me.tenantId);
+      await deleteOrphanedImages(existing.gallery as string[] ?? [], [], req.log, me.tenantId);
     }
     res.status(204).end();
   } catch (err) {

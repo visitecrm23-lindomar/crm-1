@@ -580,7 +580,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "TRIP_NOT_FOUND")); return; }
     if (coverImageChanged) {
-      await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log);
+      await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log, me.tenantId);
     }
     res.json(formatTrip(trip));
     scheduleCalendarSyncTrip(req.params.id).catch(() => {});
@@ -601,7 +601,7 @@ router.delete("/trips/:id", async (req, res, next: NextFunction): Promise<void> 
     await db.delete(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
     if (existing?.coverImage) {
-      await deleteOrphanedFile(existing.coverImage, null, req.log);
+      await deleteOrphanedFile(existing.coverImage, null, req.log, me.tenantId);
     }
     res.json({ success: true });
     scheduleCalendarDeleteEventsForTrip(req.params.id).catch(() => {});

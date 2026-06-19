@@ -6,7 +6,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { getAuth } from "@clerk/express";
-import { utapi, extractVerifiedUploadThingKey } from "../lib/uploadthing";
+import { utapi, extractVerifiedUploadThingKey, deleteOrphanedFile } from "../lib/uploadthing";
 import { collectReferencedUploadThingKeys } from "../lib/collectReferencedUploadThingKeys";
 import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
@@ -723,6 +723,12 @@ router.post("/admin/clients/:clientId/documents", async (req, res, next: NextFun
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    // Verify the clientId belongs to the caller's tenant before creating the document
+    const [clientRow] = await db.select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!clientRow) { next(new NotFoundError("Client not found", "CLIENT_NOT_FOUND")); return; }
     const { name, url, mimeType, sizeBytes } = req.body as {
       name?: string; url?: string; mimeType?: string; sizeBytes?: number;
     };
@@ -773,13 +779,8 @@ router.delete("/admin/clients/:clientId/documents/:docId", async (req, res, next
       ))
       .limit(1);
     if (!doc) { next(new NotFoundError("Document not found", "DOC_NOT_FOUND")); return; }
-    // Always derive the key from the stored URL (trusted source)
-    const key = doc.fileKey ?? extractVerifiedUploadThingKey(doc.url);
-    if (key) {
-      try { await utapi.deleteFiles(key); } catch (delErr) {
-        req.log?.warn({ err: delErr, key }, "[documents] Failed to delete file from UploadThing");
-      }
-    }
+    // Route through deleteOrphanedFile so the cross-tenant ownership guard runs
+    await deleteOrphanedFile(doc.url, null, req.log ?? console, me.tenantId);
     await db.delete(documentsTable).where(eq(documentsTable.id, doc.id));
     res.json({ success: true });
   } catch (err) {
