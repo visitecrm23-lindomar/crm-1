@@ -35,8 +35,9 @@ This threat model is production-scoped. `artifacts/mockup-sandbox` is not deploy
 ## Current Scan Reminders
 
 - **Public checkout remains a primary abuse target.** Anonymous storefront flows can affect inventory, reservations, and passenger data, so future scans should re-check pre-payment reservation creation, seat assignment validation, and privacy leaks around CPF/order/trip lookups.
-- **Authorization drift is a recurring risk in CRM routes.** Many handlers use `requireAuth(...)` plus tenant filters but still need explicit role or permission checks aligned with `lib/permissions/src/index.ts`, especially in trips, payments, reservations, and reporting endpoints.
-- **Bootstrap and billing state need server-side enforcement.** Tenant status, `trialEndsAt`, and plan selection must be treated as security-relevant because onboarding can mint long-lived privileged tenants.
+- **Order lookup and customer-data oracles need stronger secrecy assumptions.** Human-readable order numbers and CPF existence checks are security-relevant because public endpoints currently expose booking and payment context when attackers can guess or brute-force identifiers.
+- **Authorization drift is a recurring risk in CRM routes.** Many handlers use `requireAuth(...)` plus tenant filters but still need explicit role or permission checks aligned with `lib/permissions/src/index.ts`, especially in trips, boarding/check-in flows, user-management endpoints, payments, reservations, and reporting endpoints.
+- **Bootstrap and billing state need server-side enforcement.** Tenant status, `trialEndsAt`, and plan selection must be treated as security-relevant because onboarding can mint long-lived privileged tenants and unpaid tenants must not retain operational access indefinitely.
 - **Shared UploadThing credentials create cross-tenant blast radius.** Any cleanup path that deletes files by URL or key must prove ownership, not just trust that the hostname belongs to UploadThing.
 - **Transport security findings should stay in scope.** Production-only code paths that relax TLS verification, even for background sync components, are security relevant and should be rechecked on future scans.
 
