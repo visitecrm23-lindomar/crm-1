@@ -1175,9 +1175,12 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       code: z.string().min(1),
       customerEmail: z.string().optional(),
       cookieId: z.string().optional(),
+      cartTotal: z.number().nonnegative().optional(),
+      orderTotal: z.number().nonnegative().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
     const code = parsed.data.code.toUpperCase();
+    const cartTotal = parsed.data.cartTotal ?? parsed.data.orderTotal ?? 0;
 
     // Look up by client's permanent referral code
     const [referrer] = await db.select({

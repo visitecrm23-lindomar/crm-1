@@ -310,6 +310,7 @@ async function writeReservationsAndDeals(
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
   let referralConversionResult: ReferralConversionResult | undefined;
+  let checkoutClientIsNew = false;
 
   await db.transaction(async (tx) => {
     const lockedTripTypes = await lockTripsForCheckout(tx, {
@@ -322,7 +323,6 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
       quantityByProductId: args.quantityByProductId,
     });
 
-    let checkoutClientIsNew = false;
     if (args.reservationCreatedById) {
       const checkoutClientResult = await upsertCheckoutClient(tx, {
         tenantId: args.store.tenantId,
