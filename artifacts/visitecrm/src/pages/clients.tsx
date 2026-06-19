@@ -1418,6 +1418,14 @@ export default function Clients() {
 
   const isAdmin = me && ADMIN_ROLES.includes(me.role as string);
 
+  const { data: duplicatesData } = useQuery({
+    queryKey: ["client-duplicates"],
+    queryFn: fetchClientDuplicates,
+    staleTime: 60_000,
+    enabled: !!isAdmin,
+  });
+  const duplicateCount = duplicatesData?.total ?? 0;
+
   const handleDeleteConfirm = async () => {
     if (!deleteClient) return;
     try {
@@ -1448,6 +1456,11 @@ export default function Clients() {
             >
               <GitMerge className="w-4 h-4" />
               Duplicados
+              {duplicateCount > 0 && (
+                <span className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold leading-none min-w-[16px] h-4 px-1">
+                  {duplicateCount}
+                </span>
+              )}
               {showDuplicates ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </Button>
           )}
