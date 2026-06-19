@@ -27,7 +27,6 @@ const {
   mockTransaction,
   mockUpdate,
   mockInsert,
-  mockInsertValues,
   capturedInsertValues,
 } = vi.hoisted(() => {
   const capturedInsertValues: Record<string, unknown>[] = [];
@@ -53,12 +52,10 @@ const {
 
   const mockTransaction = vi.fn();
 
-  // db.update(...).set(...).where(...) — returns a resolved promise
   const mockUpdateWhere = vi.fn().mockResolvedValue([]);
   const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
   const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
 
-  // db.insert(...).values(...) — captures values for assertion
   const mockInsertValues = vi.fn().mockImplementation((vals: Record<string, unknown>) => {
     capturedInsertValues.push(vals);
     return Promise.resolve([]);
@@ -76,13 +73,13 @@ const {
     mockTransaction,
     mockUpdate,
     mockInsert,
-    mockInsertValues,
     capturedInsertValues,
   };
 });
 
 // ---------------------------------------------------------------------------
-// Module mocks
+// Module mocks — table sentinels carry _table names so tx.update() calls
+// can be inspected per-table in assertions.
 // ---------------------------------------------------------------------------
 
 vi.mock("@workspace/db", () => ({
@@ -93,24 +90,24 @@ vi.mock("@workspace/db", () => ({
     delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })),
     transaction: mockTransaction,
   },
-  clientsTable: {},
-  notesTable: {},
-  reservationsTable: {},
-  tripsTable: {},
-  npsResponsesTable: {},
-  referralsTable: {},
-  usersTable: {},
-  paymentsTable: {},
-  dealsTable: {},
-  storeOrdersTable: {},
-  storeReviewsTable: {},
-  clientScoresTable: {},
-  loyaltyMembersTable: {},
-  tenantsTable: {},
-  referralAttemptLogsTable: {},
-  calendarEventsTable: {},
-  campaignSendsTable: {},
-  clientNpsResponsesTable: {},
+  clientsTable:          { _table: "clients" },
+  notesTable:            { _table: "notes" },
+  reservationsTable:     { _table: "reservations" },
+  tripsTable:            { _table: "trips" },
+  npsResponsesTable:     { _table: "npsResponses" },
+  referralsTable:        { _table: "referrals" },
+  usersTable:            { _table: "users" },
+  paymentsTable:         { _table: "payments" },
+  dealsTable:            { _table: "deals" },
+  storeOrdersTable:      { _table: "storeOrders" },
+  storeReviewsTable:     { _table: "storeReviews" },
+  clientScoresTable:     { _table: "clientScores" },
+  loyaltyMembersTable:   { _table: "loyaltyMembers" },
+  tenantsTable:          { _table: "tenants" },
+  referralAttemptLogsTable: { _table: "referralAttemptLogs" },
+  calendarEventsTable:   { _table: "calendarEvents" },
+  campaignSendsTable:    { _table: "campaignSends" },
+  clientNpsResponsesTable: { _table: "clientNpsResponses" },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -240,7 +237,7 @@ const NON_ADMIN_USER = {
   email: "seller@example.com",
 };
 
-function makeFakeClient(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function makeFakeClient(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: "client-001",
     tenantId: "tenant-001",
@@ -288,12 +285,14 @@ function makeFakeClient(overrides: Partial<Record<string, unknown>> = {}): Recor
   };
 }
 
-const PRIMARY = makeFakeClient({ id: "client-001", name: "Maria Silva" });
+const PRIMARY   = makeFakeClient({ id: "client-001", name: "Maria Silva" });
 const SECONDARY = makeFakeClient({ id: "client-002", name: "Maria Silva Duplicada", cpf: "11111111100" });
 const SECONDARY_MERGED = makeFakeClient({ id: "client-002", status: "merged" });
 
 // ---------------------------------------------------------------------------
-// tx mock builder (includes delete, update, insert)
+// tx mock builder
+// The tx.update spy captures which table object each call receives so tests
+// can verify all expected FK tables are covered.
 // ---------------------------------------------------------------------------
 
 function buildTxMock() {
@@ -310,6 +309,12 @@ function buildTxMock() {
   return { update: txUpdate, delete: txDelete, insert: txInsert };
 }
 
+// Helper: returns the _table sentinel names passed to tx.update(table) in call order.
+function updatedTables(txUpdate: ReturnType<typeof vi.fn>): string[] {
+  return (txUpdate.mock.calls as Array<[{ _table?: string }]>)
+    .map((args) => args[0]?._table ?? "unknown");
+}
+
 // ---------------------------------------------------------------------------
 // Tests: GET /api/clients/duplicates
 // ---------------------------------------------------------------------------
@@ -320,7 +325,6 @@ describe("GET /api/clients/duplicates — duplicate detection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedInsertValues.length = 0;
-    // Rebuild mock chain after clearAllMocks
     mockWhere.mockReturnValue({ limit: mockLimit, groupBy: mockGroupBy, orderBy: mockOrderBy });
     mockGroupBy.mockReturnValue({ having: mockHaving });
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy });
@@ -329,42 +333,33 @@ describe("GET /api/clients/duplicates — duplicate detection", () => {
   });
 
   it("returns 403 when the caller is not an admin", async () => {
-    const app = buildApp();
     requireAuthMock.mockResolvedValue(NON_ADMIN_USER as never);
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
     expect(res.status).toBe(403);
   });
 
   it("returns empty pairs when no duplicates exist", async () => {
-    const app = buildApp();
-    // CPF group query → no groups
-    mockHaving.mockResolvedValueOnce([]);
-    // name+WA group query → no groups
-    mockHaving.mockResolvedValueOnce([]);
+    mockHaving.mockResolvedValueOnce([]); // CPF group query
+    mockHaving.mockResolvedValueOnce([]); // name+WA group query
 
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ pairs: [], total: 0 });
   });
 
   it("returns a CPF duplicate pair when two clients share the same CPF", async () => {
-    const app = buildApp();
     const client1 = makeFakeClient({ id: "c-001", cpf: "11111111100" });
     const client2 = makeFakeClient({ id: "c-002", cpf: "11111111100", name: "Maria S. Duplicada" });
 
-    // CPF group query → one CPF group
-    mockHaving.mockResolvedValueOnce([{ cpf: "11111111100" }]);
-    // Fetch the duplicate clients by CPF
-    mockOrderBy.mockResolvedValueOnce([client1, client2]);
-    // name+WA group query → no groups
-    mockHaving.mockResolvedValueOnce([]);
+    mockHaving.mockResolvedValueOnce([{ cpf: "11111111100" }]); // CPF groups
+    mockOrderBy.mockResolvedValueOnce([client1, client2]);        // fetch CPF dupes
+    mockHaving.mockResolvedValueOnce([]);                         // name+WA groups
 
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
-    expect(res.body.pairs).toHaveLength(1);
     expect(res.body.pairs[0].reason).toBe("cpf");
     expect(res.body.pairs[0].clients).toHaveLength(2);
     expect(res.body.pairs[0].clients[0].id).toBe("c-001");
@@ -372,18 +367,14 @@ describe("GET /api/clients/duplicates — duplicate detection", () => {
   });
 
   it("returns a name+whatsapp duplicate pair when clients share the same name and whatsapp", async () => {
-    const app = buildApp();
     const client3 = makeFakeClient({ id: "c-003", cpf: null, name: "João Costa", whatsapp: "+5511888888888" });
     const client4 = makeFakeClient({ id: "c-004", cpf: null, name: "João Costa", whatsapp: "+5511888888888" });
 
-    // CPF group query → no groups
-    mockHaving.mockResolvedValueOnce([]);
-    // name+WA group query → one group
-    mockHaving.mockResolvedValueOnce([{ normName: "joão costa", whatsapp: "+5511888888888" }]);
-    // Fetch the duplicate clients by name+WA
-    mockOrderBy.mockResolvedValueOnce([client3, client4]);
+    mockHaving.mockResolvedValueOnce([]);                                                           // CPF groups
+    mockHaving.mockResolvedValueOnce([{ normName: "joão costa", whatsapp: "+5511888888888" }]);     // name+WA groups
+    mockOrderBy.mockResolvedValueOnce([client3, client4]);                                          // fetch name+WA dupes
 
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
@@ -392,44 +383,51 @@ describe("GET /api/clients/duplicates — duplicate detection", () => {
     expect(res.body.pairs[0].clients[1].id).toBe("c-004");
   });
 
+  it("excludes clients whose status is 'merged' from duplicate pairs", async () => {
+    // The SQL WHERE already filters merged records; the mock simulates this:
+    // CPF group is found but the fetch of duplicate clients returns only one
+    // active record (the second was merged and filtered by the DB).
+    mockHaving.mockResolvedValueOnce([{ cpf: "11111111100" }]); // CPF group found
+    mockOrderBy.mockResolvedValueOnce([                          // only one non-merged client remains
+      makeFakeClient({ id: "c-001", cpf: "11111111100", status: "active" }),
+    ]);
+    mockHaving.mockResolvedValueOnce([]); // name+WA groups
+
+    const res = await request(buildApp()).get("/api/clients/duplicates");
+
+    expect(res.status).toBe(200);
+    // Fewer than 2 active clients → no pair created
+    expect(res.body.pairs).toHaveLength(0);
+    expect(res.body.total).toBe(0);
+  });
+
   it("excludes CPF-matched clients from the name+whatsapp group to prevent double-counting", async () => {
-    const app = buildApp();
-    // Two clients share a CPF AND the same name/whatsapp
     const client1 = makeFakeClient({ id: "c-001", cpf: "11111111100", name: "Maria Silva", whatsapp: "+5511999" });
     const client2 = makeFakeClient({ id: "c-002", cpf: "11111111100", name: "Maria Silva", whatsapp: "+5511999" });
 
-    // CPF group → one group
     mockHaving.mockResolvedValueOnce([{ cpf: "11111111100" }]);
-    // CPF fetch → both clients
-    mockOrderBy.mockResolvedValueOnce([client1, client2]);
-    // name+WA group → same group
+    mockOrderBy.mockResolvedValueOnce([client1, client2]);     // CPF pair
     mockHaving.mockResolvedValueOnce([{ normName: "maria silva", whatsapp: "+5511999" }]);
-    // name+WA fetch → same clients (already in CPF set)
-    mockOrderBy.mockResolvedValueOnce([client1, client2]);
+    mockOrderBy.mockResolvedValueOnce([client1, client2]);     // same clients → filtered out
 
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
 
     expect(res.status).toBe(200);
-    // Should only appear once (CPF group), not duplicated in name+WA group
-    expect(res.body.total).toBe(1);
+    expect(res.body.total).toBe(1);          // only the CPF pair
     expect(res.body.pairs[0].reason).toBe("cpf");
   });
 
   it("returns multiple CPF groups when multiple CPFs are duplicated", async () => {
-    const app = buildApp();
     const ca1 = makeFakeClient({ id: "ca1", cpf: "11111111100" });
     const ca2 = makeFakeClient({ id: "ca2", cpf: "11111111100" });
     const cb1 = makeFakeClient({ id: "cb1", cpf: "22222222200" });
     const cb2 = makeFakeClient({ id: "cb2", cpf: "22222222200" });
 
-    // Two CPF groups
     mockHaving.mockResolvedValueOnce([{ cpf: "11111111100" }, { cpf: "22222222200" }]);
-    // Fetch returns all 4 (grouped by CPF in route logic via byCpf map)
     mockOrderBy.mockResolvedValueOnce([ca1, ca2, cb1, cb2]);
-    // name+WA group → none
     mockHaving.mockResolvedValueOnce([]);
 
-    const res = await request(app).get("/api/clients/duplicates");
+    const res = await request(buildApp()).get("/api/clients/duplicates");
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(2);
@@ -456,17 +454,15 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
   });
 
   it("returns 403 when the caller is not an admin", async () => {
-    const app = buildApp();
     requireAuthMock.mockResolvedValue(NON_ADMIN_USER as never);
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "client-002" });
     expect(res.status).toBe(403);
   });
 
   it("returns 400 when secondaryId is missing from the request body", async () => {
-    const app = buildApp();
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({});
     expect(res.status).toBe(400);
@@ -474,8 +470,7 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
   });
 
   it("returns 400 when primaryId and secondaryId are the same", async () => {
-    const app = buildApp();
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "client-001" });
     expect(res.status).toBe(400);
@@ -483,13 +478,11 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
   });
 
   it("returns 404 when the primary client is not found in the tenant", async () => {
-    const app = buildApp();
-    // Promise.all: primary → not found; secondary → found
     mockLimit
-      .mockResolvedValueOnce([])         // primary not found
-      .mockResolvedValueOnce([SECONDARY]); // secondary found (Promise.all order)
+      .mockResolvedValueOnce([])          // primary → not found
+      .mockResolvedValueOnce([SECONDARY]); // secondary → found
 
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/nonexistent/merge")
       .send({ secondaryId: "client-002" });
 
@@ -498,12 +491,11 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
   });
 
   it("returns 404 when the secondary client is not found in the tenant", async () => {
-    const app = buildApp();
     mockLimit
-      .mockResolvedValueOnce([PRIMARY])  // primary found
-      .mockResolvedValueOnce([]);         // secondary not found
+      .mockResolvedValueOnce([PRIMARY])
+      .mockResolvedValueOnce([]);
 
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "nonexistent-secondary" });
 
@@ -512,12 +504,11 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
   });
 
   it("returns 400 when the secondary client has already been merged", async () => {
-    const app = buildApp();
     mockLimit
       .mockResolvedValueOnce([PRIMARY])
       .mockResolvedValueOnce([SECONDARY_MERGED]);
 
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "client-002" });
 
@@ -525,50 +516,68 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
     expect(res.body.code).toBe("VALIDATION_ERROR");
   });
 
-  it("executes the merge transaction and returns 200 with the updated primary on the happy path", async () => {
-    const app = buildApp();
+  it("executes the transaction and reassigns all FK tables to the primary client", async () => {
     const tx = buildTxMock();
-    mockTransaction.mockImplementation((cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+    mockTransaction.mockImplementation(
+      async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx),
+    );
 
     mockLimit
-      .mockResolvedValueOnce([PRIMARY])   // primary lookup
-      .mockResolvedValueOnce([SECONDARY]) // secondary lookup
-      .mockResolvedValueOnce([PRIMARY]);   // final re-fetch of primary
+      .mockResolvedValueOnce([PRIMARY])    // primary lookup
+      .mockResolvedValueOnce([SECONDARY])  // secondary lookup
+      .mockResolvedValueOnce([PRIMARY]);    // final re-fetch
 
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "client-002" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.client).toBeDefined();
     expect(res.body.client.id).toBe("client-001");
 
-    // Transaction was called
-    expect(mockTransaction).toHaveBeenCalledOnce();
-
-    // Deletes were called (clientScores and campaignSends for secondary)
+    // Both clientScores and campaignSends must be deleted for secondary
     expect(tx.delete).toHaveBeenCalledTimes(2);
 
-    // Updates were called (reassign FK tables to primary)
-    expect(tx.update).toHaveBeenCalled();
+    // Verify all expected FK tables are updated (10 FK updates + 1 status update = 11 total)
+    const tables = updatedTables(tx.update);
+    const EXPECTED_FK_TABLES = [
+      "reservations",
+      "payments",
+      "deals",
+      "storeOrders",
+      "storeReviews",
+      "notes",
+      "calendarEvents",
+      "referrals",
+      "loyaltyMembers",
+      "clientNpsResponses",
+    ];
+    for (const table of EXPECTED_FK_TABLES) {
+      expect(tables, `expected tx.update to be called for table "${table}"`).toContain(table);
+    }
+
+    // The secondary client's status must be updated to "merged"
+    expect(tables).toContain("clients");
+
+    // Exactly 11 update calls (10 FK + 1 status)
+    expect(tx.update).toHaveBeenCalledTimes(11);
   });
 
   it("inserts an audit note on the primary client during the merge transaction", async () => {
-    const app = buildApp();
     const tx = buildTxMock();
-    mockTransaction.mockImplementation((cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+    mockTransaction.mockImplementation(
+      async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx),
+    );
 
     mockLimit
       .mockResolvedValueOnce([PRIMARY])
       .mockResolvedValueOnce([SECONDARY])
       .mockResolvedValueOnce([PRIMARY]);
 
-    await request(app)
+    await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "client-002" });
 
-    // An audit note must have been inserted via tx.insert(notesTable).values(...)
     expect(tx.insert).toHaveBeenCalled();
     const noteInsert = capturedInsertValues.find(
       (v) => (v as Record<string, unknown>).type === "merge",
@@ -577,21 +586,22 @@ describe("POST /api/clients/:id/merge — transactional merge", () => {
     expect((noteInsert as Record<string, unknown>).clientId).toBe("client-001");
     expect((noteInsert as Record<string, unknown>).isPrivate).toBe(true);
     expect(typeof (noteInsert as Record<string, unknown>).content).toBe("string");
+    // Audit note must mention the secondary client's name
+    expect((noteInsert as Record<string, unknown>).content as string).toContain(
+      (SECONDARY as Record<string, unknown>).name as string,
+    );
   });
 
-  it("rejects a secondaryId belonging to a different tenant (returns 404 because tenant filter returns nothing)", async () => {
-    const app = buildApp();
-    // The DB query filters by tenantId — simulate cross-tenant secondary returning empty
+  it("returns 404 and does not start the transaction when secondary is from another tenant", async () => {
     mockLimit
       .mockResolvedValueOnce([PRIMARY])
-      .mockResolvedValueOnce([]); // cross-tenant secondary → not found in this tenant
+      .mockResolvedValueOnce([]); // cross-tenant secondary absent in this tenant
 
-    const res = await request(app)
+    const res = await request(buildApp())
       .post("/api/clients/client-001/merge")
       .send({ secondaryId: "other-tenant-client" });
 
     expect(res.status).toBe(404);
-    // Transaction must NOT have been started
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 });
