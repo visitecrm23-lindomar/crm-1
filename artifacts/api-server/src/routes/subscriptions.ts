@@ -17,7 +17,7 @@ const router = Router();
 
 router.get("/subscriptions/current", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
     if (!me.tenantId) { next(new NotFoundError("No tenant", "NOT_FOUND")); return; }
 
@@ -93,7 +93,7 @@ const UpgradeBody = z.object({
 
 router.post("/subscriptions/upgrade", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
     if (!me.tenantId) { next(new ValidationError(String("No tenant" ), "VALIDATION_ERROR")); return; }
     if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
@@ -535,7 +535,7 @@ router.post("/subscriptions/upgrade", async (req, res, next: NextFunction): Prom
 
 router.post("/invoices/:id/pix", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
@@ -579,7 +579,7 @@ router.post("/invoices/:id/pix", async (req, res, next: NextFunction): Promise<v
 
 router.post("/admin/invoices/:id/confirm-payment", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
     if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
@@ -643,7 +643,7 @@ router.post("/admin/invoices/:id/confirm-payment", async (req, res, next: NextFu
 
 router.post("/invoices/:id/stripe/checkout", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
 
     const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, req.params.id)).limit(1);
@@ -721,7 +721,7 @@ router.post("/invoices/:id/stripe/checkout", async (req, res, next: NextFunction
 
 router.post("/subscriptions/portal", async (req, res, next: NextFunction): Promise<void> => {
   try {
-    const me = await requireAuth(req, res);
+    const me = await requireAuth(req, res, { skipTenantStatusCheck: true });
     if (!me) return;
     if (!me.tenantId) { next(new ValidationError(String("No tenant" ), "VALIDATION_ERROR")); return; }
     if (me.role !== ROLES.AGENCY_ADMIN && me.role !== ROLES.SUPER_ADMIN) {
