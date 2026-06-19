@@ -144,7 +144,7 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         const tenantId = stripeInvoice.metadata?.tenantId;
         const planId = stripeInvoice.metadata?.planId;
         const stripeCustomerId = typeof stripeInvoice.customer === "string" ? stripeInvoice.customer : undefined;
-        const stripeSubscriptionId = typeof stripeInvoice.subscription === "string" ? stripeInvoice.subscription : undefined;
+        const stripeSubscriptionId = typeof (stripeInvoice as any).subscription === "string" ? (stripeInvoice as any).subscription as string : undefined;
 
         // Mark local invoice paid by stripeInvoiceId
         if (stripeInvoice.id) {
@@ -173,9 +173,9 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         }
 
         // Also handle PaymentIntent metadata path
-        if (stripeInvoice.payment_intent && typeof stripeInvoice.payment_intent === "string") {
+        if ((stripeInvoice as any).payment_intent && typeof (stripeInvoice as any).payment_intent === "string") {
           const [inv] = await db.select().from(invoicesTable)
-            .where(eq(invoicesTable.stripePaymentIntentId, stripeInvoice.payment_intent))
+            .where(eq(invoicesTable.stripePaymentIntentId, (stripeInvoice as any).payment_intent as string))
             .limit(1);
           if (inv && inv.status !== INVOICE_STATUS.PAID) {
             await db.update(invoicesTable).set({
@@ -237,7 +237,7 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         const tenantId = sub.metadata?.tenantId;
         if (!tenantId) break;
 
-        const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : undefined;
+        const periodEnd = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : undefined;
         const stripeCustomerId = typeof sub.customer === "string" ? sub.customer : undefined;
 
         const subs = await db.select().from(subscriptionsTable)

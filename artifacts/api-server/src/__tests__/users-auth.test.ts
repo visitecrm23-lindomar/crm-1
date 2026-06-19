@@ -109,7 +109,7 @@ describe("GET /api/users — TEAM.VIEW authorization gate", () => {
 
   it("allows SUPER_ADMIN to list users (200)", async () => {
     authAs(ROLES.SUPER_ADMIN);
-    mockWhere.mockReturnValue([]);
+    mockWhere.mockReturnValue([] as unknown as { limit: typeof mockLimit });
     const res = await request(buildApp()).get("/api/users");
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(403);
@@ -117,7 +117,7 @@ describe("GET /api/users — TEAM.VIEW authorization gate", () => {
 
   it("allows AGENCY_ADMIN to list users (200)", async () => {
     authAs(ROLES.AGENCY_ADMIN);
-    mockWhere.mockReturnValue([]);
+    mockWhere.mockReturnValue([] as unknown as { limit: typeof mockLimit });
     const res = await request(buildApp()).get("/api/users");
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(403);
@@ -125,7 +125,7 @@ describe("GET /api/users — TEAM.VIEW authorization gate", () => {
 
   it("allows AGENCY_MANAGER to list users (200)", async () => {
     authAs(ROLES.AGENCY_MANAGER);
-    mockWhere.mockReturnValue([]);
+    mockWhere.mockReturnValue([] as unknown as { limit: typeof mockLimit });
     const res = await request(buildApp()).get("/api/users");
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(403);

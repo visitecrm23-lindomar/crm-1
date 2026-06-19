@@ -103,7 +103,7 @@ router.get("/admin/invoices", async (req, res, next: NextFunction): Promise<void
       conditions.push(eq(invoicesTable.tenantId, req.query.tenantId as string));
     }
     if (req.query.status) {
-      if (!INVOICE_STATUS_VALUES.includes(req.query.status as string)) {
+      if (!(INVOICE_STATUS_VALUES as readonly string[]).includes(req.query.status as string)) {
         next(new ValidationError(String(`Invalid status. Must be one of: ${INVOICE_STATUS_VALUES.join(", ")}`), "VALIDATION_ERROR"));
         return;
       }

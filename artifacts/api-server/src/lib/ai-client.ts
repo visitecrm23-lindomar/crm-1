@@ -156,5 +156,5 @@ export async function getAIClientForTenant(tenantId: string): Promise<ResolvedAI
       }
     }
   }
-  return { client: managedClient, model: MANAGED_MODEL, source: "managed", provider: "openai" };
+  return { client: managedClient as unknown as OpenAI, model: MANAGED_MODEL, source: "managed", provider: "openai" };
 }

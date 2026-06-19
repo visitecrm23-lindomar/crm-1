@@ -8,6 +8,7 @@ import { REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
  * relinked/reversed against that reservation's id.
  */
 export interface ReferralReversalGap {
+  [key: string]: unknown;
   reservation_id: string;
   reservation_number: string | null;
   referral_code: string;

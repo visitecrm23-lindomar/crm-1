@@ -12,7 +12,7 @@ import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
 import { roundMoney } from "../lib/pricing";
-import { ValidationError } from "../lib/errors";
+import { ValidationError, AppError } from "../lib/errors";
 
 const router = Router();
 

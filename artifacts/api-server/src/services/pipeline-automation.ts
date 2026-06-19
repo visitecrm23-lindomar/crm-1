@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { dealsTable, pipelineStagesTable, tripsTable } from "@workspace/db";
-import { eq, and, desc, lte, gte, isNotNull } from "drizzle-orm";
+import { eq, and, desc, lte, gte, isNotNull, sql } from "drizzle-orm";
 import { DEAL_STATUS } from "@workspace/permissions";
 import { logger } from "../lib/logger";
 

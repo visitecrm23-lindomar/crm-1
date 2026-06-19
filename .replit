@@ -108,6 +108,10 @@ args = "Start application"
 task = "workflow.run"
 args = "artifacts/cliente-app: expo"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "api-typecheck"
+
 [[workflows.workflow]]
 name = "schema-drift"
 author = "agent"
@@ -129,6 +133,17 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PORT=19000 pnpm --filter @workspace/cliente-app run dev"
+
+[[workflows.workflow]]
+name = "api-typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/api-server && NODE_OPTIONS='--max-old-space-size=4096' pnpm exec tsc -p tsconfig.json --noEmit"
+
+[workflows.workflow.metadata]
+isValidation = true
 
   [agent]
 stack = "BEST_EFFORT_FALLBACK"

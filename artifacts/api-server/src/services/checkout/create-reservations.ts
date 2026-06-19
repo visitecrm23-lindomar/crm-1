@@ -101,10 +101,7 @@ export async function createReservationsForOrder(
   const products = await exec
     .select()
     .from(storeProductsTable)
-    .where(and(
-      inArray(storeProductsTable.id, productIds),
-      eq(storeProductsTable.tenantId, order.tenantId),
-    ));
+    .where(inArray(storeProductsTable.id, productIds));
 
   const productMap = new Map(products.map((p) => [p.id, p]));
 

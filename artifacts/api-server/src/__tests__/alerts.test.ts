@@ -41,9 +41,7 @@ const {
   // queries iterate / index them) or chained with `.limit()` (resolve lookup).
   // Return an array that ALSO exposes `.limit`, satisfying both shapes.
   const mockWhere = vi.fn(() => {
-    const arr = [] as unknown[] & { limit: typeof mockLimit };
-    arr.limit = mockLimit;
-    return arr;
+    return Object.assign([] as unknown[], { limit: mockLimit });
   });
   const mockFrom = vi.fn(() => ({ where: mockWhere, limit: mockLimit }));
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
@@ -167,9 +165,7 @@ describe("POST /api/alerts/referral-reversal-skipped/:reservationId/resolve", ()
 
     mockLimit.mockResolvedValue([]);
     mockWhere.mockImplementation(() => {
-      const arr = [] as unknown[] & { limit: typeof mockLimit };
-      arr.limit = mockLimit;
-      return arr;
+      return Object.assign([] as unknown[], { limit: mockLimit });
     });
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
     mockSelect.mockReturnValue({ from: mockFrom });
@@ -261,9 +257,7 @@ describe("POST /api/alerts/email-retry-exhausted/:reservationId/resolve", () => 
 
     mockLimit.mockResolvedValue([]);
     mockWhere.mockImplementation(() => {
-      const arr = [] as unknown[] & { limit: typeof mockLimit };
-      arr.limit = mockLimit;
-      return arr;
+      return Object.assign([] as unknown[], { limit: mockLimit });
     });
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
     mockSelect.mockReturnValue({ from: mockFrom });
@@ -339,9 +333,7 @@ describe("GET /api/alerts — referral-reversal gap detection", () => {
 
     mockLimit.mockResolvedValue([]);
     mockWhere.mockImplementation(() => {
-      const arr = [] as unknown[] & { limit: typeof mockLimit };
-      arr.limit = mockLimit;
-      return arr;
+      return Object.assign([] as unknown[], { limit: mockLimit });
     });
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
     mockSelect.mockReturnValue({ from: mockFrom });
@@ -358,7 +350,7 @@ describe("GET /api/alerts — referral-reversal gap detection", () => {
     expect(mockExecute).toHaveBeenCalled();
 
     const renderedQueries = mockExecute.mock.calls.map(
-      (call) => dialect.sqlToQuery(call[0] as never).sql,
+      (call: unknown[]) => dialect.sqlToQuery(call[0] as never).sql,
     );
 
     // Every gap query must scope out already-acknowledged referrals so
@@ -581,7 +573,7 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
       where: mockWhere,
       limit: mockLimit,
       innerJoin: () => ({ where: mockWhere }),
-    });
+    } as unknown as { where: typeof mockWhere; limit: typeof mockLimit });
 
     mockWhere.mockImplementation((condition?: unknown) => {
       const kind = selectKind;

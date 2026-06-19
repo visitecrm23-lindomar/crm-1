@@ -108,7 +108,7 @@ export async function calculateScoresForClient(clientId: string, tenantId: strin
         .limit(10);
 
       if (upcomingTrips.length > 0) {
-        const profileLines: string[] = [
+        const profileLines: string = [
           `Nome: ${client.name}`,
           client.dreamDestinations?.length
             ? `Destinos dos sonhos: ${client.dreamDestinations.join(", ")}`

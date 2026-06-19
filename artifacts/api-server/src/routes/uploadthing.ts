@@ -73,12 +73,12 @@ export const uploadRouter = {
     }),
 
   clientDocument: f({
-    image: { maxFileSize: "10MB", maxFileCount: 1 },
-    pdf: { maxFileSize: "10MB", maxFileCount: 1 },
-    "application/msword": { maxFileSize: "10MB", maxFileCount: 1 },
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "10MB", maxFileCount: 1 },
-    "application/vnd.ms-excel": { maxFileSize: "10MB", maxFileCount: 1 },
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { maxFileSize: "10MB", maxFileCount: 1 },
+    image: { maxFileSize: "16MB", maxFileCount: 1 },
+    pdf: { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.ms-excel": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { maxFileSize: "16MB", maxFileCount: 1 },
   })
     .middleware(async ({ req }) => {
       const { userId } = getAuth(req);

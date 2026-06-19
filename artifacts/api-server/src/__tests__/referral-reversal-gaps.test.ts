@@ -25,7 +25,7 @@ import {
   referralsTable,
 } from "@workspace/db";
 import { inArray } from "drizzle-orm";
-import { REFERRAL_STATUS, RESERVATION_STATUS } from "@workspace/permissions";
+import { REFERRAL_STATUS, RESERVATION_STATUS, type ReferralStatus, type ReservationStatus } from "@workspace/permissions";
 
 import { generateId } from "../lib/id";
 import { findReferralReversalGaps, countReferralReversalGaps } from "../lib/referral-reversal-gaps";
@@ -42,7 +42,7 @@ const referralIds: string[] = [];
 let voucherSeq = 0;
 
 function makeReservation(overrides: {
-  status?: string;
+  status?: ReservationStatus;
   discountReferralCode?: string | null;
   reservationNumber?: string | null;
 }) {
@@ -68,7 +68,7 @@ function makeReservation(overrides: {
 
 function makeReferral(overrides: {
   code: string;
-  status?: string;
+  status?: ReferralStatus;
   reservationId?: string | null;
   reversalWarningAcknowledgedAt?: Date | null;
   referrerName?: string | null;

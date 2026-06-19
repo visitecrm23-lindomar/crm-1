@@ -270,7 +270,7 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     mockWhere.mockReturnValue(
       Object.assign(Promise.resolve([]), { limit: mockLimit, orderBy: mockOrderBy }),
     );
-    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy } as unknown as { where: typeof mockWhere; limit: typeof mockLimit });
     mockSelect.mockReturnValue({ from: mockFrom });
 
     // Reset once-queues so leaked mockImplementationOnce / mockResolvedValueOnce

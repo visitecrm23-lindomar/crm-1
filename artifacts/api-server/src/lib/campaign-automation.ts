@@ -1,5 +1,6 @@
 import { db, campaignsTable, campaignSendsTable, clientsTable, tenantsTable, reservationsTable, tripsTable } from "@workspace/db";
 import { eq, ne, and, sql, isNotNull, inArray } from "drizzle-orm";
+import { RESERVATION_STATUS, type ReservationStatus } from "@workspace/permissions";
 import { logger } from "./logger";
 import { generateId } from "./id";
 import { sendReminderHtmlEmail, type SendEmailResult } from "@workspace/email";
@@ -62,7 +63,7 @@ async function resolveClientsByTrigger(
           )
         );
       if (rows.length === 0) return [];
-      const ids = rows.map((r) => r.clientId);
+      const ids = rows.map((r) => r.clientId).filter((id): id is string => id !== null);
       return db
         .select({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email })
         .from(clientsTable)
@@ -84,7 +85,7 @@ async function resolveClientsByTrigger(
           )
         );
       if (rows.length === 0) return [];
-      const ids = rows.map((r) => r.clientId);
+      const ids = rows.map((r) => r.clientId).filter((id): id is string => id !== null);
       return db
         .select({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email })
         .from(clientsTable)
@@ -118,13 +119,13 @@ async function resolveClientsByTrigger(
         .where(
           and(
             eq(reservationsTable.tenantId, tenantId),
-            inArray(reservationsTable.status, ["pending", "pending_payment"]),
+            inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, "pending_payment" as ReservationStatus]),
             sql`${reservationsTable.createdAt} < NOW() - (${hours} * INTERVAL '1 hour')`,
             sql`${reservationsTable.createdAt} > NOW() - INTERVAL '30 days'`
           )
         );
       if (rows.length === 0) return [];
-      const ids = rows.map((r) => r.clientId);
+      const ids = rows.map((r) => r.clientId).filter((id): id is string => id !== null);
       return db
         .select({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email })
         .from(clientsTable)

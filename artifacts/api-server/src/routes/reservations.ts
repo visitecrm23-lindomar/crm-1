@@ -1701,7 +1701,8 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     }
     // #28: When a referral is reversed on cancellation, notify the referrer
     if (reversedReferralInfo) {
-      dispatchReferralReversedEmail({ ...reversedReferralInfo, tenantId: me.tenantId })
+      const { referrerId: _rrReferrerId, referredId: _rrReferredId, bonusAmount: _rrBonusAmount } = reversedReferralInfo;
+      dispatchReferralReversedEmail({ referrerId: _rrReferrerId, referredId: _rrReferredId, bonusAmount: _rrBonusAmount, tenantId: me.tenantId })
         .catch((err) => req.log.error({ err }, "Error enqueueing referral reversal notification email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});
@@ -1758,7 +1759,7 @@ router.get("/reservations/installments/upcoming", async (req, res, next: NextFun
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (me.role === "client") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    if (me.role === "cliente") { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const days = Math.min(Math.max(parseInt(String(req.query["days"] ?? "7")), 1), 90);
     const now = new Date();

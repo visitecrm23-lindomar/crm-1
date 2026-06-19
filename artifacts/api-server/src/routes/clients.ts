@@ -274,7 +274,7 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
       internalRating: parsed.data.internalRating ?? null,
       companyNps: parsed.data.companyNps ?? null,
       travelInterests: parsed.data.travelInterests ?? [],
-      ambassadorOptIn: parsed.data.ambassadorOptIn ?? null,
+      ambassadorOptIn: parsed.data.ambassadorOptIn ?? undefined,
     };
 
     const id = generateId();
@@ -434,7 +434,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
       updates.npsScore = parsed.data.companyNps ?? null;
     }
     if (parsed.data.travelInterests != null) updates.travelInterests = parsed.data.travelInterests;
-    if (parsed.data.ambassadorOptIn !== undefined) updates.ambassadorOptIn = parsed.data.ambassadorOptIn ?? null;
+    if (parsed.data.ambassadorOptIn !== undefined) updates.ambassadorOptIn = parsed.data.ambassadorOptIn ?? undefined;
 
     await db.transaction(async (tx) => {
       await tx.update(clientsTable).set(updates)
