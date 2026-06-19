@@ -23,6 +23,7 @@ import { clerkClient } from "@clerk/express";
 import { calculateScoresForClient } from "../lib/client-scores";
 import { getRedisConnection } from "../lib/redis";
 import { getAIClientForTenant } from "../lib/ai-client";
+import { z } from "zod";
 
 const router = Router();
 
