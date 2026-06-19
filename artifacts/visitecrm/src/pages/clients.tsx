@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useListClients, useCreateClient, useUpdateClient,
   useListPipelineStages, useListTrips, useListUsers,
@@ -27,7 +28,8 @@ import {
 import {
   Plus, Search, Users, TrendingUp, UserCheck, MoreHorizontal,
   MapPin, Download, Upload, ChevronLeft, ChevronRight,
-  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Trash2, Copy
+  X, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, Trash2, Copy,
+  GitMerge, ChevronDown, ChevronUp, Loader2, ShieldAlert,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -1103,6 +1105,176 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
 type SortField = "name" | "createdAt" | "totalSpent" | "purchaseScore" | "churnScore";
 type SortOrder = "asc" | "desc";
 
+interface DuplicatePair {
+  reason: "cpf" | "name_whatsapp";
+  clients: Array<{ id: string; name: string; email: string; whatsapp: string; cpf?: string | null; createdAt: string; totalSpent: number; customerCode?: string | null }>;
+}
+
+async function fetchClientDuplicates(): Promise<{ pairs: DuplicatePair[]; total: number }> {
+  const res = await fetch("/api/clients/duplicates");
+  if (!res.ok) throw new Error("Erro ao buscar duplicatas");
+  return res.json() as Promise<{ pairs: DuplicatePair[]; total: number }>;
+}
+
+async function mergeClients(primaryId: string, secondaryId: string): Promise<void> {
+  const res = await fetch(`/api/clients/${primaryId}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secondaryId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "Erro ao mesclar clientes");
+  }
+}
+
+function ClientDuplicatesPanel({ onMergeComplete }: { onMergeComplete: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [mergePair, setMergePair] = useState<{ pair: DuplicatePair; primaryIndex: number } | null>(null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["client-duplicates"],
+    queryFn: fetchClientDuplicates,
+    staleTime: 60_000,
+  });
+
+  const mergeMutation = useMutation({
+    mutationFn: ({ primaryId, secondaryId }: { primaryId: string; secondaryId: string }) =>
+      mergeClients(primaryId, secondaryId),
+    onSuccess: () => {
+      toast({ title: "Clientes mesclados com sucesso", description: "O cadastro duplicado foi incorporado ao perfil principal." });
+      queryClient.invalidateQueries({ queryKey: ["client-duplicates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      onMergeComplete();
+      setMergePair(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao mesclar", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleConfirmMerge = () => {
+    if (!mergePair) return;
+    const primaryId = mergePair.pair.clients[mergePair.primaryIndex].id;
+    const secondaryId = mergePair.pair.clients[mergePair.primaryIndex === 0 ? 1 : 0].id;
+    mergeMutation.mutate({ primaryId, secondaryId });
+  };
+
+  const REASON_LABEL: Record<string, string> = {
+    cpf: "Mesmo CPF",
+    name_whatsapp: "Mesmo nome e WhatsApp",
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground justify-center">
+        <Loader2 className="w-4 h-4 animate-spin" /> Verificando registros duplicados...
+      </div>
+    );
+  }
+  if (error) {
+    return <p className="text-sm text-destructive py-4 text-center">Erro ao carregar duplicatas.</p>;
+  }
+
+  const pairs = data?.pairs ?? [];
+  if (pairs.length === 0) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        <ShieldAlert className="w-8 h-8 mx-auto mb-2 opacity-30" />
+        Nenhum registro duplicado encontrado.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-3">
+        {pairs.map((pair, pairIdx) => (
+          <div key={pairIdx} className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <Badge variant="outline" className="text-xs gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {REASON_LABEL[pair.reason] ?? pair.reason}
+              </Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs"
+                onClick={() => setMergePair({ pair, primaryIndex: 0 })}
+              >
+                <GitMerge className="w-3.5 h-3.5" /> Mesclar
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {pair.clients.map((c, idx) => (
+                <div key={c.id} className={`rounded-md border p-3 text-sm space-y-0.5 ${idx === 0 ? "bg-muted/30" : ""}`}>
+                  <p className="font-semibold truncate">{c.name}</p>
+                  {c.customerCode && <p className="text-xs text-muted-foreground">{c.customerCode}</p>}
+                  <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                  <p className="text-xs text-muted-foreground">{c.whatsapp}</p>
+                  {c.cpf && <p className="text-xs font-mono text-muted-foreground">{c.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</p>}
+                  <p className="text-xs text-muted-foreground">Cadastrado: {format(parseISO(c.createdAt), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  <p className="text-xs text-muted-foreground">Gasto: R$ {c.totalSpent.toFixed(2)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Dialog open={!!mergePair} onOpenChange={o => { if (!o) setMergePair(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mesclar Cadastros Duplicados</DialogTitle>
+            <DialogDescription>
+              Escolha qual registro será o <strong>principal</strong> (manterá todos os dados e histórico). O outro será desativado.
+            </DialogDescription>
+          </DialogHeader>
+          {mergePair && (
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-muted-foreground">Selecione o registro <strong>principal</strong>:</p>
+              <div className="grid grid-cols-2 gap-3">
+                {mergePair.pair.clients.map((c, idx) => (
+                  <button
+                    key={c.id}
+                    className={`rounded-lg border p-3 text-left text-sm space-y-1 transition-colors ${mergePair.primaryIndex === idx ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/40"}`}
+                    onClick={() => setMergePair(p => p ? { ...p, primaryIndex: idx } : p)}
+                  >
+                    <p className="font-semibold">{c.name}</p>
+                    {c.customerCode && <p className="text-xs text-muted-foreground">{c.customerCode}</p>}
+                    <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                    <p className="text-xs text-muted-foreground">{c.whatsapp}</p>
+                    <p className="text-xs text-muted-foreground">Gasto: R$ {c.totalSpent.toFixed(2)}</p>
+                    {mergePair.primaryIndex === idx && (
+                      <Badge className="text-xs mt-1">Principal</Badge>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded p-2">
+                Reservas, pagamentos, notas e demais vínculos do cadastro secundário serão transferidos ao principal. O cadastro secundário será desativado com status "mesclado".
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMergePair(null)} disabled={mergeMutation.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmMerge}
+              disabled={mergeMutation.isPending}
+              className="gap-1.5"
+            >
+              {mergeMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Mesclando...</> : <><GitMerge className="w-4 h-4" /> Confirmar Mescla</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 interface SortableHeaderProps {
   label: string;
   field: SortField;
@@ -1151,6 +1323,7 @@ export default function Clients() {
   const [viewClientId, setViewClientId] = useState<string | null>(null);
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [birthdayFilter, setBirthdayFilter] = useState(() => {
     const params = new URLSearchParams(searchStr);
     return params.get("filter") === "birthday";
@@ -1266,6 +1439,18 @@ export default function Clients() {
           <p className="text-muted-foreground text-sm">Gerencie sua carteira de clientes.</p>
         </div>
         <div className="flex gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDuplicates(v => !v)}
+              className="gap-1.5"
+            >
+              <GitMerge className="w-4 h-4" />
+              Duplicados
+              {showDuplicates ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
             <Upload className="w-4 h-4 mr-1" /> Importar CSV
           </Button>
@@ -1630,6 +1815,23 @@ export default function Clients() {
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
+      )}
+
+      {showDuplicates && isAdmin && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <GitMerge className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <h2 className="text-base font-semibold">Registros Duplicados</h2>
+                <p className="text-xs text-muted-foreground">Clientes com mesmo CPF ou mesmo nome e WhatsApp. Mescle para unificar o histórico.</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ClientDuplicatesPanel onMergeComplete={() => refetch()} />
+          </CardContent>
+        </Card>
       )}
 
       <ClientModal

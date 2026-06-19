@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable, tenantsTable, referralAttemptLogsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable, tenantsTable, referralAttemptLogsTable, calendarEventsTable, campaignSendsTable, clientNpsResponsesTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -366,6 +366,79 @@ async function requireClientAccess(
   if (!client) throw new NotFoundError("Client not found", "CLIENT_NOT_FOUND");
   return client;
 }
+
+router.get("/clients/duplicates", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const pairs: Array<{ reason: string; clients: ReturnType<typeof formatClient>[] }> = [];
+
+    const cpfDupeGroups = await db
+      .select({ cpf: clientsTable.cpf })
+      .from(clientsTable)
+      .where(and(
+        eq(clientsTable.tenantId, me.tenantId),
+        sql`${clientsTable.cpf} IS NOT NULL`,
+        sql`${clientsTable.status} != 'merged'`
+      ))
+      .groupBy(clientsTable.cpf)
+      .having(sql`count(*) > 1`);
+
+    if (cpfDupeGroups.length > 0) {
+      const dupeCpfs = cpfDupeGroups.map(r => r.cpf!);
+      const dupeClients = await db.select().from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, me.tenantId),
+          inArray(clientsTable.cpf, dupeCpfs),
+          sql`${clientsTable.status} != 'merged'`
+        ))
+        .orderBy(clientsTable.cpf, clientsTable.createdAt);
+      const byCpf = new Map<string, typeof clientsTable.$inferSelect[]>();
+      for (const c of dupeClients) {
+        const key = c.cpf!;
+        if (!byCpf.has(key)) byCpf.set(key, []);
+        byCpf.get(key)!.push(c);
+      }
+      for (const [, clients] of byCpf) {
+        if (clients.length >= 2) pairs.push({ reason: "cpf", clients: clients.map(c => formatClient(c)) });
+      }
+    }
+
+    const cpfDupeIds = new Set(pairs.flatMap(p => p.clients.map(c => c.id)));
+
+    const nameWaGroups = await db
+      .select({
+        normName: sql<string>`lower(trim(${clientsTable.name}))`,
+        whatsapp: clientsTable.whatsapp,
+      })
+      .from(clientsTable)
+      .where(and(
+        eq(clientsTable.tenantId, me.tenantId),
+        sql`${clientsTable.status} != 'merged'`
+      ))
+      .groupBy(sql`lower(trim(${clientsTable.name}))`, clientsTable.whatsapp)
+      .having(sql`count(*) > 1`);
+
+    for (const group of nameWaGroups) {
+      const dupeClients = await db.select().from(clientsTable)
+        .where(and(
+          eq(clientsTable.tenantId, me.tenantId),
+          sql`lower(trim(${clientsTable.name})) = ${group.normName}`,
+          eq(clientsTable.whatsapp, group.whatsapp),
+          sql`${clientsTable.status} != 'merged'`
+        ))
+        .orderBy(clientsTable.createdAt);
+      const nonCpfDupes = dupeClients.filter(c => !cpfDupeIds.has(c.id));
+      if (nonCpfDupes.length >= 2) pairs.push({ reason: "name_whatsapp", clients: nonCpfDupes.map(c => formatClient(c)) });
+    }
+
+    res.json({ pairs, total: pairs.length });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/clients/:id", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -1036,6 +1109,77 @@ Selecione até 3 viagens priorizando: destinos sonhados, histórico de viagens r
     }
 
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const primaryId = req.params.id;
+    const { secondaryId } = req.body as { secondaryId?: string };
+    if (!secondaryId || typeof secondaryId !== "string") {
+      next(new ValidationError("secondaryId é obrigatório", "VALIDATION_ERROR")); return;
+    }
+    if (secondaryId === primaryId) {
+      next(new ValidationError("O cliente primário e secundário não podem ser o mesmo", "VALIDATION_ERROR")); return;
+    }
+
+    const [[primary], [secondary]] = await Promise.all([
+      db.select().from(clientsTable).where(and(eq(clientsTable.id, primaryId), eq(clientsTable.tenantId, me.tenantId))).limit(1),
+      db.select().from(clientsTable).where(and(eq(clientsTable.id, secondaryId), eq(clientsTable.tenantId, me.tenantId))).limit(1),
+    ]);
+    if (!primary) { next(new NotFoundError("Cliente primário não encontrado", "NOT_FOUND")); return; }
+    if (!secondary) { next(new NotFoundError("Cliente secundário não encontrado", "NOT_FOUND")); return; }
+    if (secondary.status === "merged") { next(new ValidationError("Este cliente já foi mesclado anteriormente", "VALIDATION_ERROR")); return; }
+
+    await db.transaction(async (tx) => {
+      await Promise.all([
+        tx.delete(clientScoresTable).where(and(eq(clientScoresTable.clientId, secondaryId), eq(clientScoresTable.tenantId, me.tenantId))),
+        tx.delete(campaignSendsTable).where(eq(campaignSendsTable.clientId, secondaryId)),
+      ]);
+
+      await Promise.all([
+        tx.update(reservationsTable).set({ clientId: primaryId }).where(and(eq(reservationsTable.clientId, secondaryId), eq(reservationsTable.tenantId, me.tenantId))),
+        tx.update(paymentsTable).set({ clientId: primaryId }).where(eq(paymentsTable.clientId, secondaryId)),
+        tx.update(dealsTable).set({ clientId: primaryId }).where(and(eq(dealsTable.clientId, secondaryId), eq(dealsTable.tenantId, me.tenantId))),
+        tx.update(storeOrdersTable).set({ clientId: primaryId }).where(eq(storeOrdersTable.clientId, secondaryId)),
+        tx.update(storeReviewsTable).set({ clientId: primaryId }).where(eq(storeReviewsTable.clientId, secondaryId)),
+        tx.update(notesTable).set({ clientId: primaryId }).where(eq(notesTable.clientId, secondaryId)),
+        tx.update(calendarEventsTable).set({ clientId: primaryId }).where(eq(calendarEventsTable.clientId, secondaryId)),
+        tx.update(referralsTable).set({ clientId: primaryId }).where(and(eq(referralsTable.clientId, secondaryId), eq(referralsTable.tenantId, me.tenantId))),
+        tx.update(loyaltyMembersTable).set({ clientId: primaryId }).where(and(eq(loyaltyMembersTable.clientId, secondaryId), eq(loyaltyMembersTable.tenantId, me.tenantId))),
+        tx.update(clientNpsResponsesTable).set({ clientId: primaryId }).where(eq(clientNpsResponsesTable.clientId, secondaryId)),
+      ]);
+
+      await tx.insert(notesTable).values({
+        id: generateId(),
+        clientId: primaryId,
+        type: "merge",
+        content: `Registros mesclados: cadastro duplicado de "${secondary.name}" (ID: ${secondaryId}) foi incorporado a este perfil por ${me.id} em ${new Date().toLocaleDateString("pt-BR")}.`,
+        createdById: me.id,
+        isPrivate: true,
+      });
+
+      await tx.update(clientsTable)
+        .set({
+          status: "merged",
+          cpf: null,
+          observations: `[MESCLADO em ${new Date().toLocaleDateString("pt-BR")}] Incorporado ao cliente ${primary.name} (ID: ${primaryId}). ${secondary.observations ?? ""}`.trim(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(clientsTable.id, secondaryId), eq(clientsTable.tenantId, me.tenantId)));
+    });
+
+    const [updatedPrimary] = await db.select().from(clientsTable)
+      .where(and(eq(clientsTable.id, primaryId), eq(clientsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    res.json({ success: true, client: formatClient(updatedPrimary!) });
   } catch (err) {
     next(err);
   }
