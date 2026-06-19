@@ -17,8 +17,8 @@ import {
   nextReservationSequence,
   buildReservationNumber,
   getYearMonth,
+  getTenantReservationPrefix,
 } from "../../lib/reservation-number";
-import { getTenantReservationPrefix } from "../../lib/tenant";
 import { loadReservationContext } from "./reservation-context";
 import type { Tx } from "./tx";
 
