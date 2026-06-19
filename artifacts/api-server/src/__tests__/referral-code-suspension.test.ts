@@ -16,13 +16,16 @@ import { ROLES } from "@workspace/permissions";
 // vi.hoisted: shared mock primitives created before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
-const { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock } =
+const { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock, mockDelete, mockDeleteWhere } =
   vi.hoisted(() => {
     const mockSelectLimit = vi.fn();
     const mockSelectOrderBy = vi.fn();
     const mockUpdateReturning = vi.fn();
     const dispatchReferralCodeSuspendedEmailMock = vi.fn();
-    return { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock };
+    // db.delete(...).where(...) chain for attempt-log clearance
+    const mockDeleteWhere = vi.fn(() => Promise.resolve([]));
+    const mockDelete = vi.fn(() => ({ where: mockDeleteWhere }));
+    return { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock, mockDelete, mockDeleteWhere };
   });
 
 // ---------------------------------------------------------------------------
@@ -44,6 +47,7 @@ vi.mock("@workspace/db", () => ({
       })),
     })),
     insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
+    delete: mockDelete,
     transaction: vi.fn(),
   },
   clientsTable: {},
@@ -269,6 +273,35 @@ describe("PATCH /api/clients/:id/referral-code — suspension email dispatch", (
 
     expect(res.status).toBe(200);
     expect(dispatchReferralCodeSuspendedEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('clears referral_attempt_logs fire-and-forget when re-activating a code', async () => {
+    mockUpdateReturning.mockResolvedValue([
+      { id: FAKE_CLIENT.id, referralCodeStatus: "active" },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .patch(`/api/clients/${FAKE_CLIENT.id}/referral-code`)
+      .send({ status: "active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: FAKE_CLIENT.id, referralCodeStatus: "active" });
+    // Fire-and-forget delete must have been triggered for this client + tenant.
+    expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeleteWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT clear referral_attempt_logs when blocking a code', async () => {
+    mockUpdateReturning.mockResolvedValue([
+      { id: FAKE_CLIENT.id, referralCodeStatus: "blocked" },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .patch(`/api/clients/${FAKE_CLIENT.id}/referral-code`)
+      .send({ status: "blocked" });
+
+    expect(res.status).toBe(200);
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it("includes emailSent in the response when status triggers email dispatch", async () => {

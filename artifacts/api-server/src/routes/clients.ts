@@ -752,6 +752,13 @@ router.patch("/clients/:id/referral-code", async (req, res, next: NextFunction):
       .set({ referralCodeStatus: parsed.data.status, updatedAt: new Date() })
       .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)))
       .returning({ id: clientsTable.id, referralCodeStatus: clientsTable.referralCodeStatus });
+    if (parsed.data.status === "active") {
+      void db.delete(referralAttemptLogsTable)
+        .where(and(eq(referralAttemptLogsTable.clientId, client.id), eq(referralAttemptLogsTable.tenantId, me.tenantId)))
+        .catch((err: unknown) => {
+          req.log?.warn({ err, clientId: client.id }, "[clients] referral-attempt-log clear on re-activation failed");
+        });
+    }
     let emailSent: boolean | undefined;
     if (parsed.data.status === "blocked" || parsed.data.status === "cancelled") {
       try {
