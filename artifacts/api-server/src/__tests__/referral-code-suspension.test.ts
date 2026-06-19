@@ -62,6 +62,7 @@ vi.mock("@workspace/db", () => ({
   tenantsTable: {},
   pipelineStagesTable: {},
   storesTable: {},
+  referralAttemptLogsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -343,7 +344,11 @@ describe("GET /api/clients/:clientId/referral — response shape", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthMock.mockResolvedValue(FAKE_USER as never);
-    mockSelectOrderBy.mockResolvedValue([]); // referrals list
+    // referrals query: .orderBy() resolves to []
+    // attemptLogs query: .orderBy().limit(20) also resolves to []
+    mockSelectOrderBy.mockReturnValue(
+      Object.assign(Promise.resolve([]), { limit: vi.fn().mockResolvedValue([]) }),
+    );
   });
 
   it("includes referralSuspendedAttemptAt in the response", async () => {

@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -449,6 +449,7 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [togglingStatus, setTogglingStatus] = useState(false);
+  const [showAttemptLog, setShowAttemptLog] = useState(false);
 
   const isAdmin = MANAGEMENT_ROLES.includes(me?.role ?? "");
 
@@ -626,6 +627,39 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
           </div>
         )}
       </Card>
+
+      {/* Attempt log */}
+      {(data?.referralCodeStatus ?? "active") !== "active" && (data?.attemptLogs ?? []).length > 0 && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => setShowAttemptLog(v => !v)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronDown className={`w-3 h-3 transition-transform ${showAttemptLog ? "rotate-180" : ""}`} />
+            {showAttemptLog ? "Ocultar" : "Ver"} histórico de tentativas
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">
+              {(data?.attemptLogs ?? []).length}
+            </span>
+          </button>
+          {showAttemptLog && (
+            <div className="rounded-md border bg-orange-50/50 divide-y divide-border text-xs">
+              {(data?.attemptLogs ?? []).map((log) => (
+                <div key={log.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="font-medium truncate">{log.storeSlug}</span>
+                    {log.ipAddress && <span className="text-muted-foreground truncate">{log.ipAddress}</span>}
+                  </div>
+                  <span className="text-muted-foreground shrink-0">
+                    {new Date(log.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">

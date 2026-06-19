@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { db } from "@workspace/db";
-import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable, tenantsTable } from "@workspace/db";
+import { clientsTable, notesTable, reservationsTable, tripsTable, npsResponsesTable, referralsTable, usersTable, paymentsTable, dealsTable, storeOrdersTable, storeReviewsTable, clientScoresTable, loyaltyMembersTable, tenantsTable, referralAttemptLogsTable } from "@workspace/db";
 import { eq, and, ilike, or, sql, desc, asc, inArray, count } from "drizzle-orm";
 import { generateId, generateReferralCode } from "../lib/id";
 import { generateAndAssignReferralCode } from "../lib/referral-code";
@@ -674,6 +674,14 @@ router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): 
         eq(referralsTable.referrerId, req.params.clientId),
       ))
       .orderBy(desc(referralsTable.createdAt));
+    const attemptLogs = await db.select()
+      .from(referralAttemptLogsTable)
+      .where(and(
+        eq(referralAttemptLogsTable.tenantId, me.tenantId),
+        eq(referralAttemptLogsTable.clientId, req.params.clientId),
+      ))
+      .orderBy(desc(referralAttemptLogsTable.createdAt))
+      .limit(20);
     res.json({
       referralCode: client.referralCode ?? null,
       referralCodeStatus: client.referralCodeStatus ?? "active",
@@ -683,6 +691,7 @@ router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): 
       referralSuspendedAttemptAt: client.referralSuspendedAttemptAt ?? null,
       referralSuspendedAttemptCount: client.referralSuspendedAttemptCount ?? 0,
       referrals,
+      attemptLogs,
     });
   } catch (err) {
     next(err);

@@ -26,6 +26,7 @@ import {
   partnerProductsTable,
   partnerAvailabilityTable,
   priceAlertSubscriptionsTable,
+  referralAttemptLogsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, ilike, or, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -1170,6 +1171,11 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
         .catch((err: unknown) => {
           console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
         });
+      db.insert(referralAttemptLogsTable)
+        .values({ id: generateId(), tenantId: store.tenantId, clientId: referrer.id, storeSlug: req.params.slug, ipAddress: getClientIp(req) ?? null })
+        .catch((err: unknown) => {
+          console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
+        });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
@@ -1308,6 +1314,11 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
         .execute()
         .catch((err: unknown) => {
           console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
+        });
+      db.insert(referralAttemptLogsTable)
+        .values({ id: generateId(), tenantId: store.tenantId, clientId: referrer.id, storeSlug: req.params.slug, ipAddress: getClientIp(req) ?? null })
+        .catch((err: unknown) => {
+          console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
         });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }

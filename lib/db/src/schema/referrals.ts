@@ -140,3 +140,14 @@ export const referralCampaignsTable = pgTable("referral_campaigns", {
 });
 
 export type ReferralCampaign = typeof referralCampaignsTable.$inferSelect;
+
+export const referralAttemptLogsTable = pgTable("referral_attempt_logs", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  clientId: text("client_id").notNull(),
+  storeSlug: text("store_slug").notNull(),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ReferralAttemptLog = typeof referralAttemptLogsTable.$inferSelect;

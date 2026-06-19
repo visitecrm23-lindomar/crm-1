@@ -64,6 +64,13 @@
       "when": 1800700000000,
       "tag": "0008_referral_suspended_attempt_count",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1800800000000,
+      "tag": "0009_referral_attempt_logs",
+      "breakpoints": true
     }
   ]
 }

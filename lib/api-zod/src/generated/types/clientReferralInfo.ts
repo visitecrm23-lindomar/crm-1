@@ -7,6 +7,16 @@
  */
 import type { Referral } from "./referral";
 
+export interface ReferralAttemptLog {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  storeSlug: string;
+  /** @nullable */
+  ipAddress: string | null;
+  createdAt: string;
+}
+
 export interface ClientReferralInfo {
   /** @nullable */
   referralCode: string | null;
@@ -17,4 +27,6 @@ export interface ClientReferralInfo {
   referralSuspendedAttemptAt?: string | null;
   referralSuspendedAttemptCount: number;
   referrals: Referral[];
+  /** @nullable */
+  attemptLogs?: ReferralAttemptLog[] | null;
 }
