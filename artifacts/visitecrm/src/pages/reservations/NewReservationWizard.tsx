@@ -139,6 +139,12 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
     if (open) { setSelectedTripId(initialTripId ?? ""); setSelectedClientId(initialClientId ?? ""); setTotalValue(initialAmount ?? 0); }
   }, [open, initialTripId, initialClientId, initialAmount]);
 
+  useEffect(() => {
+    if (isCpfMode && !cpfSearchLoading && cpfMatches.length === 1 && !selectedClientId) {
+      handleSelectClient(cpfMatches[0].id);
+    }
+  }, [isCpfMode, cpfSearchLoading, cpfMatches.length]);
+
   const uiCouponApplied = roundMoney(Math.min(couponApplied?.amount ?? 0, totalValue));
   const uiRemaining1 = roundMoney(totalValue - uiCouponApplied);
   const uiLoyaltyApplied = roundMoney(Math.min(loyaltyAmountApplied, uiRemaining1));
