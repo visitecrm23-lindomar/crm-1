@@ -79,7 +79,24 @@ import ParceirosPortal from "@/pages/parceiros/index";
 import { ROLES, ADMIN_ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const clerkProxyUrl: string | undefined = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
+// In development (Replit preview is a cross-site iframe over HTTPS), route
+// Clerk's Frontend API through the same-origin backend proxy at /api/__clerk so
+// its cookies are first-party and reach the API. The backend mirrors this by
+// deriving CLERK_PROXY_URL from REPLIT_DEV_DOMAIN. Without this, the frontend
+// talks directly to Clerk's FAPI, its cookies are third-party (blocked in the
+// iframe), every /api request is unauthenticated, and RoleRedirect loops to
+// /sign-in. Clerk always loads its clerk-js script over HTTPS, so we only engage
+// the proxy when the current origin is itself HTTPS; on plain http://localhost
+// we fall back to Clerk's direct FAPI (which is reachable over HTTPS). In
+// production VITE_CLERK_PROXY_URL is honored if set; otherwise no proxy is used
+// (the deployed app is a top-level context, so direct FAPI works).
+const clerkProxyUrl: string | undefined =
+  import.meta.env.VITE_CLERK_PROXY_URL ||
+  (import.meta.env.DEV &&
+  typeof window !== "undefined" &&
+  window.location.protocol === "https:"
+    ? `${window.location.origin}/api/__clerk`
+    : undefined);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {

@@ -145,11 +145,9 @@ timeoutMs = 180000
   [userenv]
 
   [userenv.production]
-  FRONTEND_URL = "https://visitecrm.com"
-  ADDITIONAL_ORIGINS = "https://visite-crm.replit.app"
-  CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
-  VITE_APP_URL = "https://visitecrm.com"
-  VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
+FRONTEND_URL = "https://crm-1--lindomariracy.replit.app"
+ADDITIONAL_ORIGINS = "https://crm-1--lindomariracy.replit.app"
+VITE_APP_URL = "https://crm-1--lindomariracy.replit.app"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"

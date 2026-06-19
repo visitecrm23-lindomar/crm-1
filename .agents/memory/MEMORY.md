@@ -24,3 +24,4 @@
 - [Referral CHECK constraint gap](referral-check-constraint-gap.md) — referrals_crm_requires_reservation_id is in live DBs but missing from Drizzle schema + squash baseline; fresh DBs would silently lack it.
 - [Frontend SSE component tests](frontend-sse-component-tests.md) — shared eventSourceHarness.ts stubs EventSource; mocked hooks (useToast/wouter) MUST return stable refs or effects loop & act() hangs; vitest needs esbuild jsx:automatic for .tsx.
 - [Endpoint test db mock exports](endpoint-test-db-mock-exports.md) — endpoints.test.ts mocks @workspace/db with a hand-listed table set; a handler touching an unlisted table throws → 500 (not the expected 4xx). Add the table when a positive control reaches new DB reads.
+- [Clerk dev proxy](clerk-dev-proxy.md) — dev frontend MUST route Clerk FAPI via same-origin /api/__clerk (https-only guard) or iframe third-party cookies → 401 loop; prod uses no proxy unless VITE_CLERK_PROXY_URL is real.
