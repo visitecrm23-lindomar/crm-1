@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -536,6 +536,12 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
                     <XCircle className="w-3 h-3" /> Cancelado
+                  </span>
+                )}
+                {(data?.referralCodeStatus ?? "active") !== "active" && (data as { referralSuspendedAttemptAt?: string | null } | undefined)?.referralSuspendedAttemptAt && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200" title="Última tentativa de uso após suspensão">
+                    <Clock className="w-3 h-3" />
+                    Tentativa: {new Date((data as { referralSuspendedAttemptAt: string }).referralSuspendedAttemptAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
                 {isAdmin && (

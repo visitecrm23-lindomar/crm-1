@@ -1170,6 +1170,13 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
     }
 
     if (referrer.referralCodeStatus !== "active") {
+      db.update(clientsTable)
+        .set({ referralSuspendedAttemptAt: new Date() })
+        .where(eq(clientsTable.id, referrer.id))
+        .execute()
+        .catch((err: unknown) => {
+          console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
+        });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
@@ -1307,6 +1314,13 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
     }
 
     if (referrer.referralCodeStatus !== "active") {
+      db.update(clientsTable)
+        .set({ referralSuspendedAttemptAt: new Date() })
+        .where(eq(clientsTable.id, referrer.id))
+        .execute()
+        .catch((err: unknown) => {
+          console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
+        });
       next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 

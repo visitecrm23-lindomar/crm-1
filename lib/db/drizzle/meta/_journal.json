@@ -43,6 +43,13 @@
       "when": 1800400000000,
       "tag": "0005_referral_settings_fixup",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1800500000000,
+      "tag": "0006_referral_suspended_attempt",
+      "breakpoints": true
     }
   ]
 }
