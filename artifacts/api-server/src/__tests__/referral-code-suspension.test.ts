@@ -400,4 +400,50 @@ describe("GET /api/clients/:clientId/referral — response shape", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("referralSuspendedAttemptCount", 0);
   });
+
+  it("returns attemptLogs: [] when no attempt log rows exist", async () => {
+    mockSelectLimit.mockResolvedValue([FAKE_CLIENT]);
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("attemptLogs");
+    expect(res.body.attemptLogs).toEqual([]);
+  });
+
+  it("returns populated attemptLogs when the mock has log rows", async () => {
+    const FAKE_LOG = {
+      id: "log-001",
+      clientId: FAKE_CLIENT.id,
+      tenantId: FAKE_USER.tenantId,
+      storeSlug: "minha-loja",
+      ipAddress: "203.0.113.1",
+      createdAt: "2026-06-01T12:00:00.000Z",
+    };
+
+    mockSelectLimit.mockResolvedValue([FAKE_CLIENT]);
+
+    // Override orderBy for this test: first call (referrals) → [],
+    // second call (attemptLogs with .limit(20)) → [FAKE_LOG].
+    mockSelectOrderBy
+      .mockReturnValueOnce(Promise.resolve([]))
+      .mockReturnValueOnce(
+        Object.assign(Promise.resolve([FAKE_LOG]), {
+          limit: vi.fn().mockResolvedValue([FAKE_LOG]),
+        }),
+      );
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("attemptLogs");
+    expect(res.body.attemptLogs).toHaveLength(1);
+    expect(res.body.attemptLogs[0]).toMatchObject({
+      id: "log-001",
+      storeSlug: "minha-loja",
+      ipAddress: "203.0.113.1",
+    });
+  });
 });

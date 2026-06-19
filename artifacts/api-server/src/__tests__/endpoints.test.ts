@@ -28,6 +28,8 @@ const {
   mockUpdate,
   mockUpdateSet,
   mockUpdateExecute,
+  mockInsert,
+  mockInsertValues,
 } = vi.hoisted(() => {
   const capturedInserts: Record<string, unknown>[] = [];
 
@@ -52,6 +54,11 @@ const {
   const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
   const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
 
+  // db.insert(...).values(...) chain. A single `mockInsertValues` mock is
+  // shared so tests can assert on which values were passed.
+  const mockInsertValues = vi.fn().mockResolvedValue([]);
+  const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
+
   return {
     mockLimit,
     mockWhere,
@@ -62,6 +69,8 @@ const {
     mockUpdate,
     mockUpdateSet,
     mockUpdateExecute,
+    mockInsert,
+    mockInsertValues,
   };
 });
 
@@ -72,7 +81,7 @@ const {
 vi.mock("@workspace/db", () => ({
   db: {
     select: mockSelect,
-    insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
+    insert: mockInsert,
     update: mockUpdate,
     transaction: mockTransaction,
   },
@@ -747,6 +756,17 @@ describe("POST /api/public/store/:slug/referral/validate — suspended attempt t
       }),
     );
     expect(mockUpdateExecute).toHaveBeenCalledTimes(1);
+
+    // The fire-and-forget attempt-log insert must also have been triggered
+    // with the correct tenant, client, and store context.
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-001",
+        tenantId: "tenant-001",
+        storeSlug: "minha-loja",
+      }),
+    );
   });
 
   it("does NOT record a suspended attempt for an active code (passes the status gate)", async () => {
@@ -774,6 +794,8 @@ describe("POST /api/public/store/:slug/referral/validate — suspended attempt t
     expect(mockUpdateSet).not.toHaveBeenCalledWith(
       expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
     );
+    // No attempt-log insert for active codes.
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });
 
@@ -819,6 +841,17 @@ describe("GET /api/public/store/:slug/referral/info — suspended attempt tracki
       expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
     );
     expect(mockUpdateExecute).toHaveBeenCalledTimes(1);
+
+    // The fire-and-forget attempt-log insert must also have been triggered
+    // with the correct tenant, client, and store context.
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-001",
+        tenantId: "tenant-001",
+        storeSlug: "minha-loja",
+      }),
+    );
   });
 
   it("does NOT record a suspended attempt for an active code (passes the status gate)", async () => {
@@ -842,6 +875,8 @@ describe("GET /api/public/store/:slug/referral/info — suspended attempt tracki
     expect(mockUpdateSet).not.toHaveBeenCalledWith(
       expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
     );
+    // No attempt-log insert for active codes.
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });
 
