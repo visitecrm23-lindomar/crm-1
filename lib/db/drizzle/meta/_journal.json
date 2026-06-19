@@ -50,6 +50,13 @@
       "when": 1800500000000,
       "tag": "0006_referral_suspended_attempt",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1800600000000,
+      "tag": "0007_defer_referral_effects",
+      "breakpoints": true
     }
   ]
 }

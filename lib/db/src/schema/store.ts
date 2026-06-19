@@ -229,6 +229,20 @@ export const storeOrdersTable = pgTable("store_orders", {
   couponId: text("coupon_id"),
   couponCode: text("coupon_code"),
 
+  // Deferred referral/credit effects: persisted at checkout but applied ONLY
+  // after payment is confirmed (see services/checkout/deferred-referral-effects.ts).
+  // This prevents anonymous/unpaid orders from crediting a referrer's conversion
+  // or consuming a customer's referral credit before money is captured.
+  pendingReferral: json("pending_referral").$type<{
+    code: string;
+    referrerId: string;
+    discountValue: number;
+    discountType: string;
+    cookieId?: string | null;
+  }>(),
+  pendingCreditSpend: json("pending_credit_spend").$type<Array<{ id: string; consumedAmount: number }>>(),
+  referralEffectsAppliedAt: timestamp("referral_effects_applied_at", { withTimezone: true }),
+
   paymentMethod: text("payment_method").notNull(),
   paymentProvider: text("payment_provider").notNull(),
   paymentStatus: text("payment_status").notNull().default("pending"),

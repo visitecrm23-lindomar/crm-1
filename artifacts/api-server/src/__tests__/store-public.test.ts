@@ -727,19 +727,17 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
+    // Task #17 deferral: the referral CONVERSION (crediting the referrer) is no
+    // longer recorded at checkout — only the discount is applied to the total and
+    // the referral intent is persisted on the order (pending_referral). So the
+    // former "inside recordReferralConversion tx" select slots are gone.
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
       .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([referrer])              // referrer lookup
-      .mockResolvedValueOnce([refSettings])           // referral settings
-      // Inside recordReferralConversion tx (referral-conversion.ts):
+      .mockResolvedValueOnce([referrer])              // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])           // referral settings (resolveCheckoutDiscounts)
       .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside persist-order tx)
       .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([])                      // refSettings re-fetch inside referral tx
-      .mockResolvedValueOnce([])                      // applyActiveCampaignBonus – no active campaign
-      .mockResolvedValueOnce([])                      // referrer re-fetch inside referral tx
-      .mockResolvedValueOnce([])                      // trackingRow
-      .mockResolvedValueOnce([])                      // lastReferrerOrder
       .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
       .mockResolvedValue([]);
 

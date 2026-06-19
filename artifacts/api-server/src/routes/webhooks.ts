@@ -505,7 +505,7 @@ interface ApplyResult {
   tenantId: string;
 }
 
-async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<ApplyResult | null> {
+export async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<ApplyResult | null> {
   const { store, gateway, transactionId, paymentIntentId, amount, paidAt } = args;
   if (amount <= 0) return null;
 
@@ -565,8 +565,15 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<App
     );
 
   if (reservations.length === 0) {
-    logger.info({ orderId: order.id, paymentIntentId }, "[webhooks] Order has no linked reservations");
-    return null;
+    // Product-only paid order: there are no reservations to allocate Payment rows
+    // to, but the order IS paid. Return the orderId (with no reservationIds) so
+    // the caller still runs the payment-gated post-payment side effects (deferred
+    // referral conversion + referral-credit consumption + referral-code mint).
+    // Without this, paid product-only gateway orders would never credit the
+    // referrer or consume the customer's referral credit. runPostPaymentSideEffects
+    // is fully idempotent, so re-running it on a duplicate webhook is safe.
+    logger.info({ orderId: order.id, paymentIntentId }, "[webhooks] Product-only order paid — no reservations to sync");
+    return { orderId: order.id, reservationIds: [], tenantId: order.tenantId };
   }
 
   // Mixed-cart orders may include non-reservation products. Cap the amount

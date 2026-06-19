@@ -923,9 +923,6 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         if (txErr.message === "trip_not_found") {
           next(new NotFoundError(`Viagem vinculada ao produto "${tagged.productName ?? ""}" não encontrada`, "TRIP_NOT_FOUND")); return;
         }
-        if (txErr.message === "insufficient_credit") {
-          next(new ConflictError("Crédito de indicação insuficiente ou já utilizado. Tente novamente.", "INSUFFICIENT_CREDIT")); return;
-        }
       }
       throw txErr;
     }

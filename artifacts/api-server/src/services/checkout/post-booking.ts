@@ -4,6 +4,9 @@ import { and, eq } from "drizzle-orm";
 import { ensurePortalAccount } from "./portal-account";
 import { generateAndAssignReferralCode } from "../../lib/referral-code";
 import { generateReferralCode } from "../../lib/id";
+import { applyDeferredOrderCredits } from "./deferred-referral-effects";
+import { dispatchReferralConvertedEmail, dispatchReferralTierUpgradeEmail } from "../../queues/email-helpers";
+import { dispatchWhatsAppReferralConverted } from "../../queues/whatsapp-helpers";
 
 /**
  * Side effects that must only happen AFTER a store order's payment is confirmed
@@ -31,6 +34,46 @@ import { generateReferralCode } from "../../lib/id";
  * @param orderId - The store_orders.id whose payment was just confirmed.
  */
 export async function runPostPaymentSideEffects(orderId: string): Promise<void> {
+  // Deferred referral conversion + referral-credit consumption. Runs first, in
+  // its own transaction, gated behind confirmed payment and idempotent. Wrapped
+  // in try/catch so a credit/referral failure never blocks the rest of the
+  // post-payment side effects (or the already-confirmed payment).
+  try {
+    const deferred = await applyDeferredOrderCredits(orderId);
+    if (deferred.conversionApplied && deferred.referrerId && deferred.tenantId) {
+      dispatchReferralConvertedEmail(
+        deferred.referrerId,
+        deferred.customerName ?? "",
+        deferred.tenantId,
+      ).catch((err) =>
+        console.error("[checkout/post-payment] Failed to dispatch referral-converted email:", err),
+      );
+      if (deferred.conversion?.tierUpgraded) {
+        dispatchReferralTierUpgradeEmail(
+          deferred.referrerId,
+          deferred.tenantId,
+          deferred.conversion.newTierLevel,
+          deferred.conversion.newTierLabel,
+          deferred.conversion.bonusMultiplier,
+        ).catch((err) =>
+          console.error("[checkout/post-payment] Failed to dispatch referral tier-upgrade email:", err),
+        );
+      }
+      if (deferred.referralCode) {
+        dispatchWhatsAppReferralConverted({
+          referrerId: deferred.referrerId,
+          referredName: deferred.customerName ?? "",
+          referralCode: deferred.referralCode,
+          tenantId: deferred.tenantId,
+        }).catch((err) =>
+          console.error("[checkout/post-payment] Failed to dispatch referral WhatsApp notification:", err),
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[checkout/post-payment] Failed to apply deferred referral/credit effects:", err);
+  }
+
   const [order] = await db
     .select({
       id: storeOrdersTable.id,

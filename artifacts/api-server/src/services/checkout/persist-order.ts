@@ -1,13 +1,10 @@
 import { db } from "@workspace/db";
-import { dispatchReferralConvertedEmail, dispatchReferralTierUpgradeEmail } from "../../queues/email-helpers";
-import { dispatchWhatsAppReferralConverted } from "../../queues/whatsapp-helpers";
 import {
   storesTable,
   storeProductsTable,
   storeOrdersTable,
   storeOrderItemsTable,
   storeCouponsTable,
-  referralsTable,
   partnersTable,
   partnerProductsTable,
   partnerCommissionsTable,
@@ -17,7 +14,6 @@ import { and, eq, sql, inArray } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import { upsertCheckoutClient } from "./checkout-user";
 import { lockProductsForCheckout } from "./order-locks";
-import { recordReferralConversion, type ReferralConversionResult } from "./referral-conversion";
 import type { Tx } from "./tx";
 
 export interface PersistedOrderItem {
@@ -165,6 +161,22 @@ async function writeOrderAndItems(tx: Tx, args: PersistOrderArgs, reservationCli
     totalAmount: totalAmount.toFixed(2),
     ...(couponId && { couponId }),
     ...(data.couponCode && { couponCode: data.couponCode }),
+    // Persist referral conversion + referral-credit intent on the order. The
+    // actual crediting/consumption is deferred to payment confirmation
+    // (applyDeferredOrderCredits) so unpaid orders cannot credit a referrer or
+    // burn a customer's referral credit.
+    ...(args.appliedReferralCode && args.appliedReferralReferrerId && {
+      pendingReferral: {
+        code: args.appliedReferralCode,
+        referrerId: args.appliedReferralReferrerId,
+        discountValue: args.appliedReferralDiscountValue,
+        discountType: args.appliedReferralDiscountType,
+        cookieId: data.referralCookieId ?? null,
+      },
+    }),
+    ...(args.creditSpend && args.creditSpend.length > 0 && {
+      pendingCreditSpend: args.creditSpend,
+    }),
     paymentMethod: data.paymentMethod ?? "pending",
     paymentProvider: data.paymentProvider ?? "manual",
     ...(data.customerNotes && { customerNotes: data.customerNotes }),
@@ -202,7 +214,6 @@ async function decrementStockAndSales(tx: Tx, args: PersistOrderArgs): Promise<v
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
-  let referralConversionResult: ReferralConversionResult | undefined;
 
   await db.transaction(async (tx) => {
     await lockProductsForCheckout(tx, {
@@ -245,96 +256,23 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         .where(eq(storeCouponsTable.id, args.couponId));
     }
 
-    if (args.appliedReferralCode && args.appliedReferralReferrerId) {
-      referralConversionResult = await recordReferralConversion(tx, {
-        tenantId: args.store.tenantId,
-        referrerId: args.appliedReferralReferrerId,
-        referralCode: args.appliedReferralCode,
-        referredClientId: reservationClientId,
-        customerEmail: args.data.customerEmail,
-        customerName: args.data.customerName,
-        discountAmount: args.discountAmount,
-        discountValue: args.appliedReferralDiscountValue,
-        discountType: args.appliedReferralDiscountType,
-        referralCookieId: args.data.referralCookieId,
-        conversionIp: args.data.ipAddress ?? null,
-        reservationId: null,
-      });
-    }
+    // Referral conversion (crediting the referrer) and referral-credit
+    // consumption are NOT performed here. The intent is persisted on the order
+    // (pending_referral / pending_credit_spend) and the effects are applied only
+    // after payment is confirmed, by applyDeferredOrderCredits (invoked from
+    // runPostPaymentSideEffects). This prevents anonymous/unpaid checkout
+    // submissions from crediting a referrer or burning a customer's credit, and
+    // lets the conversion be linked to a real reservation so it is reversible.
+
     await tx.update(storesTable)
       .set({ totalOrders: sql`total_orders + 1` })
       .where(eq(storesTable.id, args.store.id));
-
-    if (args.creditSpend && args.creditSpend.length > 0) {
-      // Lock rows for update to prevent concurrent double-spend
-      const ids = args.creditSpend.map((r) => r.id);
-      // Re-read current balances under row lock to catch concurrent modifications
-      const lockedRows = await tx.execute(
-        sql`SELECT id, bonus_amount, COALESCE(bonus_credit_used_amount, 0) AS already_used FROM referrals WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) FOR UPDATE`,
-      );
-      const lockedMap = new Map(
-        (lockedRows.rows as Array<{ id: string; bonus_amount: string; already_used: string }>).map(
-          (r) => [r.id, { bonusAmount: Number(r.bonus_amount), alreadyUsed: Number(r.already_used) }],
-        ),
-      );
-      // Validate that each planned spend is still feasible under lock
-      for (const { id, consumedAmount } of args.creditSpend) {
-        const locked = lockedMap.get(id);
-        if (!locked) throw new Error("insufficient_credit");
-        const stillAvailable = locked.bonusAmount - locked.alreadyUsed;
-        if (stillAvailable < consumedAmount - 0.005) throw new Error("insufficient_credit");
-      }
-      const now = new Date();
-      for (const { id, consumedAmount } of args.creditSpend) {
-        // Accumulate spend (not overwrite) to support partial and sequential consumption
-        await tx
-          .update(referralsTable)
-          .set({
-            bonusCreditUsedAt: now,
-            bonusCreditOrderId: args.orderId,
-            bonusCreditUsedAmount: sql`COALESCE(${referralsTable.bonusCreditUsedAmount}, 0) + ${consumedAmount.toFixed(2)}`,
-            updatedAt: now,
-          })
-          .where(eq(referralsTable.id, id));
-      }
-    }
   });
 
-  if (args.appliedReferralCode && args.appliedReferralReferrerId) {
-    dispatchReferralConvertedEmail(
-      args.appliedReferralReferrerId,
-      args.data.customerName,
-      args.store.tenantId,
-    ).catch((err) => {
-      console.error("[checkout/persist-order] Failed to dispatch referral-converted email:", err);
-    });
-
-    if ((referralConversionResult as ReferralConversionResult | undefined)?.tierUpgraded) {
-      dispatchReferralTierUpgradeEmail(
-        args.appliedReferralReferrerId,
-        args.store.tenantId,
-        (referralConversionResult as ReferralConversionResult).newTierLevel,
-        (referralConversionResult as ReferralConversionResult).newTierLabel,
-        (referralConversionResult as ReferralConversionResult).bonusMultiplier,
-      ).catch((err) => {
-        console.error("[checkout/persist-order] Failed to dispatch referral tier-upgrade email:", err);
-      });
-    }
-
-    dispatchWhatsAppReferralConverted({
-      referrerId: args.appliedReferralReferrerId,
-      referredName: args.data.customerName,
-      referralCode: args.appliedReferralCode,
-      tenantId: args.store.tenantId,
-    }).catch((err) => {
-      console.error("[checkout/persist-order] Failed to dispatch referral WhatsApp:", err);
-    });
-  }
-
-  // Referral-code generation for the checkout client is intentionally NOT done
-  // here. It is deferred to runPostPaymentSideEffects so a code is only minted
-  // after the order's payment is confirmed (anonymous, non-paying checkout
-  // submissions must not be able to mint referral codes).
+  // Referral-converted / tier-upgrade / WhatsApp notifications and referral-code
+  // generation for the checkout client are intentionally NOT dispatched here.
+  // They are deferred to runPostPaymentSideEffects so they only fire after the
+  // order's payment is confirmed.
 
   return { reservationClientId };
 }
