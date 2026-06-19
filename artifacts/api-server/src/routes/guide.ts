@@ -179,6 +179,17 @@ router.post("/guide/trip/:tripId/checkins", async (req, res, next: NextFunction)
       status: z.enum(["present", "absent"]).default("present"),
     }).parse(req.body);
 
+    const [passenger] = await db.select({ id: passengersTable.id })
+      .from(passengersTable)
+      .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+      .where(and(
+        eq(passengersTable.id, passengerId),
+        eq(reservationsTable.tripId, guide.tripId),
+        eq(reservationsTable.tenantId, guide.tenantId),
+      ))
+      .limit(1);
+    if (!passenger) { next(new NotFoundError("Passageiro não encontrado", "PASSENGER_NOT_FOUND")); return; }
+
     const checkedInAt = new Date();
     await db.insert(tripCheckinsTable)
       .values({
@@ -218,6 +229,17 @@ router.delete("/guide/trip/:tripId/checkins/:passengerId", async (req, res, next
     if (guide.tripId !== req.params.tripId) {
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
+    const [passenger] = await db.select({ id: passengersTable.id })
+      .from(passengersTable)
+      .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+      .where(and(
+        eq(passengersTable.id, req.params.passengerId!),
+        eq(reservationsTable.tripId, guide.tripId),
+        eq(reservationsTable.tenantId, guide.tenantId),
+      ))
+      .limit(1);
+    if (!passenger) { next(new NotFoundError("Passageiro não encontrado", "PASSENGER_NOT_FOUND")); return; }
+
     await db.delete(tripCheckinsTable)
       .where(and(
         eq(tripCheckinsTable.tripId, guide.tripId),

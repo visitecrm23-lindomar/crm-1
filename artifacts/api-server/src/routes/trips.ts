@@ -8,7 +8,7 @@ import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
 import { eq, and, ilike, sql, desc, asc, inArray, or, gt } from "drizzle-orm";
 import { generateId } from "../lib/id";
-import { requireAuth, getTenantUser } from "../lib/tenant";
+import { requireAuth, getTenantUser, MANAGEMENT_ROLES } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { hasSeatMapFeature } from "../lib/plan-features";
 import { deriveAgeCategory, getAgeYears } from "../lib/passenger";
@@ -2202,6 +2202,9 @@ router.get("/trips/:id/checkins", async (req, res, next: NextFunction): Promise<
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
     const [trip] = await db.select({ id: tripsTable.id })
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
@@ -2218,6 +2221,9 @@ router.post("/trips/:id/checkins", async (req, res, next: NextFunction): Promise
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
     const { passengerId, reservationId, notes, status } = z.object({
       passengerId: z.string().min(1),
       reservationId: z.string().optional(),
@@ -2230,6 +2236,17 @@ router.post("/trips/:id/checkins", async (req, res, next: NextFunction): Promise
       .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const [passenger] = await db.select({ id: passengersTable.id })
+      .from(passengersTable)
+      .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+      .where(and(
+        eq(passengersTable.id, passengerId),
+        eq(reservationsTable.tripId, req.params.id!),
+        eq(reservationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+    if (!passenger) { next(new NotFoundError("Passageiro não encontrado", "PASSENGER_NOT_FOUND")); return; }
 
     const checkedInAt = new Date();
     await db.insert(tripCheckinsTable)
@@ -2262,11 +2279,25 @@ router.delete("/trips/:id/checkins/:passengerId", async (req, res, next: NextFun
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
     const [trip] = await db.select({ id: tripsTable.id })
       .from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id!), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!trip) { next(new NotFoundError("Viagem não encontrada", "TRIP_NOT_FOUND")); return; }
+
+    const [passenger] = await db.select({ id: passengersTable.id })
+      .from(passengersTable)
+      .innerJoin(reservationsTable, eq(passengersTable.reservationId, reservationsTable.id))
+      .where(and(
+        eq(passengersTable.id, req.params.passengerId!),
+        eq(reservationsTable.tripId, req.params.id!),
+        eq(reservationsTable.tenantId, me.tenantId),
+      ))
+      .limit(1);
+    if (!passenger) { next(new NotFoundError("Passageiro não encontrado", "PASSENGER_NOT_FOUND")); return; }
 
     await db.delete(tripCheckinsTable)
       .where(and(

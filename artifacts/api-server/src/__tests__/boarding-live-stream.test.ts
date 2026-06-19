@@ -184,6 +184,7 @@ import { errorHandler } from "../middlewares/errorHandler.js";
 
 interface QueryChain extends Promise<unknown[]> {
   from(t?: unknown): QueryChain;
+  innerJoin(t?: unknown, c?: unknown): QueryChain;
   where(c?: unknown): QueryChain;
   limit(n?: number): Promise<unknown[]>;
   orderBy(...args: unknown[]): Promise<unknown[]>;
@@ -193,6 +194,7 @@ interface QueryChain extends Promise<unknown[]> {
 function makeChain(data: unknown[]): QueryChain {
   return Object.assign(Promise.resolve(data), {
     from: vi.fn().mockImplementation(() => makeChain(data)),
+    innerJoin: vi.fn().mockImplementation(() => makeChain(data)),
     where: vi.fn().mockImplementation(() => makeChain(data)),
     limit: vi.fn().mockResolvedValue(data),
     orderBy: vi.fn().mockResolvedValue(data),
@@ -379,6 +381,7 @@ describe("boarding-state changes emit a live refresh", () => {
   it("emits a refresh for the trip after a passenger check-in (POST /checkins)", async () => {
     const app = buildApp();
     selectQueue.push([{ id: "trip-001" }]); // trip lookup → found in tenant
+    selectQueue.push([{ id: "pax-001" }]);  // passenger ownership check → belongs to trip
 
     const res = await request(app)
       .post("/api/trips/trip-001/checkins")
@@ -404,6 +407,7 @@ describe("boarding-state changes emit a live refresh", () => {
   it("emits a refresh for the trip after a check-in is removed (DELETE /checkins/:passengerId)", async () => {
     const app = buildApp();
     selectQueue.push([{ id: "trip-001" }]); // trip lookup → found in tenant
+    selectQueue.push([{ id: "pax-001" }]);  // passenger ownership check → belongs to trip
 
     const res = await request(app).delete("/api/trips/trip-001/checkins/pax-001");
 

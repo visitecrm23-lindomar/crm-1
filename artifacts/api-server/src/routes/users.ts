@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { getAuth, clerkClient } from "@clerk/express";
 import { ADMIN_ROLES } from '../lib/tenant';
-import { ROLES } from "@workspace/permissions";
+import { ROLES, RESOURCES, ACTIONS, hasPermission } from "@workspace/permissions";
 import { AppError, ForbiddenError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 
 const router = Router();
@@ -210,6 +210,9 @@ router.get("/users", async (req, res, next): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.TEAM, ACTIONS.VIEW)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+    }
     const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
     res.json(users.map(formatUser));
   } catch (err) {
@@ -262,7 +265,13 @@ router.patch("/users/:id", async (req, res, next): Promise<void> => {
     const parsed = UpdateUserBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }
     const updates: Partial<typeof usersTable.$inferInsert> = {};
-    if (parsed.data.name != null) updates.name = parsed.data.name;
+    const isSelf = req.params.id === me.id;
+    if (parsed.data.name != null) {
+      if (!isSelf && !ADMIN_ROLES.includes(me.role)) {
+        next(new ForbiddenError("Forbidden: apenas administradores podem alterar dados de outros usuários", "FORBIDDEN_ROLE")); return;
+      }
+      updates.name = parsed.data.name;
+    }
     if (parsed.data.role != null || parsed.data.isActive != null) {
       const adminRoles = ADMIN_ROLES;
       if (!adminRoles.includes(me.role)) {
