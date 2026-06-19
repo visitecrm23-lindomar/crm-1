@@ -463,8 +463,16 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error("Failed");
+      const json = await res.json() as { emailSent?: boolean };
       const labels: Record<string, string> = { active: "ativado", blocked: "bloqueado", cancelled: "cancelado" };
       toast({ title: `Código de indicação ${labels[newStatus] ?? newStatus}` });
+      if ((newStatus === "blocked" || newStatus === "cancelled") && json.emailSent === false) {
+        toast({
+          title: "Aviso: e-mail não enviado",
+          description: "O cliente pode não ter recebido a notificação de suspensão do código.",
+          variant: "destructive",
+        });
+      }
       refetch();
     } catch {
       toast({ title: "Erro ao alterar status do código", variant: "destructive" });

@@ -741,12 +741,16 @@ router.patch("/clients/:id/referral-code", async (req, res, next: NextFunction):
       .set({ referralCodeStatus: parsed.data.status, updatedAt: new Date() })
       .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)))
       .returning({ id: clientsTable.id, referralCodeStatus: clientsTable.referralCodeStatus });
-    res.json({ id: updated.id, referralCodeStatus: updated.referralCodeStatus });
+    let emailSent: boolean | undefined;
     if (parsed.data.status === "blocked" || parsed.data.status === "cancelled") {
-      dispatchReferralCodeSuspendedEmail({ clientId: client.id, tenantId: me.tenantId, status: parsed.data.status }).catch((err) => {
+      try {
+        emailSent = await dispatchReferralCodeSuspendedEmail({ clientId: client.id, tenantId: me.tenantId, status: parsed.data.status });
+      } catch (err) {
         req.log?.warn({ err, clientId: client.id }, "[clients] referral-code-suspended email dispatch failed");
-      });
+        emailSent = false;
+      }
     }
+    res.json({ id: updated.id, referralCodeStatus: updated.referralCodeStatus, ...(emailSent !== undefined ? { emailSent } : {}) });
   } catch (err) {
     next(err);
   }

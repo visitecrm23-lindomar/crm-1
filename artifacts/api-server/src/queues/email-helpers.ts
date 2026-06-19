@@ -1539,7 +1539,7 @@ export async function dispatchReferralCodeSuspendedEmail(opts: {
   clientId: string;
   tenantId: string;
   status: "blocked" | "cancelled";
-}): Promise<void> {
+}): Promise<boolean> {
   const { clientId, tenantId, status } = opts;
 
   const [client] = await db
@@ -1550,12 +1550,12 @@ export async function dispatchReferralCodeSuspendedEmail(opts: {
 
   if (!client?.email) {
     logger.warn({ clientId, tenantId }, "[email-queue] referral-code-suspended: client has no email — skipping");
-    return;
+    return false;
   }
 
   if (!client.referralCode) {
     logger.warn({ clientId, tenantId }, "[email-queue] referral-code-suspended: client has no referral code — skipping");
-    return;
+    return false;
   }
 
   const [tenant] = await db
@@ -1593,4 +1593,6 @@ export async function dispatchReferralCodeSuspendedEmail(opts: {
     { emailLogId, clientId, tenantId, success: sendResult.success },
     "[email-queue] referral-code-suspended email dispatched"
   );
+
+  return sendResult.success;
 }
