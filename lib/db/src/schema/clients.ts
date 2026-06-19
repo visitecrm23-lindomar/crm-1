@@ -60,6 +60,7 @@ export const clientsTable = pgTable("clients", {
   referralEarnings: numeric("referral_earnings", { precision: 10, scale: 2 }).notNull().default("0"),
   referralWelcomeEmailSentAt: timestamp("referral_welcome_email_sent_at", { withTimezone: true }),
   referralSuspendedAttemptAt: timestamp("referral_suspended_attempt_at", { withTimezone: true }),
+  referralSuspendedAttemptCount: integer("referral_suspended_attempt_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   lastContactAt: timestamp("last_contact_at", { withTimezone: true }),

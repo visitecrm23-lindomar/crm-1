@@ -681,6 +681,7 @@ router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): 
       successfulReferrals: client.successfulReferrals ?? 0,
       referralEarnings: Number(client.referralEarnings ?? 0),
       referralSuspendedAttemptAt: client.referralSuspendedAttemptAt ?? null,
+      referralSuspendedAttemptCount: client.referralSuspendedAttemptCount ?? 0,
       referrals,
     });
   } catch (err) {

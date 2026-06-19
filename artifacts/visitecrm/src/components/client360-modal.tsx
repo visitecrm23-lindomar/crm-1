@@ -546,10 +546,15 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
                     <XCircle className="w-3 h-3" /> Cancelado
                   </span>
                 )}
-                {(data?.referralCodeStatus ?? "active") !== "active" && (data as { referralSuspendedAttemptAt?: string | null } | undefined)?.referralSuspendedAttemptAt && (
+                {(data?.referralCodeStatus ?? "active") !== "active" && data?.referralSuspendedAttemptAt && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200" title="Última tentativa de uso após suspensão">
                     <Clock className="w-3 h-3" />
-                    Tentativa: {new Date((data as { referralSuspendedAttemptAt: string }).referralSuspendedAttemptAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    Tentativa: {new Date(data.referralSuspendedAttemptAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {(data?.referralSuspendedAttemptCount ?? 0) > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center px-1.5 rounded-full bg-orange-200 text-orange-800 font-semibold" title="Total de tentativas de uso após suspensão">
+                        {data.referralSuspendedAttemptCount}x
+                      </span>
+                    )}
                   </span>
                 )}
                 {isAdmin && (

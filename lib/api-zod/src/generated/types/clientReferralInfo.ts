@@ -13,5 +13,8 @@ export interface ClientReferralInfo {
   totalReferrals: number;
   successfulReferrals: number;
   referralEarnings: number;
+  /** @nullable */
+  referralSuspendedAttemptAt?: string | null;
+  referralSuspendedAttemptCount: number;
   referrals: Referral[];
 }

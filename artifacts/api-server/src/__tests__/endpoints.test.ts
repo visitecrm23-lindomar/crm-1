@@ -736,10 +736,14 @@ describe("POST /api/public/store/:slug/referral/validate — suspended attempt t
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: "REFERRAL_CODE_SUSPENDED", valid: false });
 
-    // The fire-and-forget suspended-attempt update must have been triggered.
+    // The fire-and-forget suspended-attempt update must have been triggered,
+    // recording the timestamp AND incrementing the attempt count.
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockUpdateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
+      expect.objectContaining({
+        referralSuspendedAttemptAt: expect.any(Date),
+        referralSuspendedAttemptCount: expect.anything(),
+      }),
     );
     expect(mockUpdateExecute).toHaveBeenCalledTimes(1);
   });

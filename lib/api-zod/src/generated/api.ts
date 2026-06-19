@@ -1169,6 +1169,8 @@ export const GetClientReferralResponse = zod.object({
   totalReferrals: zod.number(),
   successfulReferrals: zod.number(),
   referralEarnings: zod.number(),
+  referralSuspendedAttemptAt: zod.string().nullish(),
+  referralSuspendedAttemptCount: zod.number(),
   referrals: zod.array(
     zod.object({
       id: zod.string(),

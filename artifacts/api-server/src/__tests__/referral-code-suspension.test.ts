@@ -371,4 +371,28 @@ describe("GET /api/clients/:clientId/referral — response shape", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("referralSuspendedAttemptAt", null);
   });
+
+  it("includes referralSuspendedAttemptCount in the response", async () => {
+    mockSelectLimit.mockResolvedValue([
+      { ...FAKE_CLIENT, referralSuspendedAttemptCount: 3 },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("referralSuspendedAttemptCount", 3);
+  });
+
+  it("defaults referralSuspendedAttemptCount to 0 when unset", async () => {
+    mockSelectLimit.mockResolvedValue([
+      { ...FAKE_CLIENT, referralSuspendedAttemptCount: null },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("referralSuspendedAttemptCount", 0);
+  });
 });

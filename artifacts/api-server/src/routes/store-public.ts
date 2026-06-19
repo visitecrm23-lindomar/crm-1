@@ -1161,7 +1161,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
 
     if (referrer.referralCodeStatus !== "active") {
       db.update(clientsTable)
-        .set({ referralSuspendedAttemptAt: new Date() })
+        .set({
+          referralSuspendedAttemptAt: new Date(),
+          referralSuspendedAttemptCount: sql`${clientsTable.referralSuspendedAttemptCount} + 1`,
+        })
         .where(eq(clientsTable.id, referrer.id))
         .execute()
         .catch((err: unknown) => {
@@ -1297,7 +1300,10 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
 
     if (referrer.referralCodeStatus !== "active") {
       db.update(clientsTable)
-        .set({ referralSuspendedAttemptAt: new Date() })
+        .set({
+          referralSuspendedAttemptAt: new Date(),
+          referralSuspendedAttemptCount: sql`${clientsTable.referralSuspendedAttemptCount} + 1`,
+        })
         .where(eq(clientsTable.id, referrer.id))
         .execute()
         .catch((err: unknown) => {
