@@ -30,7 +30,6 @@ import {
 import { eq, and, desc, asc, ilike, or, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { getTenantReservationPrefix, getYearMonth } from "../lib/reservation-number";
 import { randomBytes, createHash } from "crypto";
 import { getAIClientForTenant } from "../lib/ai-client";
 import { sendPriceAlertConfirmationEmail } from "../queues/email-helpers";
@@ -39,7 +38,6 @@ import { writeClientActivity } from "../lib/activities";
 import { getClientIp } from "../lib/get-client-ip";
 import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
 import { prepareCheckoutItems } from "../services/checkout/items";
-import { loadReservationContext } from "../services/checkout/reservation-context";
 import { persistCheckoutOrder } from "../services/checkout/persist-order";
 import { runPostBookingSideEffects } from "../services/checkout/post-booking";
 import { insertClientNotification } from "../lib/client-notifications";
@@ -715,43 +713,6 @@ router.get("/public/store/:slug/trips/:tripId/seat-map", async (req, res, next: 
   }
 });
 
-router.get("/public/store/:slug/products/:productSlug/check-cpf", async (req, res, next: NextFunction): Promise<void> => {
-  try {
-    const { slug, productSlug } = req.params;
-    const cpf = String(req.query.cpf ?? "").trim();
-    if (!cpf) { res.json({ exists: false }); return; }
-
-    const store = await getActiveStore(slug);
-    if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
-
-    const [product] = await db.select({ tripId: storeProductsTable.tripId })
-      .from(storeProductsTable)
-      .where(and(
-        eq(storeProductsTable.storeId, store.id),
-        eq(storeProductsTable.slug, productSlug),
-        eq(storeProductsTable.status, "active"),
-      )).limit(1);
-
-    if (!product?.tripId) { res.json({ exists: false }); return; }
-
-    const normalizedCpf = cpf.replace(/\D/g, "");
-    if (!normalizedCpf) { res.json({ exists: false }); return; }
-
-    const [match] = await db.select({ id: reservationsTable.id })
-      .from(reservationsTable)
-      .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
-      .where(and(
-        eq(reservationsTable.tripId, product.tripId),
-        eq(reservationsTable.tenantId, store.tenantId),
-        sql`${reservationsTable.status} != ${RESERVATION_STATUS.CANCELLED}`,
-        sql`REGEXP_REPLACE(${clientsTable.cpf}, '[^0-9]', '', 'g') = ${normalizedCpf}`,
-      )).limit(1);
-
-    res.json({ exists: !!match });
-  } catch (err) {
-    next(err);
-  }
-});
 
 router.get("/public/store/:slug/trips/:tripId/seats/stream", async (req, res, next: NextFunction): Promise<void> => {
   const store = await getActiveStore(req.params.slug).catch(() => null);
@@ -914,24 +875,22 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       ? new Date(data.customerBirthdate.slice(0, 10) + "T12:00:00")
       : null;
 
-    let reservationCreatedById: string | null = null;
-    let vitrineStageId: string | null = null;
-    let tripNameMap = new Map<string, string>();
-    let tenantResPrefix = "";
     if (tripLinkedProducts.size > 0) {
-      const ctx = await loadReservationContext({
-        tenantId: store.tenantId,
-        tripIds: [...tripLinkedProducts.keys()],
-      });
-      reservationCreatedById = ctx.reservationCreatedById;
-      vitrineStageId = ctx.vitrineStageId;
-      tripNameMap = ctx.tripNameMap;
-      tenantResPrefix = await getTenantReservationPrefix(store.tenantId);
+      // Hard cap: prevent a single anonymous order from draining large trip capacity.
+      // Reservations are NOT created here — they are created only after payment confirmation
+      // (Stripe webhook or manual admin payment). This eliminates pre-payment seat holds.
+      const rawMax = parseInt(process.env["CHECKOUT_MAX_SEATS_PER_TRIP"] ?? "20", 10);
+      const maxSeatsPerOrder = Number.isFinite(rawMax) && rawMax > 0 ? Math.min(rawMax, 500) : 20;
+      for (const [, { totalQty }] of tripLinkedProducts) {
+        if (totalQty > maxSeatsPerOrder) {
+          next(new ValidationError(
+            `Máximo de ${maxSeatsPerOrder} passageiros por viagem por pedido.`,
+            "SEATS_PER_ORDER_EXCEEDED",
+          ));
+          return;
+        }
+      }
     }
-
-    const rawTtl = parseInt(process.env["PENDING_RESERVATION_TTL_MINUTES"] ?? "15", 10);
-    const pendingReservationTtlMinutes = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 1440) : 15;
-    const reservationExpiresAt = new Date(Date.now() + pendingReservationTtlMinutes * 60 * 1000);
 
     let reservationClientId: string | null = null;
     try {
@@ -949,8 +908,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
         appliedReferralDiscountValue: discounts.appliedReferralDiscountValue,
         appliedReferralDiscountType: discounts.appliedReferralDiscountType,
         orderItemsData, fetchedProducts, quantityByProductId, tripLinkedProducts,
-        reservationCreatedById, vitrineStageId, parsedBirthDate, tripNameMap,
-        reservationExpiresAt, tenantResPrefix, resYearMonth: getYearMonth(),
+        parsedBirthDate,
         creditSpend: creditSpend.length > 0 ? creditSpend : undefined,
       });
       reservationClientId = result.reservationClientId;
@@ -995,21 +953,21 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
       orderId: order.id,
       items,
       paymentToken: orderPaymentToken,
-      reservationExpiresAt: tripLinkedProducts.size > 0 ? reservationExpiresAt.toISOString() : null,
+      reservationExpiresAt: null,
     });
 
     for (const [tripId] of tripLinkedProducts) {
       broadcastSeatUpdate(tripId, store.tenantId).catch(() => {});
     }
 
-    if (reservationClientId && reservationCreatedById) {
+    if (reservationClientId) {
       const totalFormatted = Number(order?.totalAmount ?? 0)
         .toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       writeClientActivity(
         reservationClientId,
-        "reservation_created",
-        `Reserva criada via loja — ${totalFormatted}`,
-        reservationCreatedById,
+        "order_created",
+        `Pedido criado via loja — ${totalFormatted}`,
+        reservationClientId,
         { storeOrderId: orderId },
       ).catch(() => {});
     }
@@ -1088,9 +1046,12 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
     const store = await getActiveStore(req.params.slug);
     if (!store) { next(new NotFoundError("Store not found", "NOT_FOUND")); return; }
 
-    const customerEmail = normalizeOrderEmail(req.query.email);
-    if (!customerEmail) {
-      next(new ValidationError("Email is required to look up an order", "VALIDATION_ERROR"));
+    // Require the high-entropy paymentToken (returned at order creation) as the
+    // authenticator. The human-readable orderNumber is not secret and must not
+    // be the sole access gate to private order data.
+    const suppliedToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!suppliedToken) {
+      next(new ValidationError("token is required to look up an order", "VALIDATION_ERROR"));
       return;
     }
 
@@ -1121,6 +1082,7 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
       completedAt: storeOrdersTable.completedAt,
       cancelledAt: storeOrdersTable.cancelledAt,
       createdAt: storeOrdersTable.createdAt,
+      storedPaymentToken: storeOrdersTable.paymentToken,
     }).from(storeOrdersTable)
       .where(and(
         eq(storeOrdersTable.storeId, store.id),
@@ -1128,8 +1090,13 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
       )).limit(1);
     if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
 
-    // Verify ownership: the provided email must match the order's customer email
-    if (order.customerEmail.trim().toLowerCase() !== customerEmail) {
+    // Verify ownership via timing-safe comparison of the high-entropy paymentToken.
+    const stored = order.storedPaymentToken ?? "";
+    const a = Buffer.from(suppliedToken);
+    const b = Buffer.from(stored);
+    const tokenMatches = a.length === b.length && a.length > 0 &&
+      (await import("node:crypto")).timingSafeEqual(a, b);
+    if (!tokenMatches) {
       next(new NotFoundError("Order not found", "NOT_FOUND"));
       return;
     }
@@ -1157,7 +1124,9 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
         variantLabel,
       };
     });
-    res.json({ ...order, items });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { storedPaymentToken: _tok, ...safeOrder } = order;
+    res.json({ ...safeOrder, items });
   } catch (err) {
     next(err);
   }

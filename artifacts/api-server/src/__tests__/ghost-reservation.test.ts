@@ -107,15 +107,27 @@ describe("Ghost reservation prevention — checkout route (real DB)", () => {
   it("leaves no client row when transaction rolls back after client insert", async () => {
     const email = `ghost-customer-${RUN}@test.com`;
 
-    // Throw after tx.insert(clientsTable) to force a full rollback
-    mockNextSeq.mockRejectedValueOnce(new Error("Simulated sequence failure after client insert"));
+    // generateId is mocked above. We need: orderId succeeds (before tx),
+    // then newClientId inside tx.insert(clientsTable) throws to force rollback.
+    // generateId is called: (1) for orderId at route level, (2) inside upsertCheckoutClient
+    // for a brand-new client. We make the 2nd call throw.
+    const { generateId } = await import("../lib/id.js");
+    const mockGenerateId = vi.mocked(generateId);
+    let callCount = 0;
+    mockGenerateId.mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 2) throw new Error("Simulated ID failure inside tx");
+      return randomUUID();
+    });
 
     const res = await request(buildApp())
       .post(`/api/public/store/${SLUG}/orders`)
       .send({ customerName: "Ghost Customer", customerEmail: email, items: [{ productId: PROD_ID, quantity: 1 }] });
 
-    // Confirm execution reached the mid-tx failure point
-    expect(mockNextSeq).toHaveBeenCalledTimes(1);
+    // Restore to random UUID for subsequent tests
+    mockGenerateId.mockImplementation(() => randomUUID());
+
+    // Tx should have rolled back
     expect(res.status).toBeGreaterThanOrEqual(400);
 
     const [orphan] = await db
@@ -126,39 +138,31 @@ describe("Ghost reservation prevention — checkout route (real DB)", () => {
   });
 });
 
-describe("Reservation TTL — expiresAt on persisted reservation (real DB)", () => {
-  it("persists expiresAt ~15 min in the future and surfaces reservationExpiresAt in the response", async () => {
-    const email = `ttl-customer-${RUN}@test.com`;
-    mockNextSeq.mockResolvedValueOnce(1);
+describe("Checkout order creation — no pre-payment reservation (real DB)", () => {
+  it("creates a store order and client but no reservation at checkout; reservationExpiresAt is null", async () => {
+    const email = `no-prealloc-${RUN}@test.com`;
 
-    const beforeRequest = Date.now();
     const res = await request(buildApp())
       .post(`/api/public/store/${SLUG}/orders`)
-      .send({ customerName: "TTL Customer", customerEmail: email, items: [{ productId: PROD_ID, quantity: 1 }] });
-    const afterRequest = Date.now();
+      .send({ customerName: "No Prealloc Customer", customerEmail: email, items: [{ productId: PROD_ID, quantity: 1 }] });
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty("reservationExpiresAt");
-    expect(new Date(res.body.reservationExpiresAt as string).getTime()).toBeGreaterThan(Date.now());
+    // Payment-gated design: reservationExpiresAt is null at checkout time
+    expect(res.body.reservationExpiresAt).toBeNull();
 
+    // Client row must exist (upserted atomically inside the order tx)
     const [client] = await db
       .select({ id: clientsTable.id })
       .from(clientsTable)
       .where(and(eq(clientsTable.tenantId, TENANT_ID), eq(clientsTable.email, email)));
     expect(client).toBeDefined();
 
-    // expiresAt is not yet in the compiled Drizzle insert type; use raw SQL to read it
+    // No reservation should exist yet — reservation is created after payment confirmation
     const result = await db.execute(sql`
-      SELECT expires_at FROM reservations
+      SELECT id FROM reservations
       WHERE tenant_id = ${TENANT_ID} AND client_id = ${client.id}
       LIMIT 1
     `);
-    const rawExpiresAt = result.rows[0]?.expires_at;
-    expect(rawExpiresAt).toBeDefined();
-    const expiresAt = rawExpiresAt instanceof Date ? rawExpiresAt : new Date(rawExpiresAt as string);
-    const fifteenMin = 15 * 60 * 1000;
-    const tolerance = 30_000;
-    expect(expiresAt.getTime()).toBeGreaterThanOrEqual(beforeRequest + fifteenMin - tolerance);
-    expect(expiresAt.getTime()).toBeLessThanOrEqual(afterRequest + fifteenMin + tolerance);
+    expect(result.rows.length).toBe(0);
   });
 });

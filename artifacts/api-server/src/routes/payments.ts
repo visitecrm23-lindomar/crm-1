@@ -12,6 +12,7 @@ import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
+import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";

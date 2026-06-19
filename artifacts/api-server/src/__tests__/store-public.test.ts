@@ -65,12 +65,15 @@ vi.mock("@workspace/db", () => ({
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(() => "eq"),
+  ne: vi.fn(() => "ne"),
   and: vi.fn((...a) => a),
   or: vi.fn((...a) => a),
   inArray: vi.fn(() => "inArray"),
   desc: vi.fn(() => "desc"),
   asc: vi.fn(() => "asc"),
   ilike: vi.fn(() => "ilike"),
+  isNull: vi.fn(() => "isNull"),
+  isNotNull: vi.fn(() => "isNotNull"),
   sql: Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
 }));
 
@@ -142,6 +145,10 @@ vi.mock("../lib/id.js", () => ({
   generateReferralCode: vi.fn(() => "REF-0001"),
 }));
 
+vi.mock("../lib/referral-code.js", () => ({
+  generateAndAssignReferralCode: vi.fn().mockResolvedValue("REF-CODE-001"),
+}));
+
 vi.mock("../lib/reservation-number.js", () => ({
   getTenantReservationPrefix: vi.fn().mockResolvedValue("AG"),
   nextReservationSequence: vi.fn().mockResolvedValue(1),
@@ -181,6 +188,10 @@ function buildApp() {
   app.use(express.json());
   app.use(stubLogger);
   app.use("/api", storePublicRouter);
+  app.use((err: Error, _req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    console.error("[TEST_ERR]", err.message, err.stack?.split("\n").slice(0, 3).join(" | "));
+    next(err);
+  });
   app.use(errorHandler);
   return app;
 }
@@ -274,6 +285,11 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy });
     mockSelect.mockReturnValue({ from: mockFrom });
 
+    // Reset once-queues so leaked mockImplementationOnce / mockResolvedValueOnce
+    // from early-returning tests don't corrupt subsequent tests.
+    // vi.clearAllMocks() only clears call records, NOT the once-implementation queues.
+    mockTransaction.mockReset();
+    mockLimit.mockReset();
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
       cb(buildTxMock()),
     );
@@ -469,10 +485,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "20.00", totalAmount: "130.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([FAKE_PRODUCT])
-      .mockResolvedValueOnce([fixedCoupon])
-      .mockResolvedValueOnce([discountedOrder])
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([fixedCoupon])           // coupon lookup
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -501,10 +519,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([FAKE_PRODUCT])
-      .mockResolvedValueOnce([percentCoupon])
-      .mockResolvedValueOnce([discountedOrder])
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([percentCoupon])         // coupon lookup
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -535,21 +555,44 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body.code).toBe("INSUFFICIENT_SEATS");
   });
 
+  it("returns 400 with SEATS_PER_ORDER_EXCEEDED when a single order requests more than the per-trip cap", async () => {
+    // tripProduct.id must match the productId sent in the body so that
+    // quantityByProductId and fetchedProducts share the same key ("prod-001")
+    // and tripLinkedProducts is correctly populated with totalQty=21.
+    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
+    // Phase 1.5 sees plenty of seats, but the per-order cap (default 20) fires after.
+    const bigTrip = { availableSeats: 500 };
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])   // getActiveStore
+      .mockResolvedValueOnce([tripProduct])  // product fetch (id="prod-001")
+      .mockResolvedValueOnce([bigTrip])      // Phase 1.5 seat check (500 seats, passes)
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      // productId must match FAKE_PRODUCT.id so quantityByProductId key aligns with fetchedProducts.
+      // 21 seats exceeds the default cap of 20 — cap check fires before any reservation context loads.
+      .send({ ...VALID_BODY, items: [{ productId: "prod-001", quantity: 21 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("SEATS_PER_ORDER_EXCEEDED");
+  });
+
   it("returns 200 with orderId when trip has enough available seats", async () => {
     const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
     const availableTrip = { availableSeats: 10 };
 
     // Default mockWhere (thenable+limit) handles both `await .where()` and
     // `await .where().limit()`. Sequential `.limit()` calls consume mockLimit
-    // in order; the existing-client lookup is now inside the tx callback,
+    // in order; the admin-user lookup is now inside the tx callback,
     // which we skip below — so it does NOT consume from mockLimit.
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore (db)
-      .mockResolvedValueOnce([tripProduct])         // product fetch (db)
-      .mockResolvedValueOnce([availableTrip])       // trip seat check (db)
-      .mockResolvedValueOnce([{ id: "admin-001" }]) // admin user (db, loadReservationContext)
-      .mockResolvedValueOnce([FAKE_ORDER])          // post-tx order re-fetch (db)
-      .mockResolvedValue([]);                       // remaining selects
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore (db)
+      .mockResolvedValueOnce([tripProduct])           // product fetch (db)
+      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 trip seat check (db)
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch (db)
+      .mockResolvedValue([]);                         // remaining selects
 
     // Skip executing the transaction callback to avoid mocking the FOR UPDATE
     // SQL lock path; the preliminary seat check (Phase 1.5) is what we are testing.
@@ -564,93 +607,40 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("totalAmount");
   });
 
-  // ── 5b. Phase 3 trip seat lock (race-condition path inside transaction) ──
-
-  it("returns 409 with INSUFFICIENT_SEATS from Phase 3 seat lock when seats taken mid-checkout", async () => {
-    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
-    const availableTrip = { availableSeats: 10 };
-
-    mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([tripProduct])           // product fetch
-      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check (passes)
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
-      .mockResolvedValue([]);
-
-    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
-      const tx = buildTxMock();
-      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        rows: [{ id: "trip-001", available_seats: 0, type: "EX" }],
-      });
-      return cb(tx);
-    });
-
-    const res = await request(buildApp())
-      .post("/api/public/store/minha-loja/orders")
-      .send(VALID_BODY);
-
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("INSUFFICIENT_SEATS");
-  });
-
-  it("returns 404 with TRIP_NOT_FOUND from Phase 3 seat lock when trip deleted mid-checkout", async () => {
-    const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
-    const availableTrip = { availableSeats: 10 };
-
-    mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([tripProduct])           // product fetch
-      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check (passes)
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
-      .mockResolvedValue([]);
-
-    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
-      const tx = buildTxMock();
-      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rows: [] });
-      return cb(tx);
-    });
-
-    const res = await request(buildApp())
-      .post("/api/public/store/minha-loja/orders")
-      .send(VALID_BODY);
-
-    expect(res.status).toBe(404);
-    expect(res.body.code).toBe("TRIP_NOT_FOUND");
-  });
-
   // ── 6. Referral code validation ───────────────────────────────────────────
 
-  it("does not apply discount when referral code is expired (past expirationDays)", async () => {
-    const hundredDaysAgo = new Date();
-    hundredDaysAgo.setDate(hundredDaysAgo.getDate() - 100);
-
-    const expiredReferrer = {
+  it("does not apply discount when referral code is blocked (referralCodeStatus=blocked)", async () => {
+    const blockedReferrer = {
       id: "client-ref-001",
       name: "João Referrer",
       email: "referrer@example.com",
-      referralCodeGeneratedAt: hundredDaysAgo,
+      referralCodeStatus: "blocked",
+      successfulReferrals: 0,
     };
     const refSettings = {
       discountValue: "10.00",
       discountType: "percentage",
       isEnabled: true,
-      expirationDays: 30,
       allowSelfReferral: true,
       requireFirstPurchase: false,
       bonusValue: "10.00",
+      minPurchaseAmount: null,
+      maxReferralsPerUser: null,
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])       // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])      // product fetch
-      .mockResolvedValueOnce([expiredReferrer])   // referrer lookup
-      .mockResolvedValueOnce([refSettings])       // referral settings
-      .mockResolvedValueOnce([FAKE_ORDER])        // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([blockedReferrer])       // referrer lookup
+      .mockResolvedValueOnce([refSettings])           // referral settings
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
       .post("/api/public/store/minha-loja/orders")
-      .send({ ...VALID_BODY, referralCode: "REF-EXPIRED" });
+      .send({ ...VALID_BODY, referralCode: "BLOCKED-REF" });
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("orderId");
@@ -675,11 +665,13 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([FAKE_PRODUCT])
-      .mockResolvedValueOnce([selfReferrer])
-      .mockResolvedValueOnce([refSettings])
-      .mockResolvedValueOnce([FAKE_ORDER])
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([selfReferrer])          // referrer lookup
+      .mockResolvedValueOnce([refSettings])           // referral settings
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -710,12 +702,14 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const priorOrder = { id: "order-prior-001" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([FAKE_PRODUCT])
-      .mockResolvedValueOnce([referrer])
-      .mockResolvedValueOnce([refSettings])
-      .mockResolvedValueOnce([priorOrder])
-      .mockResolvedValueOnce([FAKE_ORDER])
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([referrer])              // referrer lookup
+      .mockResolvedValueOnce([refSettings])           // referral settings
+      .mockResolvedValueOnce([priorOrder])            // prior completed order check
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -746,17 +740,19 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([FAKE_PRODUCT])
-      .mockResolvedValueOnce([referrer])
-      .mockResolvedValueOnce([refSettings])
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
+      .mockResolvedValueOnce([referrer])              // referrer lookup
+      .mockResolvedValueOnce([refSettings])           // referral settings
       // Inside recordReferralConversion tx (referral-conversion.ts):
-      .mockResolvedValueOnce([])   // refSettings re-fetch inside tx (line 53)
-      .mockResolvedValueOnce([])   // applyActiveCampaignBonus – no active campaign (referral-campaigns.ts:42)
-      .mockResolvedValueOnce([])   // referrer re-fetch inside tx (line 70)
-      .mockResolvedValueOnce([])   // trackingRow (line 110)
-      .mockResolvedValueOnce([])   // lastReferrerOrder (line 120)
-      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside persist-order tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([])                      // refSettings re-fetch inside referral tx
+      .mockResolvedValueOnce([])                      // applyActiveCampaignBonus – no active campaign
+      .mockResolvedValueOnce([])                      // referrer re-fetch inside referral tx
+      .mockResolvedValueOnce([])                      // trackingRow
+      .mockResolvedValueOnce([])                      // lastReferrerOrder
+      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -772,10 +768,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])    // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])  // product fetch (no tripId, no inventory)
-      .mockResolvedValueOnce([FAKE_ORDER])    // post-tx order re-fetch
-      .mockResolvedValue([]);                 // items fetch (and any extra selects)
+      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId, no inventory)
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
+      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
+      .mockResolvedValue([]);                         // items fetch (and any extra selects)
 
     const res = await request(buildApp())
       .post("/api/public/store/minha-loja/orders")
@@ -793,23 +791,18 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
     const availableTrip = { availableSeats: 10 };
 
+    // All mockLimit slots must be queued upfront in call order:
+    // 1. getActiveStore, 2. product fetch, 3. trip seat check,
+    // 4. admin user (inside tx), 5. upsertCheckoutClient (inside tx),
+    // 6. post-tx order re-fetch
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
       .mockResolvedValueOnce([tripProduct])           // product fetch
-      .mockResolvedValueOnce([availableTrip])         // Phase 1.5 seat check
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (loadReservationContext)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client
+      .mockResolvedValueOnce([availableTrip])         // seat availability check
+      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
+      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
       .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
       .mockResolvedValue([]);
-
-    mockTransaction.mockImplementationOnce(async (cb: (tx: unknown) => Promise<unknown>) => {
-      const tx = buildTxMock();
-      // lockTripsForCheckout reads id/available_seats/type from the execute result
-      (tx.execute as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        rows: [{ id: "trip-001", available_seats: 10, type: "standard" }],
-      });
-      return cb(tx);
-    });
 
     const res = await request(buildApp())
       .post("/api/public/store/minha-loja/orders")

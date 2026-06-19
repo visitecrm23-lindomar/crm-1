@@ -6,6 +6,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
+import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
@@ -535,6 +536,10 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<App
       .set({ paymentStatus: STORE_PAYMENT_STATUS.PAID, paidAt, status: STORE_ORDER_STATUS.CONFIRMED, confirmedAt: paidAt })
       .where(eq(storeOrdersTable.id, order.id));
   }
+
+  // Create reservations now (payment confirmed): seats are only reserved after payment,
+  // not at checkout time. createReservationsForOrder is idempotent — safe on retries.
+  await createReservationsForOrder(order.id, tx as unknown as Parameters<typeof createReservationsForOrder>[1]);
 
   // Find the reservations linked to this order via storeOrderId == orderNumber
   const reservations = await tx

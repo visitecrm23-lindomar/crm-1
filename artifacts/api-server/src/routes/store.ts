@@ -20,6 +20,7 @@ import { UTApi } from "uploadthing/server";
 import { randomBytes, createHash } from "crypto";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
+import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
@@ -782,6 +783,14 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
     const [order] = await db.select().from(storeOrdersTable)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
     if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
+
+    // Payment-gated reservation: create trip reservations on first manual payment confirmation.
+    // idempotent — safe to call multiple times (returns existing reservations if already created).
+    if (isTransitioningToPaid) {
+      createReservationsForOrder(order.id).catch((err) => {
+        req.log.warn({ err, orderId: order.id }, "[store/orders] Failed to create reservations on manual payment confirmation");
+      });
+    }
 
     // Auto-create CRM deal as "won" when order transitions to paid or completed (fire-and-forget).
     // Looks up linked reservation by storeOrderId to get tripId + reservationId for full linkage.

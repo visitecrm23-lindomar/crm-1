@@ -235,6 +235,8 @@ const FAKE_REFERRER = {
   name: "João Referrer",
   email: "referrer@test.com",
   referralCode: "REF123",
+  referralCodeStatus: "active",
+  successfulReferrals: 0,
   referralCodeGeneratedAt: null,
 };
 
@@ -358,7 +360,7 @@ describe("Feature flag enabled — endpoints return normal responses", () => {
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])
       .mockResolvedValueOnce([TENANT_ALL_ENABLED])
-      .mockResolvedValueOnce([{ id: FAKE_REFERRER.id, name: FAKE_REFERRER.name }])
+      .mockResolvedValueOnce([{ id: FAKE_REFERRER.id, name: FAKE_REFERRER.name, referralCodeStatus: FAKE_REFERRER.referralCodeStatus }])
       .mockResolvedValueOnce([FAKE_REF_SETTINGS])
       .mockResolvedValue([]);
 

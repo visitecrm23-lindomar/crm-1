@@ -181,7 +181,7 @@ function parseRateLimitEnv(name: string, defaultValue: number): number {
 
 const RATE_LIMIT_WINDOW_MS = parseRateLimitEnv("RATE_LIMIT_WINDOW_MS", 60_000);
 const RATE_LIMIT_PUBLIC_MAX = parseRateLimitEnv("RATE_LIMIT_PUBLIC_MAX", 60);
-const RATE_LIMIT_ORDERS_MAX = parseRateLimitEnv("RATE_LIMIT_ORDERS_MAX", 10);
+const RATE_LIMIT_ORDERS_MAX = parseRateLimitEnv("RATE_LIMIT_ORDERS_MAX", 5);
 
 const publicGeneralLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -192,7 +192,7 @@ const publicGeneralLimiter = rateLimit({
 });
 
 const publicOrderLimiter = rateLimit({
-  windowMs: RATE_LIMIT_WINDOW_MS,
+  windowMs: 15 * 60_000,
   max: RATE_LIMIT_ORDERS_MAX,
   standardHeaders: true,
   legacyHeaders: false,
@@ -215,8 +215,17 @@ const priceAlertSubscribeLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
+const orderLookupLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  max: parseRateLimitEnv("RATE_LIMIT_ORDER_LOOKUP_MAX", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
 app.use("/api/public", publicGeneralLimiter);
 app.post("/api/public/store/:slug/orders", publicOrderLimiter);
+app.get("/api/public/store/:slug/orders/:orderNumber", orderLookupLimiter);
 app.post("/api/public/store/:slug/referral/validate", referralValidateLimiter);
 app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
 

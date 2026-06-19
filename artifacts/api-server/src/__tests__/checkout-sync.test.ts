@@ -166,6 +166,10 @@ vi.mock("../lib/id.js", () => ({
   generateReferralCode: vi.fn(() => "REF-0001"),
 }));
 
+vi.mock("../lib/referral-code.js", () => ({
+  generateAndAssignReferralCode: vi.fn().mockResolvedValue("REF-CODE-001"),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
@@ -304,16 +308,13 @@ function setupTripLinkedCheckoutQueue() {
   selectQueue.length = 0;
   selectQueue.push(
     [FAKE_STORE],                                                 // 1. getActiveStore (db)
-    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
+    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db, prepareCheckoutItems)
     [{ availableSeats: 10 }],                                     // 3. trip seats check (db, prepareCheckoutItems)
-    [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
-    [],                                                           // 5. pipeline stages (db, loadReservationContext)
-    [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
-    [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
-    [],                                                           // 8. active reservations seat check (tx, persist-order)
-    [FAKE_ORDER],                                                 // 9. post-tx order (db)
-    [],                                                           // 10. post-tx items (db)
-    [],                                                           // 11. portal user check (db, ensurePortalAccount)
+    [{ id: "user-001" }],                                         // 4. admin user (tx, persist-order)
+    [{ id: "client-001", cpf: null, birthDate: null }],           // 5. existing client (tx, upsertCheckoutClient)
+    [FAKE_ORDER],                                                 // 6. post-tx order (db)
+    [],                                                           // 7. post-tx items (db)
+    [],                                                           // 8. portal user check (db, ensurePortalAccount) — existing user
   );
 }
 
@@ -321,18 +322,15 @@ function setupNewUserCheckoutQueue() {
   selectQueue.length = 0;
   selectQueue.push(
     [FAKE_STORE],                                                 // 1. getActiveStore (db)
-    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db)
+    [FAKE_TRIP_PRODUCT],                                          // 2. product fetch (db, prepareCheckoutItems)
     [{ availableSeats: 10 }],                                     // 3. trip seats check (db, prepareCheckoutItems)
-    [{ id: "user-001" }],                                         // 4. admin user (db, loadReservationContext)
-    [],                                                           // 5. pipeline stages (db, loadReservationContext)
-    [{ id: "trip-001", name: "Excursão Nordeste" }],              // 6. trip names (db, loadReservationContext)
-    [{ id: "client-001", cpf: null, birthDate: null }],           // 7. existing client (tx, upsertCheckoutClient)
-    [],                                                           // 8. active reservations seat check (tx, persist-order)
-    [FAKE_ORDER],                                                 // 9. post-tx order (db)
-    [],                                                           // 10. post-tx items (db)
-    [],                                                           // 11. portal user check — empty → new user (db, ensurePortalAccount)
-    [FAKE_RESERVATION],                                           // 12. reservation query for confirmation email (db, post-booking)
-    [],                                                           // 13. reservation rows for agency notification (db, post-booking)
+    [{ id: "user-001" }],                                         // 4. admin user (tx, persist-order)
+    [{ id: "client-001", cpf: null, birthDate: null }],           // 5. existing client (tx, upsertCheckoutClient)
+    [FAKE_ORDER],                                                 // 6. post-tx order (db)
+    [],                                                           // 7. post-tx items (db)
+    [],                                                           // 8. portal user check — empty → new user (db, ensurePortalAccount)
+    [],                                                           // 9. reservation query for confirmation email (no reservation yet)
+    [],                                                           // 10. agency notification reservation rows (no reservation yet)
   );
 }
 
@@ -367,7 +365,7 @@ describe("POST /api/public/store/:slug/orders — checkout sync", () => {
 
   // ── (b) writeClientActivity ──────────────────────────────────────────────
 
-  it("(b) records writeClientActivity with reservation_created after a trip-linked checkout", async () => {
+  it("(b) records writeClientActivity with order_created after a trip-linked checkout", async () => {
     setupTripLinkedCheckoutQueue();
 
     const res = await request(buildApp())
@@ -378,9 +376,9 @@ describe("POST /api/public/store/:slug/orders — checkout sync", () => {
     expect(mockWriteClientActivity).toHaveBeenCalledOnce();
     expect(mockWriteClientActivity).toHaveBeenCalledWith(
       "client-001",
-      "reservation_created",
+      "order_created",
       expect.stringContaining("loja"),
-      "user-001",
+      "client-001",
       expect.any(Object),
     );
   });
@@ -390,10 +388,11 @@ describe("POST /api/public/store/:slug/orders — checkout sync", () => {
   it("does not call broadcastSeatUpdate or writeClientActivity for non-trip products", async () => {
     selectQueue.length = 0;
     selectQueue.push(
-      [FAKE_STORE],
-      [{ ...FAKE_TRIP_PRODUCT, tripId: null }],  // non-trip product
-      [FAKE_ORDER],
-      [],
+      [FAKE_STORE],                                // 1. getActiveStore
+      [{ ...FAKE_TRIP_PRODUCT, tripId: null }],   // 2. product fetch (non-trip, no seat check)
+      [],                                          // 3. admin user (tx) — empty → no client created
+      [FAKE_ORDER],                                // 4. post-tx order
+      [],                                          // 5. post-tx items
     );
 
     const res = await request(buildApp())
@@ -445,9 +444,13 @@ describe("POST /api/public/store/:slug/orders — welcome email for new portal u
     expect(welcomeProps.clientEmail).toBe(VALID_BODY.customerEmail);
   });
 
-  // ── (d) enqueueReservationConfirmationEmail includes credentials.plainTextPassword
+  // ── (d) enqueueReservationConfirmationEmail is NOT sent at checkout (payment-gated design)
+  //
+  // Reservations are created only after payment confirmation (webhook/manual payment),
+  // so no reservation confirmation email is enqueued during the checkout route.
+  // The confirmation email is dispatched from createReservationsForOrder at payment time.
 
-  it("(d) enqueueReservationConfirmationEmail includes credentials.plainTextPassword when the user is new", async () => {
+  it("(d) enqueueReservationConfirmationEmail is not called at checkout (reservation created at payment time)", async () => {
     setupNewUserCheckoutQueue();
 
     const res = await request(buildApp())
@@ -456,13 +459,10 @@ describe("POST /api/public/store/:slug/orders — welcome email for new portal u
 
     expect(res.status).toBe(200);
 
-    await vi.waitFor(() => expect(mockEnqueueConfirmationEmail).toHaveBeenCalledOnce());
+    // Allow any async fire-and-forget to settle
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const callArgs = mockEnqueueConfirmationEmail.mock.calls[0][0] as {
-      props: { credentials?: { plainTextPassword?: string } };
-    };
-    expect(callArgs.props.credentials).toBeDefined();
-    expect(typeof callArgs.props.credentials?.plainTextPassword).toBe("string");
-    expect((callArgs.props.credentials?.plainTextPassword ?? "").length).toBeGreaterThan(0);
+    // No confirmation email at checkout — reservation (and its email) are deferred to payment
+    expect(mockEnqueueConfirmationEmail).not.toHaveBeenCalled();
   });
 });

@@ -197,10 +197,10 @@ export const publicStoreApi = {
   },
   createOrder: (slug: string, data: CreateOrderInput) =>
     publicReq<StoreOrder>("POST", `/public/store/${slug}/orders`, data),
-  getOrder: (slug: string, orderNumber: string, customerEmail: string) =>
+  getOrder: (slug: string, orderNumber: string, paymentToken: string) =>
     publicReq<StoreOrder>(
       "GET",
-      `/public/store/${slug}/orders/${encodeURIComponent(orderNumber)}?email=${encodeURIComponent(customerEmail)}`
+      `/public/store/${slug}/orders/${encodeURIComponent(orderNumber)}?token=${encodeURIComponent(paymentToken)}`
     ),
   validateCoupon: (
     slug: string,
@@ -248,11 +248,6 @@ export const publicStoreApi = {
       "POST",
       `/public/store/${slug}/create-payment-intent`,
       { orderNumber, paymentToken }
-    ),
-  checkCpf: (slug: string, productSlug: string, cpf: string) =>
-    publicReq<{ exists: boolean }>(
-      "GET",
-      `/public/store/${slug}/products/${encodeURIComponent(productSlug)}/check-cpf?cpf=${encodeURIComponent(cpf)}`
     ),
   validateReferral: (slug: string, code: string) =>
     publicReq<ReferralValidation>("POST", `/public/store/${slug}/referral/validate`, { code }),

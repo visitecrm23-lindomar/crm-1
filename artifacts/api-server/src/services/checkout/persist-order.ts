@@ -7,27 +7,19 @@ import {
   storeOrdersTable,
   storeOrderItemsTable,
   storeCouponsTable,
-  reservationsTable,
-  tripsTable,
-  dealsTable,
   referralsTable,
   partnersTable,
   partnerProductsTable,
   partnerCommissionsTable,
+  usersTable,
 } from "@workspace/db";
 import { and, eq, sql, inArray } from "drizzle-orm";
-import { generateId, generateVoucherCode } from "../../lib/id";
-import {
-  tripTypeToCode,
-  nextReservationSequence,
-  buildReservationNumber,
-} from "../../lib/reservation-number";
+import { generateId } from "../../lib/id";
 import { upsertCheckoutClient } from "./checkout-user";
 import { generateAndAssignReferralCode } from "../../lib/referral-code";
-import { lockTripsForCheckout, lockProductsForCheckout } from "./order-locks";
+import { lockProductsForCheckout } from "./order-locks";
 import { recordReferralConversion, type ReferralConversionResult } from "./referral-conversion";
 import type { Tx } from "./tx";
-import { RESERVATION_STATUS } from "@workspace/permissions";
 
 export interface PersistedOrderItem {
   id: string;
@@ -83,13 +75,7 @@ export interface PersistOrderArgs {
   fetchedProducts: Map<string, typeof storeProductsTable.$inferSelect>;
   quantityByProductId: Map<string, number>;
   tripLinkedProducts: Map<string, { product: typeof storeProductsTable.$inferSelect; totalQty: number; totalValue: number }>;
-  reservationCreatedById: string | null;
-  vitrineStageId: string | null;
   parsedBirthDate: Date | null;
-  tripNameMap: Map<string, string>;
-  reservationExpiresAt: Date;
-  tenantResPrefix: string;
-  resYearMonth: string;
   /** Referral rows to mark as (partially) consumed for credit spend — processed inside the transaction */
   creditSpend?: Array<{ id: string; consumedAmount: number }>;
 }
@@ -215,115 +201,26 @@ async function decrementStockAndSales(tx: Tx, args: PersistOrderArgs): Promise<v
   }
 }
 
-async function writeReservationsAndDeals(
-  tx: Tx,
-  args: PersistOrderArgs,
-  reservationClientId: string,
-  lockedTripTypes: Map<string, string>,
-): Promise<string | null> {
-  const {
-    store, data, orderNumber, promoDiscountAmount, appliedReferralCode,
-    tripLinkedProducts, reservationCreatedById, vitrineStageId, tripNameMap,
-    reservationExpiresAt, tenantResPrefix, resYearMonth,
-  } = args;
-  if (!reservationCreatedById) return null;
-
-  let firstReservationId: string | null = null;
-
-  for (const [tripId, { product, totalQty, totalValue }] of tripLinkedProducts) {
-    const voucherCode = generateVoucherCode();
-    const reservationId = generateId();
-    if (!firstReservationId) firstReservationId = reservationId;
-    let realSeats: string[];
-    if (data.seats && data.seats.length >= totalQty) {
-      realSeats = data.seats.slice(0, totalQty);
-    } else {
-      const activeReservations = await tx.select({ seats: reservationsTable.seats })
-        .from(reservationsTable)
-        .where(and(
-          eq(reservationsTable.tripId, tripId),
-          eq(reservationsTable.tenantId, store.tenantId),
-          inArray(reservationsTable.status, [RESERVATION_STATUS.PENDING, RESERVATION_STATUS.CONFIRMED]),
-        ));
-      const allOccupiedNums = activeReservations
-        .flatMap(r => r.seats)
-        .map(s => parseInt(s, 10))
-        .filter(n => !isNaN(n));
-      const maxOccupied = allOccupiedNums.length > 0 ? Math.max(...allOccupiedNums) : 0;
-      realSeats = Array.from({ length: totalQty }, (_, i) => String(maxOccupied + 1 + i));
-    }
-    const resTypeCode = tripTypeToCode(lockedTripTypes.get(tripId) ?? "");
-    const resSeq = await nextReservationSequence(store.tenantId, resYearMonth, resTypeCode, tx);
-    const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);
-    const reservationNotes = (data.customerNotes || data.notes) ?? undefined;
-
-    await tx.insert(reservationsTable).values({
-      id: reservationId,
-      tenantId: store.tenantId,
-      tripId,
-      clientId: reservationClientId,
-      seats: realSeats,
-      totalValue: totalValue.toFixed(2),
-      paidValue: "0",
-      balance: totalValue.toFixed(2),
-      status: RESERVATION_STATUS.PENDING,
-      voucherCode,
-      reservationNumber,
-      qrCode: `QR-${voucherCode}`,
-      storeOrderId: orderNumber,
-      createdById: reservationCreatedById,
-      discountReferralCode: appliedReferralCode ?? undefined,
-      // Use promo-only discount — credit spend is tracked separately on referral rows
-      discountReferralAmount: appliedReferralCode ? promoDiscountAmount.toFixed(2) : undefined,
-      expiresAt: reservationExpiresAt,
-      ...(reservationNotes ? { notes: reservationNotes } : {}),
-      ...(data.boardingLocationId ? { boardingLocationId: data.boardingLocationId } : {}),
-    });
-
-    await tx.update(tripsTable).set({
-      availableSeats: sql`available_seats - ${totalQty}`,
-      reservedSeats: sql`reserved_seats + ${totalQty}`,
-    }).where(and(eq(tripsTable.id, tripId), eq(tripsTable.tenantId, store.tenantId)));
-
-    if (vitrineStageId) {
-      const tripName = tripNameMap.get(tripId) ?? product.name;
-      await tx.insert(dealsTable).values({
-        id: generateId(),
-        tenantId: store.tenantId,
-        stageId: vitrineStageId,
-        title: `${data.customerName} — ${tripName}`,
-        value: totalValue.toFixed(2),
-        clientId: reservationClientId,
-        tripId,
-        ownerId: reservationCreatedById,
-        status: "open",
-        source: "website",
-        autoCreated: true,
-        reservationId,
-      });
-    }
-  }
-
-  return firstReservationId;
-}
-
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
   let referralConversionResult: ReferralConversionResult | undefined;
   let checkoutClientIsNew = false;
 
   await db.transaction(async (tx) => {
-    const lockedTripTypes = await lockTripsForCheckout(tx, {
-      tenantId: args.store.tenantId,
-      tripLinkedProducts: args.tripLinkedProducts,
-    });
-
     await lockProductsForCheckout(tx, {
       fetchedProducts: args.fetchedProducts,
       quantityByProductId: args.quantityByProductId,
     });
 
-    if (args.reservationCreatedById) {
+    // Resolve an admin user to act as createdById for the client record.
+    // This is a lightweight lookup; the full reservation-context (stages, trip names)
+    // is resolved separately in createReservationsForOrder at payment time.
+    const [adminUser] = await tx
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.tenantId, args.store.tenantId), eq(usersTable.isActive, true)))
+      .limit(1);
+    if (adminUser) {
       const checkoutClientResult = await upsertCheckoutClient(tx, {
         tenantId: args.store.tenantId,
         email: args.data.customerEmail,
@@ -331,7 +228,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         phone: args.data.customerPhone,
         cpf: args.data.customerCpf,
         birthDate: args.parsedBirthDate,
-        createdById: args.reservationCreatedById,
+        createdById: adminUser.id,
       });
       reservationClientId = checkoutClientResult.clientId;
       checkoutClientIsNew = checkoutClientResult.isNew;
@@ -341,10 +238,9 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     await writePartnerCommissions(tx, args.store.tenantId, args.orderId, args.orderItemsData, args.fetchedProducts);
     await decrementStockAndSales(tx, args);
 
-    let firstReservationId: string | null = null;
-    if (args.tripLinkedProducts.size > 0 && reservationClientId) {
-      firstReservationId = await writeReservationsAndDeals(tx, args, reservationClientId, lockedTripTypes);
-    }
+    // Reservations are NOT created here. They are created after payment confirmation
+    // (Stripe webhook or manual payment entry) to prevent anonymous users from holding
+    // trip inventory without paying. See createReservationsForOrder in create-reservations.ts.
 
     if (args.couponId) {
       await tx.update(storeCouponsTable)
@@ -365,7 +261,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         discountType: args.appliedReferralDiscountType,
         referralCookieId: args.data.referralCookieId,
         conversionIp: args.data.ipAddress ?? null,
-        reservationId: firstReservationId,
+        reservationId: null,
       });
     }
     await tx.update(storesTable)

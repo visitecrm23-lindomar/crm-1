@@ -509,7 +509,7 @@ describe("GET /api/public/store/:slug/orders/:orderNumber — email validation a
     expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
-  it("returns 404 (not 400) when email is valid but order is not found", async () => {
+  it("returns 404 (not 400) when token is provided but order is not found", async () => {
     const app = buildStorePublicApp();
     // First call: store found. Second call: order not found.
     mockLimit
@@ -517,9 +517,9 @@ describe("GET /api/public/store/:slug/orders/:orderNumber — email validation a
       .mockResolvedValueOnce([]);
 
     const res = await request(app)
-      .get("/api/public/store/minha-loja/orders/ORD-001?email=cliente@example.com");
+      .get("/api/public/store/minha-loja/orders/ORD-001?token=validtoken123");
 
-    // Email passed validation → got past the 400, now 404 (order not found)
+    // Token passed validation → got past the 400, now 404 (order not found)
     expect(res.status).toBe(404);
     expect(res.body.code).not.toBe("VALIDATION_ERROR");
   });
@@ -529,22 +529,22 @@ describe("GET /api/public/store/:slug/orders/:orderNumber — email validation a
     mockLimit.mockResolvedValueOnce([]); // store not found
 
     const res = await request(app)
-      .get("/api/public/store/nonexistent/orders/ORD-001?email=test@example.com");
+      .get("/api/public/store/nonexistent/orders/ORD-001?token=validtoken123");
 
     expect(res.status).toBe(404);
   });
 
-  it("normalizes email to lowercase before comparing (case-insensitive lookup)", async () => {
+  it("returns non-400 when token is present and non-empty (order found but token mismatch → 404)", async () => {
     const app = buildStorePublicApp();
-    // Provide order with lowercase email; pass email in mixed case
+    // Order is found; token mismatch causes 404, not a validation 400
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])
-      .mockResolvedValueOnce([{ ...FAKE_ORDER, items: [] }]);
+      .mockResolvedValueOnce([{ ...FAKE_ORDER, paymentToken: "correct-token", items: [] }]);
 
     const res = await request(app)
-      .get("/api/public/store/minha-loja/orders/ORD-001?email=CLIENTE@EXAMPLE.COM");
+      .get("/api/public/store/minha-loja/orders/ORD-001?token=wrong-token");
 
-    // Should get past email validation and attempt order fetch (not a 400)
+    // Token present → got past the 400 check; mismatch gives 404
     expect(res.status).not.toBe(400);
   });
 });
