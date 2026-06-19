@@ -341,6 +341,9 @@ export default function Indicacoes() {
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
       pointsPerReferral: settings?.pointsPerReferral ?? 0,
+      discountExpirationDays: settings?.discountExpirationDays ?? 30,
+      minPurchaseAmount: settings?.minPurchaseAmount ?? null,
+      maxReferralsPerUser: settings?.maxReferralsPerUser ?? 0,
     });
     setSettingsModalOpen(true);
   }
@@ -368,6 +371,9 @@ export default function Indicacoes() {
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
           pointsPerReferral: localSettings.pointsPerReferral != null ? Number(localSettings.pointsPerReferral) : undefined,
+          discountExpirationDays: (localSettings as Record<string, unknown>).discountExpirationDays != null ? Number((localSettings as Record<string, unknown>).discountExpirationDays) : undefined,
+          minPurchaseAmount: (localSettings as Record<string, unknown>).minPurchaseAmount != null && String((localSettings as Record<string, unknown>).minPurchaseAmount).trim() !== "" ? parseFloat(String((localSettings as Record<string, unknown>).minPurchaseAmount)) : undefined,
+          maxReferralsPerUser: (localSettings as Record<string, unknown>).maxReferralsPerUser != null ? Number((localSettings as Record<string, unknown>).maxReferralsPerUser) : undefined,
         },
       });
       toast({ title: "Configurações salvas com sucesso" });
@@ -2480,6 +2486,42 @@ export default function Indicacoes() {
                 value={localSettings.expirationDays ?? 30}
                 onChange={(e) => setLocalSettings((s) => ({ ...s, expirationDays: parseInt(e.target.value) || 30 }))}
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Validade do desconto (dias)</Label>
+              <Input
+                type="number"
+                value={(localSettings as Record<string, unknown>).discountExpirationDays as number ?? 30}
+                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), discountExpirationDays: parseInt(e.target.value) || 30 } as typeof s))}
+              />
+              <p className="text-xs text-muted-foreground">Por quantos dias o desconto gerado pelo código permanece válido após ser aplicado.</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Valor mínimo de compra (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={String((localSettings as Record<string, unknown>).minPurchaseAmount ?? "")}
+                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), minPurchaseAmount: e.target.value === "" ? null : e.target.value } as typeof s))}
+                placeholder="Sem mínimo"
+              />
+              <p className="text-xs text-muted-foreground">Valor mínimo do pedido para que o código de indicação seja aceito. Deixe em branco para não exigir.</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Máximo de indicações por indicador</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={String((localSettings as Record<string, unknown>).maxReferralsPerUser ?? 0)}
+                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), maxReferralsPerUser: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">Número máximo de indicações que cada cliente pode fazer. Use 0 para ilimitado.</p>
             </div>
 
             <div className="flex items-center justify-between">

@@ -1186,6 +1186,7 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       email: clientsTable.email,
       referralCode: clientsTable.referralCode,
       referralCodeGeneratedAt: clientsTable.referralCodeGeneratedAt,
+      referralCodeStatus: clientsTable.referralCodeStatus,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, store.tenantId),
@@ -1194,6 +1195,10 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
 
     if (!referrer) {
       next(new ValidationError("Código de indicação inválido", "REFERRAL_CODE_INVALID", { valid: false })); return;
+    }
+
+    if (referrer.referralCodeStatus !== "active") {
+      next(new ValidationError("Código de indicação suspenso", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
     // Get discount % from referral settings

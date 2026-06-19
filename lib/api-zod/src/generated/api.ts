@@ -1165,6 +1165,7 @@ export const GetClientReferralParams = zod.object({
 
 export const GetClientReferralResponse = zod.object({
   referralCode: zod.string().nullable(),
+  referralCodeStatus: zod.string(),
   totalReferrals: zod.number(),
   successfulReferrals: zod.number(),
   referralEarnings: zod.number(),
@@ -1244,6 +1245,9 @@ export const GetReferralSettingsResponse = zod.object({
   expiryWarning1DayEnabled: zod.boolean(),
   bonusReleaseEmailEnabled: zod.boolean(),
   pointsPerReferral: zod.number(),
+  discountExpirationDays: zod.number(),
+  minPurchaseAmount: zod.string().nullable().optional(),
+  maxReferralsPerUser: zod.number(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1271,6 +1275,9 @@ export const UpdateReferralSettingsBody = zod.object({
   expiryWarning1DayEnabled: zod.boolean().optional(),
   bonusReleaseEmailEnabled: zod.boolean().optional(),
   pointsPerReferral: zod.number().optional(),
+  discountExpirationDays: zod.number().optional(),
+  minPurchaseAmount: zod.number().optional(),
+  maxReferralsPerUser: zod.number().optional(),
 });
 
 export const UpdateReferralSettingsResponse = zod.object({
@@ -1295,6 +1302,9 @@ export const UpdateReferralSettingsResponse = zod.object({
   expiryWarning1DayEnabled: zod.boolean(),
   bonusReleaseEmailEnabled: zod.boolean(),
   pointsPerReferral: zod.number(),
+  discountExpirationDays: zod.number(),
+  minPurchaseAmount: zod.string().nullable().optional(),
+  maxReferralsPerUser: zod.number(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

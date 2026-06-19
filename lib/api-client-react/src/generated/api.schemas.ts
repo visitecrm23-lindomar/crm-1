@@ -2463,6 +2463,10 @@ export interface ReferralSettings {
   expiryWarning1DayEnabled: boolean;
   bonusReleaseEmailEnabled: boolean;
   pointsPerReferral: number;
+  discountExpirationDays: number;
+  /** @nullable */
+  minPurchaseAmount?: string | null;
+  maxReferralsPerUser: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -2487,11 +2491,15 @@ export interface UpdateReferralSettingsBody {
   expiryWarning1DayEnabled?: boolean;
   bonusReleaseEmailEnabled?: boolean;
   pointsPerReferral?: number;
+  discountExpirationDays?: number;
+  minPurchaseAmount?: number;
+  maxReferralsPerUser?: number;
 }
 
 export interface ClientReferralInfo {
   /** @nullable */
   referralCode: string | null;
+  referralCodeStatus: string;
   totalReferrals: number;
   successfulReferrals: number;
   referralEarnings: number;

@@ -29,6 +29,13 @@
       "when": 1800200000000,
       "tag": "0003_price_alert_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1800300000000,
+      "tag": "0004_referral_code_enhancements",
+      "breakpoints": true
     }
   ]
 }

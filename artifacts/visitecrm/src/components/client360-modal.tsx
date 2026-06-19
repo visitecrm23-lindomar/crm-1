@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -448,6 +448,31 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState(false);
+
+  const isAdmin = ADMIN_ROLES.includes(me?.role ?? "");
+
+  async function handleToggleCodeStatus() {
+    if (!data?.referralCode) return;
+    const currentStatus = data?.referralCodeStatus ?? "active";
+    const newStatus = currentStatus === "active" ? "suspended" : "active";
+    setTogglingStatus(true);
+    try {
+      const res = await fetch(`${API_BASE_ADMIN}/api/clients/${clientId}/referral-code-status`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast({ title: newStatus === "active" ? "Código de indicação ativado" : "Código de indicação suspenso" });
+      refetch();
+    } catch {
+      toast({ title: "Erro ao alterar status do código", variant: "destructive" });
+    } finally {
+      setTogglingStatus(false);
+    }
+  }
 
   const storeSlug = (me as { tenant?: { slug?: string } } | undefined)?.tenant?.slug ?? "";
   const shareLink = data?.referralCode && storeSlug
@@ -496,11 +521,32 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
           <div>
             <p className="text-sm text-muted-foreground mb-1">Código de indicação</p>
             {data?.referralCode ? (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-mono font-bold text-primary">{data.referralCode}</span>
-                <Button size="sm" variant="outline" onClick={copyCode} title="Copiar código">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-2xl font-mono font-bold ${(data?.referralCodeStatus ?? "active") === "active" ? "text-primary" : "text-muted-foreground line-through"}`}>{data.referralCode}</span>
+                <Button size="sm" variant="outline" onClick={copyCode} title="Copiar código" disabled={(data?.referralCodeStatus ?? "active") !== "active"}>
                   {copied ? <CheckSquare className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4" />}
                 </Button>
+                {(data?.referralCodeStatus ?? "active") === "active" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    <ShieldCheck className="w-3 h-3" /> Ativo
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                    <Ban className="w-3 h-3" /> Suspenso
+                  </span>
+                )}
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={`h-7 text-xs ${(data?.referralCodeStatus ?? "active") === "active" ? "text-red-600 border-red-300 hover:bg-red-50" : "text-green-700 border-green-300 hover:bg-green-50"}`}
+                    onClick={handleToggleCodeStatus}
+                    disabled={togglingStatus}
+                  >
+                    {togglingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : (data?.referralCodeStatus ?? "active") === "active" ? <Ban className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
+                    {(data?.referralCodeStatus ?? "active") === "active" ? "Suspender" : "Ativar"}
+                  </Button>
+                )}
               </div>
             ) : (
               <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>

@@ -1448,6 +1448,9 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
       expiryWarning1DayEnabled: z.boolean().optional(),
       bonusReleaseEmailEnabled: z.boolean().optional(),
       pointsPerReferral: z.number().int().min(0).optional(),
+      discountExpirationDays: z.number().int().min(0).optional(),
+      minPurchaseAmount: z.number().min(0).optional(),
+      maxReferralsPerUser: z.number().int().min(0).optional(),
     }).safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
 
@@ -1471,6 +1474,9 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
     if (parsed.data.pointsPerReferral != null) updates.pointsPerReferral = parsed.data.pointsPerReferral;
+    if (parsed.data.discountExpirationDays != null) updates.discountExpirationDays = parsed.data.discountExpirationDays;
+    if (parsed.data.minPurchaseAmount != null) updates.minPurchaseAmount = parsed.data.minPurchaseAmount.toFixed(2);
+    if (parsed.data.maxReferralsPerUser != null) updates.maxReferralsPerUser = parsed.data.maxReferralsPerUser;
 
     const [existing] = await db.select({
       id: referralSettingsTable.id,

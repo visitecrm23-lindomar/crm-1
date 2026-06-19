@@ -332,6 +332,17 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (upserted.birthDate) {
       scheduleCalendarSyncBirthday(upserted.id).catch(() => {});
     }
+
+    if (isNew) {
+      const baseCode = generateReferralCode(upserted.name ?? "REF", me.tenantId);
+      const namePart = baseCode.replace(/\d+$/, "");
+      const year = new Date().getFullYear();
+      generateAndAssignReferralCode(upserted.id, me.tenantId, baseCode, namePart, year)
+        .then((code) => {
+          dispatchReferralWelcomeEmail({ clientId: upserted.id, referralCode: code, tenantId: me.tenantId }).catch(() => {});
+        })
+        .catch(() => {});
+    }
   } catch (err) {
     next(err);
   }
@@ -664,6 +675,7 @@ router.get("/clients/:clientId/referral", async (req, res, next: NextFunction): 
       .orderBy(desc(referralsTable.createdAt));
     res.json({
       referralCode: client.referralCode ?? null,
+      referralCodeStatus: client.referralCodeStatus ?? "active",
       totalReferrals: client.totalReferrals ?? 0,
       successfulReferrals: client.successfulReferrals ?? 0,
       referralEarnings: Number(client.referralEarnings ?? 0),
@@ -709,6 +721,26 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
     });
 
     res.json({ code });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/clients/:id/referral-code-status", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    const client = await requireClientAccess(me, req.params.id);
+    const parsed = z.object({
+      status: z.enum(["active", "suspended"]),
+    }).safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+    const [updated] = await db.update(clientsTable)
+      .set({ referralCodeStatus: parsed.data.status, updatedAt: new Date() })
+      .where(and(eq(clientsTable.id, client.id), eq(clientsTable.tenantId, me.tenantId)))
+      .returning({ id: clientsTable.id, referralCodeStatus: clientsTable.referralCodeStatus });
+    res.json({ id: updated.id, referralCodeStatus: updated.referralCodeStatus });
   } catch (err) {
     next(err);
   }
