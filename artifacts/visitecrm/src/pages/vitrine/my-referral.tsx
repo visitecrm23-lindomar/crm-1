@@ -34,6 +34,7 @@ import {
   XCircle,
   QrCode,
   Coins,
+  AlertTriangle,
 } from "lucide-react";
 import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
@@ -457,6 +458,8 @@ export default function MyReferralPage({ slug, store }: Props) {
   }
 
   const ref = profile.referral;
+  const referralCodeStatus = ref.referralCodeStatus ?? "active";
+  const isCodeActive = referralCodeStatus === "active";
   const tierColors = TIER_COLORS[ref.currentTierLevel] ?? TIER_COLORS.bronze;
 
   const filteredReferrals = (referrals ?? []).filter((r) => {
@@ -542,6 +545,23 @@ export default function MyReferralPage({ slug, store }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+      {/* Suspended code banner */}
+      {!isCodeActive && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              {referralCodeStatus === "blocked" ? "Código bloqueado" : "Código cancelado"}
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {referralCodeStatus === "blocked"
+                ? "Seu código de indicação foi temporariamente bloqueado. Entre em contato com a agência para mais informações."
+                : "Seu código de indicação foi cancelado. Entre em contato com a agência para mais informações."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Campaign banner */}
       {activeCampaign && countdown && (
         <div
@@ -701,120 +721,132 @@ export default function MyReferralPage({ slug, store }: Props) {
           >
             <span
               className="text-2xl font-mono font-extrabold tracking-widest"
-              style={{ color: primaryColor }}
+              style={{ color: isCodeActive ? primaryColor : "#9ca3af" }}
             >
               {referralCode}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={handleCopyCode}
-            >
-              {codeCopied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-green-500" />
-                  Copiado
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  Copiar código
-                </>
-              )}
-            </Button>
-          </div>
-
-          {/* Share link */}
-          {shareLink && (
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground truncate flex-1">{shareLink}</span>
+            {isCodeActive ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 px-2 text-xs gap-1 shrink-0"
-                onClick={handleCopyLink}
+                className="gap-1.5 shrink-0"
+                onClick={handleCopyCode}
               >
-                {linkCopied ? (
-                  <Check className="w-3 h-3 text-green-500" />
+                {codeCopied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-green-500" />
+                    Copiado
+                  </>
                 ) : (
-                  <Copy className="w-3 h-3" />
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    Copiar código
+                  </>
                 )}
-                {linkCopied ? "Copiado" : "Copiar"}
               </Button>
-            </div>
-          )}
-
-          {/* Share buttons */}
-          <div className="flex flex-col sm:flex-row gap-2 pt-1">
-            <Button
-              className="flex-1 gap-2 text-white"
-              style={{ background: "#25D366" }}
-              onClick={handleShareWhatsApp}
-            >
-              <MessageCircle className="w-4 h-4" />
-              Compartilhar no WhatsApp
-            </Button>
-
-            {typeof navigator !== "undefined" && "share" in navigator && (
-              <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                onClick={handleNativeShare}
-              >
-                <Share2 className="w-4 h-4" />
-                Mais opções
-              </Button>
-            )}
-
-            {!(typeof navigator !== "undefined" && "share" in navigator) && (
-              <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                onClick={handleCopyLink}
-              >
-                <Copy className="w-4 h-4" />
-                {linkCopied ? "Link copiado!" : "Copiar link"}
-              </Button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {referralCodeStatus === "blocked" ? "Bloqueado" : "Cancelado"}
+              </span>
             )}
           </div>
 
-          {/* QR Code inline thumbnail */}
-          <div className="flex items-center gap-3 rounded-xl border p-3 bg-muted/30">
-            <button
-              type="button"
-              aria-label="Ver QR Code completo"
-              className="shrink-0 rounded-lg border bg-white shadow-sm overflow-hidden w-16 h-16 flex items-center justify-center hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
-              onClick={() => setShowQrDialog(true)}
-              disabled={qrLoading || !qrPreviewUrl}
-            >
-              {qrLoading ? (
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              ) : qrPreviewUrl ? (
-                <img src={qrPreviewUrl} alt="QR Code" className="w-full h-full object-contain" />
-              ) : (
-                <QrCode className="w-6 h-6 text-muted-foreground" />
+          {/* Share link, share buttons, and QR — hidden when code is not active */}
+          {isCodeActive && (
+            <>
+              {/* Share link */}
+              {shareLink && (
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs text-muted-foreground truncate flex-1">{shareLink}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 shrink-0"
+                    onClick={handleCopyLink}
+                  >
+                    {linkCopied ? (
+                      <Check className="w-3 h-3 text-green-500" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                    {linkCopied ? "Copiado" : "Copiar"}
+                  </Button>
+                </div>
               )}
-            </button>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-tight">QR Code de indicação</p>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                {qrLoading ? "Gerando..." : qrPreviewUrl ? "Toque para ampliar, baixar ou compartilhar" : "Indisponível"}
-              </p>
-            </div>
-            {qrPreviewUrl && !qrLoading && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 gap-1.5 text-xs"
-                onClick={() => setShowQrDialog(true)}
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                Ver
-              </Button>
-            )}
-          </div>
+
+              {/* Share buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <Button
+                  className="flex-1 gap-2 text-white"
+                  style={{ background: "#25D366" }}
+                  onClick={handleShareWhatsApp}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Compartilhar no WhatsApp
+                </Button>
+
+                {typeof navigator !== "undefined" && "share" in navigator && (
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2"
+                    onClick={handleNativeShare}
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Mais opções
+                  </Button>
+                )}
+
+                {!(typeof navigator !== "undefined" && "share" in navigator) && (
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2"
+                    onClick={handleCopyLink}
+                  >
+                    <Copy className="w-4 h-4" />
+                    {linkCopied ? "Link copiado!" : "Copiar link"}
+                  </Button>
+                )}
+              </div>
+
+              {/* QR Code inline thumbnail */}
+              <div className="flex items-center gap-3 rounded-xl border p-3 bg-muted/30">
+                <button
+                  type="button"
+                  aria-label="Ver QR Code completo"
+                  className="shrink-0 rounded-lg border bg-white shadow-sm overflow-hidden w-16 h-16 flex items-center justify-center hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                  onClick={() => setShowQrDialog(true)}
+                  disabled={qrLoading || !qrPreviewUrl}
+                >
+                  {qrLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  ) : qrPreviewUrl ? (
+                    <img src={qrPreviewUrl} alt="QR Code" className="w-full h-full object-contain" />
+                  ) : (
+                    <QrCode className="w-6 h-6 text-muted-foreground" />
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-tight">QR Code de indicação</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                    {qrLoading ? "Gerando..." : qrPreviewUrl ? "Toque para ampliar, baixar ou compartilhar" : "Indisponível"}
+                  </p>
+                </div>
+                {qrPreviewUrl && !qrLoading && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 gap-1.5 text-xs"
+                    onClick={() => setShowQrDialog(true)}
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    Ver
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

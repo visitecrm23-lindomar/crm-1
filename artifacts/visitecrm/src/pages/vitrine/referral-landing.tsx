@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
-import { PublicStore, publicStoreApi, ReferralValidation } from "@/lib/storeApi";
+import { PublicStore, publicStoreApi, ReferralValidation, PublicApiError } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Gift, Tag, Users, ArrowRight, CheckCircle } from "lucide-react";
+import { Loader2, Gift, Tag, Users, ArrowRight, CheckCircle, AlertTriangle } from "lucide-react";
 import { ROLES } from "@workspace/permissions";
 
 interface Props {
@@ -33,6 +33,7 @@ export default function ReferralLanding({ slug, store }: Props) {
   const [loading, setLoading] = useState(true);
   const [tracked, setTracked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSuspended, setIsSuspended] = useState(false);
 
   const { code, utmSource, utmMedium, utmCampaign } = getUrlParams();
 
@@ -83,8 +84,13 @@ export default function ReferralLanding({ slug, store }: Props) {
         // Track the visit
         trackVisit(code);
       })
-      .catch(() => {
-        setError("Este código de indicação é inválido ou expirou.");
+      .catch((err: unknown) => {
+        if (err instanceof PublicApiError && err.code === "REFERRAL_CODE_SUSPENDED") {
+          setIsSuspended(true);
+          setError("Este código de indicação está suspenso e não pode ser utilizado no momento.");
+        } else {
+          setError("Este código de indicação é inválido ou expirou.");
+        }
       })
       .finally(() => setLoading(false));
   }, [code, slug, trackVisit]);
@@ -125,10 +131,16 @@ export default function ReferralLanding({ slug, store }: Props) {
   if (error || !referralInfo) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center px-4 py-16">
-        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-          <Tag className="w-8 h-8 text-red-500" />
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isSuspended ? "bg-amber-100" : "bg-red-100"}`}>
+          {isSuspended ? (
+            <AlertTriangle className="w-8 h-8 text-amber-500" />
+          ) : (
+            <Tag className="w-8 h-8 text-red-500" />
+          )}
         </div>
-        <h1 className="text-2xl font-bold mb-2">Código inválido</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          {isSuspended ? "Código suspenso" : "Código inválido"}
+        </h1>
         <p className="text-muted-foreground mb-6 max-w-sm">
           {error ?? "Este código de indicação não existe ou já foi utilizado."}
         </p>

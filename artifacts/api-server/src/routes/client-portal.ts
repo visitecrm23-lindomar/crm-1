@@ -104,6 +104,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
     let reservations: unknown[] = [];
     let referralStats: {
       code: string | null;
+      referralCodeStatus: string;
       totalReferrals: number;
       completedReferrals: number;
       pendingReferrals: number;
@@ -119,6 +120,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
       pointsPerReferral: number;
     } = {
       code: client?.referralCode ?? null,
+      referralCodeStatus: client?.referralCodeStatus ?? "active",
       totalReferrals: 0,
       completedReferrals: 0,
       pendingReferrals: 0,
@@ -310,6 +312,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
 
       referralStats = {
         code: resolvedReferralCode ?? null,
+        referralCodeStatus: client.referralCodeStatus ?? "active",
         totalReferrals,
         completedReferrals,
         pendingReferrals,

@@ -108,6 +108,7 @@ export interface ClientPortalProfile {
   reservations: ClientPortalReservation[];
   referral: {
     code: string | null;
+    referralCodeStatus: string;
     totalReferrals: number;
     completedReferrals: number;
     pendingReferrals: number;

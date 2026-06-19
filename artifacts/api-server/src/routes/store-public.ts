@@ -1323,6 +1323,7 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
     const [referrer] = await db.select({
       id: clientsTable.id,
       name: clientsTable.name,
+      referralCodeStatus: clientsTable.referralCodeStatus,
     }).from(clientsTable)
       .where(and(
         eq(clientsTable.tenantId, store.tenantId),
@@ -1332,6 +1333,10 @@ router.get("/public/store/:slug/referral/info", async (req, res, next: NextFunct
     if (!referrer) {
       next(new NotFoundError("Referral not found", "NOT_FOUND"));
       return;
+    }
+
+    if (referrer.referralCodeStatus !== "active") {
+      next(new ValidationError("Código de indicação bloqueado ou cancelado", "REFERRAL_CODE_SUSPENDED", { valid: false })); return;
     }
 
     // Get discount % from referral settings
