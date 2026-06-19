@@ -97,7 +97,7 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (!me) return;
 
     const {
-      search, status, pipelineStage, classification,
+      search, cpf: cpfParam, status, pipelineStage, classification,
       city, tripId, sellerId, origin, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
       page = "1", limit = "20",
       minPurchaseScore, maxPurchaseScore, minChurnScore, maxChurnScore,
@@ -136,6 +136,12 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
         ilike(clientsTable.customerCode, `%${search}%`),
         searchClean.length >= 3 ? ilike(clientsTable.cpf, `%${searchClean}%`) : undefined,
       ) as ReturnType<typeof eq>);
+    }
+    if (cpfParam) {
+      const cleanedCpfParam = cleanCPF(cpfParam);
+      if (cleanedCpfParam.length === 11) {
+        conditions.push(eq(clientsTable.cpf, cleanedCpfParam));
+      }
     }
     if (status) conditions.push(eq(clientsTable.status, status));
     if (pipelineStage) conditions.push(eq(clientsTable.pipelineStage, pipelineStage));

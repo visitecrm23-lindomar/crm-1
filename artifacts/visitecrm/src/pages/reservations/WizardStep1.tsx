@@ -1,12 +1,14 @@
+import { useMemo } from "react";
 import type { Trip } from "@workspace/api-client-react";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { TRIP_TYPE_LABELS } from "./constants";
 
 interface WizardStep1Props {
@@ -22,10 +24,18 @@ interface WizardStep1Props {
   tripComboOpen: boolean;
   clientComboOpen: boolean;
   canGoNext: boolean;
+  clientSearch: string;
+  isCpfMode: boolean;
+  cpfMatches: { id: string; name: string; whatsapp?: string | null }[];
+  cpfSearchLoading: boolean;
+  pendingClient: { id: string; name: string; whatsapp?: string | null } | null;
   setTripComboOpen: (v: boolean) => void;
   setClientComboOpen: (v: boolean) => void;
   onSelectTrip: (id: string) => void;
   onSelectClient: (id: string) => void;
+  onClientSearchChange: (v: string) => void;
+  onCreateNewClient: () => void;
+  onCloseClientCombo: () => void;
   onSelectBoarding: (id: string) => void;
   onSelectSeats: (seats: string[]) => void;
   onManualSeatsChange: (v: string) => void;
@@ -37,9 +47,27 @@ export function WizardStep1({
   allTrips, allClients, boardingRaw, selectedTripFull,
   selectedTripId, selectedClientId, boardingLocationId,
   selectedSeats, manualSeats, tripComboOpen, clientComboOpen, canGoNext,
+  clientSearch, isCpfMode, cpfMatches, cpfSearchLoading, pendingClient,
   setTripComboOpen, setClientComboOpen, onSelectTrip, onSelectClient,
+  onClientSearchChange, onCreateNewClient, onCloseClientCombo,
   onSelectBoarding, onSelectSeats, onManualSeatsChange, onClose, onNext,
 }: WizardStep1Props) {
+  const filteredClients = useMemo(() => {
+    if (isCpfMode) return [];
+    if (!clientSearch.trim()) return allClients;
+    const q = clientSearch.toLowerCase();
+    return allClients.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.whatsapp && c.whatsapp.includes(q))
+    );
+  }, [allClients, clientSearch, isCpfMode]);
+
+  const selectedClientDisplay = (() => {
+    if (!selectedClientId) return null;
+    if (pendingClient?.id === selectedClientId) return pendingClient;
+    return allClients.find(c => c.id === selectedClientId) ?? null;
+  })();
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -76,32 +104,83 @@ export function WizardStep1({
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Cliente *</label>
-          <Popover open={clientComboOpen} onOpenChange={setClientComboOpen}>
+          <Popover open={clientComboOpen} onOpenChange={v => { setClientComboOpen(v); if (!v) onCloseClientCombo(); }}>
             <PopoverTrigger asChild>
               <Button variant="outline" role="combobox" aria-expanded={clientComboOpen} className="w-full justify-between font-normal">
                 <span className="truncate">
-                  {selectedClientId ? (() => {
-                    const cl = allClients.find(c => c.id === selectedClientId);
-                    return cl ? `${cl.name} — ${cl.whatsapp}` : "Cliente não encontrado";
-                  })() : "Selecionar cliente..."}
+                  {selectedClientDisplay
+                    ? `${selectedClientDisplay.name}${selectedClientDisplay.whatsapp ? ` — ${selectedClientDisplay.whatsapp}` : ""}`
+                    : "Selecionar cliente..."}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Buscar por nome ou whatsapp..." />
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Buscar por nome, WhatsApp ou CPF..."
+                  value={clientSearch}
+                  onValueChange={onClientSearchChange}
+                />
                 <CommandList>
-                  <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
-                  <CommandGroup>
-                    {allClients.map(c => (
-                      <CommandItem key={c.id} value={`${c.name} ${c.whatsapp}`} onSelect={() => onSelectClient(c.id)}>
-                        <Check className={`mr-2 h-4 w-4 ${selectedClientId === c.id ? "opacity-100" : "opacity-0"}`} />
-                        <span className="flex-1">{c.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{c.whatsapp}</span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
+                  {isCpfMode ? (
+                    cpfSearchLoading ? (
+                      <div className="flex items-center gap-2 py-6 px-3 text-sm text-muted-foreground justify-center">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Buscando pelo CPF...
+                      </div>
+                    ) : cpfMatches.length > 0 ? (
+                      <CommandGroup heading="Identificado pelo CPF">
+                        {cpfMatches.map(c => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.id}
+                            onSelect={() => onSelectClient(c.id)}
+                          >
+                            <Check className={`mr-2 h-4 w-4 shrink-0 ${selectedClientId === c.id ? "opacity-100" : "opacity-0"}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium truncate">{c.name}</span>
+                                <Badge variant="secondary" className="text-xs shrink-0 px-1.5">CPF</Badge>
+                              </div>
+                              {c.whatsapp && <p className="text-xs text-muted-foreground">{c.whatsapp}</p>}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    ) : (
+                      <div className="py-3 px-2 space-y-2">
+                        <p className="text-sm text-muted-foreground text-center pt-2">
+                          Nenhum cliente com este CPF.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-2"
+                          onClick={() => { setClientComboOpen(false); onCreateNewClient(); }}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Cadastrar novo cliente
+                        </Button>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      {filteredClients.length === 0 ? (
+                        <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                      ) : (
+                        <CommandGroup>
+                          {filteredClients.map(c => (
+                            <CommandItem key={c.id} value={c.id} onSelect={() => onSelectClient(c.id)}>
+                              <Check className={`mr-2 h-4 w-4 ${selectedClientId === c.id ? "opacity-100" : "opacity-0"}`} />
+                              <span className="flex-1">{c.name}</span>
+                              <span className="text-xs text-muted-foreground ml-2">{c.whatsapp}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </>
+                  )}
                 </CommandList>
               </Command>
             </PopoverContent>

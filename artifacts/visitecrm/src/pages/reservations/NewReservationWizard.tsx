@@ -4,10 +4,13 @@ import {
   useListTrips, useListClients, useListBoardingLocations, useListUsers,
   useCreateReservation, useUpdateReservation, useUpdateDeal,
   useValidateReservationCoupon, useGetTrip, useGetClientLoyalty,
+  useCreateClient,
   validateReferralCode,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { XCircle } from "lucide-react";
@@ -56,6 +59,7 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   const createReservation = useCreateReservation();
   const updateReservation = useUpdateReservation();
   const updateDeal = useUpdateDeal();
+  const createClient = useCreateClient();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -90,6 +94,23 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   const [discountsOpen, setDiscountsOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const [clientSearch, setClientSearch] = useState("");
+  const [pendingClient, setPendingClient] = useState<{ id: string; name: string; whatsapp?: string | null } | null>(null);
+  const [showNewClientDialog, setShowNewClientDialog] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientWhatsapp, setNewClientWhatsapp] = useState("");
+  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientError, setNewClientError] = useState<string | null>(null);
+
+  const cpfClean = useMemo(() => clientSearch.replace(/\D/g, ""), [clientSearch]);
+  const isCpfMode = cpfClean.length === 11;
+
+  const { data: cpfData, isLoading: cpfSearchLoading } = useListClients(
+    { cpf: cpfClean, limit: 5 },
+    { query: { queryKey: ["cpf-client-search", cpfClean], enabled: isCpfMode } }
+  );
+  const cpfMatches = cpfData?.data ?? [];
+
   const validateCoupon = useValidateReservationCoupon();
   const { data: selectedTripFull } = useGetTrip(selectedTripId, { query: { queryKey: ["wizard-trip", selectedTripId], enabled: !!selectedTripId } });
   const { data: loyaltyInfo } = useGetClientLoyalty(selectedClientId, { query: { queryKey: ["wizard-loyalty", selectedClientId], enabled: !!selectedClientId, retry: false } });
@@ -97,7 +118,11 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   const allTrips = tripsData?.data ?? [];
   const allClients = clientsData?.data ?? [];
   const selectedTrip = tripsData?.data.find(t => t.id === selectedTripId);
-  const selectedClient = clientsData?.data.find(c => c.id === selectedClientId);
+  const selectedClient = (() => {
+    if (!selectedClientId) return undefined;
+    if (pendingClient?.id === selectedClientId) return pendingClient;
+    return clientsData?.data.find(c => c.id === selectedClientId);
+  })();
   const selectedBoarding = (boardingRaw ?? []).find(b => b.id === boardingLocationId);
 
   const effectiveSeats = useMemo(() => {
@@ -130,9 +155,65 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
     setCouponCode(""); setCouponApplied(null); setCouponError(null);
     setRedeemLoyalty(false); setLoyaltyPointsToRedeem(0); setLoyaltyAmountApplied(0);
     setReferralCode(""); setReferralApplied(null); setReferralError(null); setDiscountsOpen(false);
+    setClientSearch(""); setPendingClient(null);
+    setShowNewClientDialog(false); setNewClientName(""); setNewClientWhatsapp(""); setNewClientEmail(""); setNewClientError(null);
   };
   const handleClose = () => { resetWizard(); onClose(); };
   const canGoNext1 = !!selectedTripId && !!selectedClientId && effectiveSeats.length > 0;
+
+  const handleSelectClient = (id: string) => {
+    setSelectedClientId(id);
+    setClientComboOpen(false);
+    if (isCpfMode) {
+      const matched = cpfMatches.find(c => c.id === id);
+      if (matched) {
+        setPendingClient(matched);
+        toast({ title: "Cliente identificado pelo CPF", description: `${matched.name} foi vinculado à reserva.` });
+      }
+    }
+    setClientSearch("");
+  };
+
+  const handleOpenNewClientDialog = () => {
+    setNewClientName("");
+    setNewClientWhatsapp("");
+    setNewClientEmail("");
+    setNewClientError(null);
+    setShowNewClientDialog(true);
+  };
+
+  const handleCreateNewClient = async () => {
+    setNewClientError(null);
+    if (!newClientName.trim() || !newClientWhatsapp.trim()) {
+      setNewClientError("Nome e WhatsApp são obrigatórios.");
+      return;
+    }
+    try {
+      const result = await createClient.mutateAsync({
+        data: {
+          name: newClientName.trim(),
+          email: newClientEmail.trim() || "",
+          whatsapp: newClientWhatsapp.trim(),
+          cpf: cpfClean,
+        },
+      });
+      const isNew = result.isNew ?? true;
+      setPendingClient({ id: result.id, name: result.name, whatsapp: result.whatsapp ?? null });
+      setSelectedClientId(result.id);
+      setShowNewClientDialog(false);
+      setClientSearch("");
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      toast({
+        title: isNew ? "Novo cliente cadastrado" : "Cliente vinculado pelo CPF",
+        description: isNew
+          ? `${result.name} foi cadastrado e vinculado à reserva.`
+          : `${result.name} já estava cadastrado e foi vinculado à reserva.`,
+      });
+    } catch (err: unknown) {
+      const apiMsg = (err as { data?: { error?: string } })?.data?.error;
+      setNewClientError(apiMsg ?? (err instanceof Error ? err.message : "Erro ao cadastrar cliente."));
+    }
+  };
 
   const handleCouponApply = async () => {
     if (!couponCode.trim()) return;
@@ -205,77 +286,146 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nova Reserva</DialogTitle></DialogHeader>
-        <WizardStepIndicator step={step} />
+    <>
+      <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Nova Reserva</DialogTitle></DialogHeader>
+          <WizardStepIndicator step={step} />
 
-        {step === 1 && (
-          <WizardStep1
-            allTrips={allTrips} allClients={allClients} boardingRaw={boardingRaw}
-            selectedTripFull={selectedTripFull} selectedTripId={selectedTripId}
-            selectedClientId={selectedClientId} boardingLocationId={boardingLocationId}
-            selectedSeats={selectedSeats} manualSeats={manualSeats}
-            tripComboOpen={tripComboOpen} clientComboOpen={clientComboOpen} canGoNext={canGoNext1}
-            setTripComboOpen={setTripComboOpen} setClientComboOpen={setClientComboOpen}
-            onSelectTrip={id => { setSelectedTripId(id); setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); }}
-            onSelectClient={id => { setSelectedClientId(id); setClientComboOpen(false); }}
-            onSelectBoarding={setBoardingLocationId}
-            onSelectSeats={setSelectedSeats}
-            onManualSeatsChange={setManualSeats}
-            onClose={handleClose}
-            onNext={() => setStep(2)}
-          />
-        )}
+          {step === 1 && (
+            <WizardStep1
+              allTrips={allTrips} allClients={allClients} boardingRaw={boardingRaw}
+              selectedTripFull={selectedTripFull} selectedTripId={selectedTripId}
+              selectedClientId={selectedClientId} boardingLocationId={boardingLocationId}
+              selectedSeats={selectedSeats} manualSeats={manualSeats}
+              tripComboOpen={tripComboOpen} clientComboOpen={clientComboOpen} canGoNext={canGoNext1}
+              clientSearch={clientSearch} isCpfMode={isCpfMode}
+              cpfMatches={cpfMatches} cpfSearchLoading={cpfSearchLoading}
+              pendingClient={pendingClient}
+              setTripComboOpen={setTripComboOpen} setClientComboOpen={setClientComboOpen}
+              onSelectTrip={id => { setSelectedTripId(id); setSelectedSeats([]); setManualSeats(""); setTripComboOpen(false); }}
+              onSelectClient={handleSelectClient}
+              onClientSearchChange={setClientSearch}
+              onCreateNewClient={handleOpenNewClientDialog}
+              onCloseClientCombo={() => setClientSearch("")}
+              onSelectBoarding={setBoardingLocationId}
+              onSelectSeats={setSelectedSeats}
+              onManualSeatsChange={setManualSeats}
+              onClose={handleClose}
+              onNext={() => setStep(2)}
+            />
+          )}
 
-        {step === 2 && <WizardStep2 {...step2Props} />}
+          {step === 2 && <WizardStep2 {...step2Props} />}
 
-        {step === 3 && (
-          <div className="space-y-4">
-            <div className="bg-muted/30 rounded-xl border p-4 space-y-3">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Resumo da Reserva</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-muted-foreground text-xs mb-0.5">Viagem</p><p className="font-semibold">{selectedTrip?.name ?? "—"}</p>{selectedTrip?.destination && <p className="text-xs text-muted-foreground">{selectedTrip.destination}</p>}</div>
-                <div><p className="text-muted-foreground text-xs mb-0.5">Cliente</p><p className="font-semibold">{selectedClient?.name ?? "—"}</p>{selectedClient?.whatsapp && <p className="text-xs text-muted-foreground">{selectedClient.whatsapp}</p>}</div>
-                {selectedBoarding && <div><p className="text-muted-foreground text-xs mb-0.5">Ponto de Embarque</p><p className="font-semibold">{selectedBoarding.name}</p></div>}
-                <div><p className="text-muted-foreground text-xs mb-0.5">Assentos</p><p className="font-semibold">{effectiveSeats.length > 0 ? effectiveSeats.join(", ") : "A definir"}</p></div>
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="bg-muted/30 rounded-xl border p-4 space-y-3">
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Resumo da Reserva</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-muted-foreground text-xs mb-0.5">Viagem</p><p className="font-semibold">{selectedTrip?.name ?? "—"}</p>{selectedTrip?.destination && <p className="text-xs text-muted-foreground">{selectedTrip.destination}</p>}</div>
+                  <div><p className="text-muted-foreground text-xs mb-0.5">Cliente</p><p className="font-semibold">{selectedClient?.name ?? "—"}</p>{selectedClient?.whatsapp && <p className="text-xs text-muted-foreground">{selectedClient.whatsapp}</p>}</div>
+                  {selectedBoarding && <div><p className="text-muted-foreground text-xs mb-0.5">Ponto de Embarque</p><p className="font-semibold">{selectedBoarding.name}</p></div>}
+                  <div><p className="text-muted-foreground text-xs mb-0.5">Assentos</p><p className="font-semibold">{effectiveSeats.length > 0 ? effectiveSeats.join(", ") : "A definir"}</p></div>
+                </div>
+                <Separator />
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Valor Base</p><p className={`font-bold text-base ${totalDiscount > 0 ? "line-through text-muted-foreground" : ""}`}>R$ {totalValue.toFixed(2)}</p></div>
+                  <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Valor Pago</p><p className="font-bold text-base text-green-600">R$ {paidValue.toFixed(2)}</p></div>
+                  <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Saldo</p><p className={`font-bold text-base ${balance > 0 ? "text-destructive" : "text-green-600"}`}>R$ {balance.toFixed(2)}</p></div>
+                </div>
+                {totalDiscount > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1.5 text-sm">
+                    <p className="font-semibold text-green-800 text-xs uppercase tracking-wide">Descontos Aplicados</p>
+                    {uiCouponApplied > 0 && couponApplied && <div className="flex justify-between text-green-700"><span>Cupom ({couponApplied.code})</span><span>−R$ {uiCouponApplied.toFixed(2)}</span></div>}
+                    {uiLoyaltyApplied > 0 && <div className="flex justify-between text-green-700"><span>Fidelidade ({loyaltyPointsToRedeem} pts)</span><span>−R$ {uiLoyaltyApplied.toFixed(2)}</span></div>}
+                    {uiReferralApplied > 0 && referralApplied && <div className="flex justify-between text-green-700"><span>Indicação ({referralApplied.code})</span><span>−R$ {uiReferralApplied.toFixed(2)}</span></div>}
+                    <div className="flex justify-between font-bold text-green-800 pt-1 border-t border-green-200"><span>Total com Desconto</span><span>R$ {finalTotal.toFixed(2)}</span></div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-muted-foreground text-xs mb-0.5">Forma de Pagamento</p><p className="font-semibold">{PAYMENT_LABELS[paymentMethod] ?? paymentMethod}</p></div>
+                  <div><p className="text-muted-foreground text-xs mb-0.5">Parcelas</p><p className="font-semibold">{installments}×</p></div>
+                  {hasInsurance && <div><p className="text-muted-foreground text-xs mb-0.5">Seguro</p><p className="font-semibold">Incluso</p></div>}
+                  {notes && <div className="col-span-2"><p className="text-muted-foreground text-xs mb-0.5">Observações</p><p className="font-semibold">{notes}</p></div>}
+                </div>
               </div>
-              <Separator />
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Valor Base</p><p className={`font-bold text-base ${totalDiscount > 0 ? "line-through text-muted-foreground" : ""}`}>R$ {totalValue.toFixed(2)}</p></div>
-                <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Valor Pago</p><p className="font-bold text-base text-green-600">R$ {paidValue.toFixed(2)}</p></div>
-                <div className="text-center"><p className="text-muted-foreground text-xs mb-0.5">Saldo</p><p className={`font-bold text-base ${balance > 0 ? "text-destructive" : "text-green-600"}`}>R$ {balance.toFixed(2)}</p></div>
-              </div>
-              {totalDiscount > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-1.5 text-sm">
-                  <p className="font-semibold text-green-800 text-xs uppercase tracking-wide">Descontos Aplicados</p>
-                  {uiCouponApplied > 0 && couponApplied && <div className="flex justify-between text-green-700"><span>Cupom ({couponApplied.code})</span><span>−R$ {uiCouponApplied.toFixed(2)}</span></div>}
-                  {uiLoyaltyApplied > 0 && <div className="flex justify-between text-green-700"><span>Fidelidade ({loyaltyPointsToRedeem} pts)</span><span>−R$ {uiLoyaltyApplied.toFixed(2)}</span></div>}
-                  {uiReferralApplied > 0 && referralApplied && <div className="flex justify-between text-green-700"><span>Indicação ({referralApplied.code})</span><span>−R$ {uiReferralApplied.toFixed(2)}</span></div>}
-                  <div className="flex justify-between font-bold text-green-800 pt-1 border-t border-green-200"><span>Total com Desconto</span><span>R$ {finalTotal.toFixed(2)}</span></div>
+              {createError && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                  <XCircle className="w-4 h-4 shrink-0" /><span>{createError}</span>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-muted-foreground text-xs mb-0.5">Forma de Pagamento</p><p className="font-semibold">{PAYMENT_LABELS[paymentMethod] ?? paymentMethod}</p></div>
-                <div><p className="text-muted-foreground text-xs mb-0.5">Parcelas</p><p className="font-semibold">{installments}×</p></div>
-                {hasInsurance && <div><p className="text-muted-foreground text-xs mb-0.5">Seguro</p><p className="font-semibold">Incluso</p></div>}
-                {notes && <div className="col-span-2"><p className="text-muted-foreground text-xs mb-0.5">Observações</p><p className="font-semibold">{notes}</p></div>}
+              <div className="flex justify-between gap-2 pt-2">
+                <Button variant="outline" onClick={() => setStep(2)}>← Anterior</Button>
+                <Button onClick={handleConfirm} disabled={createReservation.isPending}>
+                  {createReservation.isPending ? "Criando..." : "Confirmar Reserva"}
+                </Button>
               </div>
             </div>
-            {createError && (
-              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                <XCircle className="w-4 h-4 shrink-0" /><span>{createError}</span>
-              </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewClientDialog} onOpenChange={(o) => { if (!o) setShowNewClientDialog(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cadastrar Novo Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>CPF</Label>
+              <Input
+                value={cpfClean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                disabled
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nc-name">Nome completo *</Label>
+              <Input
+                id="nc-name"
+                placeholder="Nome completo"
+                value={newClientName}
+                onChange={e => setNewClientName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nc-wa">WhatsApp *</Label>
+              <Input
+                id="nc-wa"
+                placeholder="(00) 00000-0000"
+                value={newClientWhatsapp}
+                onChange={e => setNewClientWhatsapp(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nc-email" className="text-muted-foreground">E-mail <span className="font-normal">(opcional)</span></Label>
+              <Input
+                id="nc-email"
+                type="email"
+                placeholder="email@exemplo.com"
+                value={newClientEmail}
+                onChange={e => setNewClientEmail(e.target.value)}
+              />
+            </div>
+            {newClientError && (
+              <p className="text-sm text-destructive">{newClientError}</p>
             )}
-            <div className="flex justify-between gap-2 pt-2">
-              <Button variant="outline" onClick={() => setStep(2)}>← Anterior</Button>
-              <Button onClick={handleConfirm} disabled={createReservation.isPending}>
-                {createReservation.isPending ? "Criando..." : "Confirmar Reserva"}
-              </Button>
-            </div>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewClientDialog(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateNewClient}
+              disabled={createClient.isPending || !newClientName.trim() || !newClientWhatsapp.trim()}
+            >
+              {createClient.isPending ? "Salvando..." : "Cadastrar e Vincular"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
