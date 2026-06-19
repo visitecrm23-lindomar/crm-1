@@ -39,7 +39,6 @@ import { getClientIp } from "../lib/get-client-ip";
 import { resolveCheckoutDiscounts } from "../services/checkout/discounts";
 import { prepareCheckoutItems } from "../services/checkout/items";
 import { persistCheckoutOrder } from "../services/checkout/persist-order";
-import { runPostBookingSideEffects } from "../services/checkout/post-booking";
 import { insertClientNotification } from "../lib/client-notifications";
 
 function generateCookieId(): string {
@@ -936,17 +935,11 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     const items = await db.select().from(storeOrderItemsTable)
       .where(eq(storeOrderItemsTable.orderId, orderId));
 
-    if (reservationClientId && tripLinkedProducts.size > 0) {
-      void runPostBookingSideEffects({
-        store,
-        customerEmail: data.customerEmail,
-        customerName: data.customerName,
-        customerCpf: data.customerCpf,
-        customerPhone: data.customerPhone,
-        paymentMethod: data.paymentMethod,
-        orderNumber,
-      });
-    }
+    // Portal account provisioning and referral-code minting are intentionally
+    // NOT done here. They are deferred to runPostPaymentSideEffects, which runs
+    // only after the order's payment is confirmed (webhook or manual entry), so
+    // an anonymous, non-paying visitor cannot provision an account or mint a
+    // referral code just by submitting the checkout form.
 
     res.status(200).json({
       ...order,
@@ -1187,7 +1180,6 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       isEnabled: referralSettingsTable.isEnabled,
       expirationDays: referralSettingsTable.expirationDays,
       allowSelfReferral: referralSettingsTable.allowSelfReferral,
-      requireFirstPurchase: referralSettingsTable.requireFirstPurchase,
       minPurchaseAmount: referralSettingsTable.minPurchaseAmount,
       maxReferralsPerUser: referralSettingsTable.maxReferralsPerUser,
     }).from(referralSettingsTable)
@@ -1204,19 +1196,12 @@ router.post("/public/store/:slug/referral/validate", async (req, res, next: Next
       }
     }
 
-    // Enforce requireFirstPurchase: customer must not have prior completed orders in this tenant
-    if (settings?.requireFirstPurchase && parsed.data.customerEmail) {
-      const [priorOrder] = await db.select({ id: storeOrdersTable.id })
-        .from(storeOrdersTable)
-        .where(and(
-          eq(storeOrdersTable.tenantId, store.tenantId),
-          eq(storeOrdersTable.customerEmail, parsed.data.customerEmail.toLowerCase()),
-          eq(storeOrdersTable.status, "completed"),
-        )).limit(1);
-      if (priorOrder) {
-        next(new ValidationError("Código de indicação válido apenas para novos clientes", "REFERRAL_EXISTING_CUSTOMER", { valid: false })); return;
-      }
-    }
+    // NOTE: requireFirstPurchase is intentionally NOT enforced here. Probing
+    // store_orders by customerEmail from this anonymous endpoint leaked whether
+    // an email had ever purchased (REFERRAL_EXISTING_CUSTOMER acted as an
+    // enumeration oracle). The authoritative first-purchase enforcement runs at
+    // checkout in the discount-application path, which is the only place the
+    // discount actually affects the order total.
 
     const discountType = settings?.discountType ?? "percentage";
     const discountValue = Number(settings?.discountValue ?? 5);

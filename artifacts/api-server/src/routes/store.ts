@@ -21,6 +21,7 @@ import { randomBytes, createHash } from "crypto";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
+import { runPostPaymentSideEffects } from "../services/checkout/post-booking";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
@@ -787,9 +788,14 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
     // Payment-gated reservation: create trip reservations on first manual payment confirmation.
     // idempotent — safe to call multiple times (returns existing reservations if already created).
     if (isTransitioningToPaid) {
-      createReservationsForOrder(order.id).catch((err) => {
-        req.log.warn({ err, orderId: order.id }, "[store/orders] Failed to create reservations on manual payment confirmation");
-      });
+      // Chain post-payment side effects (portal account + referral code) AFTER
+      // reservations commit, so ensurePortalAccount sees the freshly-created
+      // reservations. Both are gated behind confirmed payment.
+      createReservationsForOrder(order.id)
+        .then(() => runPostPaymentSideEffects(order.id))
+        .catch((err) => {
+          req.log.warn({ err, orderId: order.id }, "[store/orders] Failed reservation/post-payment side effects on manual payment confirmation");
+        });
     }
 
     // Auto-create CRM deal as "won" when order transitions to paid or completed (fire-and-forget).

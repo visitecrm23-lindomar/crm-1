@@ -7,6 +7,7 @@ import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
+import { runPostPaymentSideEffects } from "../services/checkout/post-booking";
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
@@ -192,6 +193,11 @@ async function handleStripeEvent(event: StripeEvent, store: StoreScope): Promise
           logger.warn({ err, reservationId }, "[webhooks] Failed to enqueue payment confirmation notification"),
         );
       }
+      // Post-payment: provision the portal account and mint the referral code
+      // (gated behind confirmed payment). Fire-and-forget; never blocks the webhook.
+      runPostPaymentSideEffects(result.orderId).catch((err) =>
+        logger.warn({ err, orderId: result.orderId }, "[webhooks] Failed post-payment side effects"),
+      );
     }
     return;
   }
@@ -396,6 +402,11 @@ async function handleMpPayment(store: StoreScope, paymentId: string, payment: Mp
           logger.warn({ err, reservationId }, "[webhooks] Failed to enqueue payment confirmation notification"),
         );
       }
+      // Post-payment: provision the portal account and mint the referral code
+      // (gated behind confirmed payment). Fire-and-forget; never blocks the webhook.
+      runPostPaymentSideEffects(result.orderId).catch((err) =>
+        logger.warn({ err, orderId: result.orderId }, "[webhooks] Failed post-payment side effects"),
+      );
     }
   } else if (payment.status === "rejected") {
     await db.transaction(async (tx) => {
@@ -489,6 +500,7 @@ interface ApplyArgs {
 }
 
 interface ApplyResult {
+  orderId: string;
   reservationIds: string[];
   tenantId: string;
 }
@@ -602,7 +614,7 @@ async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Promise<App
     { orderId: order.id, gateway, transactionId, reservations: reservations.length, amount },
     "[webhooks] Gateway payment applied and reservations synced",
   );
-  return { reservationIds: reservations.map((r) => r.id), tenantId: order.tenantId };
+  return { orderId: order.id, reservationIds: reservations.map((r) => r.id), tenantId: order.tenantId };
 }
 
 async function markOrderFailed(

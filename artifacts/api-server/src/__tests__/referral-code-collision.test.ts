@@ -130,7 +130,10 @@ describe("generateAndAssignReferralCode — callback logic", () => {
 
     const result = await generateAndAssignReferralCode(CLIENT_ID, TENANT_ID, BASE, NAME, YEAR);
 
-    expect(result).toBe(`${NAME}${YEAR}1`);
+    // Fallback candidates now carry a high-entropy random suffix instead of a
+    // predictable numeric index, so we assert the format rather than an exact value.
+    expect(result).toMatch(/^JOAO2026[0-9A-Z]{8}$/);
+    expect(result).not.toBe(BASE);
     expect(db.transaction).toHaveBeenCalledTimes(2);
     expect(tx1.update).not.toHaveBeenCalled();
     expect(tx2.update).toHaveBeenCalledTimes(1);
@@ -160,7 +163,9 @@ describe("generateAndAssignReferralCode — retry loop", () => {
 
     const result = await generateAndAssignReferralCode(CLIENT_ID, TENANT_ID, BASE, NAME, YEAR);
 
-    expect(result).toBe(`${NAME}${YEAR}1`);
+    // Fallback candidate uses a high-entropy random suffix (not a numeric index).
+    expect(result).toMatch(/^JOAO2026[0-9A-Z]{8}$/);
+    expect(result).not.toBe(BASE);
     expect(db.transaction).toHaveBeenCalledTimes(2);
   });
 

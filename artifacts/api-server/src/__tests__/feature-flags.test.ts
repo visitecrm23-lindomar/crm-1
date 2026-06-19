@@ -160,7 +160,7 @@ vi.mock("../queues/whatsapp-helpers.js", () => ({
 }));
 
 vi.mock("../services/checkout/post-booking.js", () => ({
-  runPostBookingSideEffects: vi.fn().mockResolvedValue(undefined),
+  runPostPaymentSideEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../services/checkout/discounts.js", () => ({

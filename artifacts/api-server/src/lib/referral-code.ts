@@ -3,6 +3,7 @@ import { clientsTable } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { ConflictError } from "./errors";
 import { logger } from "./logger";
+import { generateReferralCodeSuffix } from "./id";
 
 const MAX_CANDIDATE_ATTEMPTS = 5;
 const MAX_SERIALIZATION_RETRIES = 5;
@@ -44,8 +45,13 @@ export async function generateAndAssignReferralCode(
   year: number,
 ): Promise<string> {
   for (let candidateIndex = 0; candidateIndex < MAX_CANDIDATE_ATTEMPTS; candidateIndex++) {
+    // Candidate 0 is the caller-supplied base code (already carries a random
+    // suffix in production). On collision, derive a fresh high-entropy candidate
+    // instead of a predictable `${namePart}${year}${index}` so codes stay
+    // unguessable. Computed once per candidateIndex (reused across serialization
+    // retries) so a 40001 retry does not waste candidates.
     const candidate =
-      candidateIndex === 0 ? baseCode : `${namePart}${year}${candidateIndex}`;
+      candidateIndex === 0 ? baseCode : `${namePart}${year}${generateReferralCodeSuffix()}`;
 
     for (let serRetry = 0; serRetry < MAX_SERIALIZATION_RETRIES; serRetry++) {
       try {

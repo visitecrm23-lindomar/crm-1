@@ -16,7 +16,6 @@ import {
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { generateId } from "../../lib/id";
 import { upsertCheckoutClient } from "./checkout-user";
-import { generateAndAssignReferralCode } from "../../lib/referral-code";
 import { lockProductsForCheckout } from "./order-locks";
 import { recordReferralConversion, type ReferralConversionResult } from "./referral-conversion";
 import type { Tx } from "./tx";
@@ -204,7 +203,6 @@ async function decrementStockAndSales(tx: Tx, args: PersistOrderArgs): Promise<v
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
   let referralConversionResult: ReferralConversionResult | undefined;
-  let checkoutClientIsNew = false;
 
   await db.transaction(async (tx) => {
     await lockProductsForCheckout(tx, {
@@ -231,7 +229,6 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
         createdById: adminUser.id,
       });
       reservationClientId = checkoutClientResult.clientId;
-      checkoutClientIsNew = checkoutClientResult.isNew;
     }
 
     await writeOrderAndItems(tx, args, reservationClientId);
@@ -334,16 +331,10 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     });
   }
 
-  // Auto-generate referral code for new checkout clients (fire-and-forget, post-commit)
-  if (checkoutClientIsNew && reservationClientId) {
-    const nameParts = args.data.customerName.trim().split(/\s+/);
-    const namePart = nameParts[0] ?? "CLI";
-    const year = new Date().getFullYear();
-    const baseCode = `${namePart.toUpperCase().slice(0, 6)}${year}`;
-    generateAndAssignReferralCode(reservationClientId, args.store.tenantId, baseCode, namePart, year).catch((err: unknown) => {
-      console.error("[checkout/persist-order] Failed to generate referral code for new client:", err);
-    });
-  }
+  // Referral-code generation for the checkout client is intentionally NOT done
+  // here. It is deferred to runPostPaymentSideEffects so a code is only minted
+  // after the order's payment is confirmed (anonymous, non-paying checkout
+  // submissions must not be able to mint referral codes).
 
   return { reservationClientId };
 }

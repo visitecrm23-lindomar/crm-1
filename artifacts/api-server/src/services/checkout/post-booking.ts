@@ -1,162 +1,112 @@
 import { db } from "@workspace/db";
-import { reservationsTable, storesTable, tripsTable } from "@workspace/db";
+import { reservationsTable, storesTable, storeOrdersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import {
-  enqueueReservationConfirmationEmail,
-  enqueueNewBookingNotificationEmail,
-} from "../../queues/email-helpers";
 import { ensurePortalAccount } from "./portal-account";
-import { STORE_PAYMENT_STATUS } from "@workspace/permissions";
+import { generateAndAssignReferralCode } from "../../lib/referral-code";
+import { generateReferralCode } from "../../lib/id";
 
-export interface PostBookingArgs {
-  store: typeof storesTable.$inferSelect;
-  customerEmail: string;
-  customerName: string;
-  customerCpf?: string;
-  customerPhone?: string;
-  paymentMethod?: string;
-  orderNumber: string;
-}
+/**
+ * Side effects that must only happen AFTER a store order's payment is confirmed
+ * (Stripe/Mercado Pago webhook or manual payment entry) — never at checkout.
+ *
+ * Running these at checkout let an anonymous, non-paying visitor provision a
+ * Clerk portal account (with a welcome email + temporary password) and mint a
+ * referral code just by submitting the checkout form. Both are deferred here so
+ * they are gated behind a real payment.
+ *
+ * This function is invoked post-commit (the order/reservation transaction has
+ * already committed) because both ensurePortalAccount (external Clerk calls) and
+ * generateAndAssignReferralCode (its own serializable transaction) must not run
+ * inside another DB transaction. It is best-effort: every step is guarded so a
+ * failure never rolls back or blocks the confirmed payment.
+ *
+ * Idempotent: ensurePortalAccount no-ops when the portal user already exists and
+ * generateAndAssignReferralCode no-ops when the client already has a code, so it
+ * is safe on webhook/payment retries.
+ *
+ * Note: the customer reservation-confirmation email is intentionally NOT sent
+ * here (it is a pre-existing gap tracked separately) and the agency new-booking
+ * notification is dispatched by the webhook handler, so it is not duplicated.
+ *
+ * @param orderId - The store_orders.id whose payment was just confirmed.
+ */
+export async function runPostPaymentSideEffects(orderId: string): Promise<void> {
+  const [order] = await db
+    .select({
+      id: storeOrdersTable.id,
+      orderNumber: storeOrdersTable.orderNumber,
+      tenantId: storeOrdersTable.tenantId,
+      storeId: storeOrdersTable.storeId,
+      clientId: storeOrdersTable.clientId,
+      customerName: storeOrdersTable.customerName,
+      customerEmail: storeOrdersTable.customerEmail,
+    })
+    .from(storeOrdersTable)
+    .where(eq(storeOrdersTable.id, orderId))
+    .limit(1);
 
-export async function runPostBookingSideEffects(args: PostBookingArgs): Promise<void> {
-  const {
-    store, customerEmail, customerName, customerCpf, customerPhone, paymentMethod, orderNumber,
-  } = args;
+  if (!order) return;
 
-  const tenantId = store.tenantId;
-  const agencyName = store.name;
-  const agencyLogo = store.logo ?? "";
-  const agencyPhone = store.whatsapp ?? store.phone ?? "";
-  const agencyEmail = store.email ?? "";
+  // Auto-generate a referral code for the paying client (generate-if-missing).
+  // Gated behind payment so anonymous checkout submissions cannot mint codes.
+  if (order.clientId) {
+    try {
+      const year = new Date().getFullYear();
+      const namePart =
+        (order.customerName ?? "REF").replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 4) || "REF";
+      const baseCode = generateReferralCode(order.customerName);
+      await generateAndAssignReferralCode(order.clientId, order.tenantId, baseCode, namePart, year);
+    } catch (err) {
+      console.error("[checkout/post-payment] Failed to generate referral code:", err);
+    }
+  }
+
+  // Provision the customer's portal account only when the paid order produced
+  // trip reservations. Product-only orders do not get a portal account (matches
+  // the prior trip-linked gating), and provisioning is now gated behind payment.
+  const reservationRows = await db
+    .select({ id: reservationsTable.id })
+    .from(reservationsTable)
+    .where(
+      and(
+        eq(reservationsTable.tenantId, order.tenantId),
+        eq(reservationsTable.storeOrderId, order.orderNumber),
+      ),
+    );
+
+  if (reservationRows.length === 0) return;
+
+  const [store] = await db
+    .select({
+      tenantId: storesTable.tenantId,
+      name: storesTable.name,
+      slug: storesTable.slug,
+      logo: storesTable.logo,
+      customDomain: storesTable.customDomain,
+    })
+    .from(storesTable)
+    .where(and(eq(storesTable.id, order.storeId), eq(storesTable.tenantId, order.tenantId)))
+    .limit(1);
+
+  if (!store) return;
+
   const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
   const storeBase = store.customDomain
     ? `https://${store.customDomain}`
     : `${STORE_PUBLIC_BASE}/loja/${store.slug}`;
   const loginUrl = `${storeBase}/entrar`;
-  const consultUrl = `${storeBase}/consultar-pedido`;
 
   try {
-    const { credentials } = await ensurePortalAccount({
-      email: customerEmail,
-      name: customerName,
-      tenantId,
+    await ensurePortalAccount({
+      email: order.customerEmail,
+      name: order.customerName,
+      tenantId: order.tenantId,
       storeBase,
       loginUrl,
-      agencyName,
-      agencyLogo,
+      agencyName: store.name,
+      agencyLogo: store.logo ?? "",
     });
-
-    const [reservation] = await db
-      .select({
-        reservationId: reservationsTable.id,
-        reservationNumber: reservationsTable.reservationNumber,
-        voucherCode: reservationsTable.voucherCode,
-        seats: reservationsTable.seats,
-        totalValue: reservationsTable.totalValue,
-        tripName: tripsTable.name,
-        tripDestination: tripsTable.destination,
-        tripDepartureDate: tripsTable.departureDate,
-        tripReturnDate: tripsTable.returnDate,
-      })
-      .from(reservationsTable)
-      .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
-      .where(eq(reservationsTable.storeOrderId, orderNumber))
-      .limit(1);
-
-    if (reservation) {
-      const depDate = reservation.tripDepartureDate as unknown as Date | null;
-      const retDate = reservation.tripReturnDate as unknown as Date | null;
-
-      const departureDateStr = depDate
-        ? depDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-        : "A confirmar";
-
-      let duration = "A confirmar";
-      if (depDate && retDate) {
-        const diffDays = Math.round((retDate.getTime() - depDate.getTime()) / (1000 * 60 * 60 * 24));
-        const nights = diffDays > 0 ? diffDays : 0;
-        const days = nights + 1;
-        duration = `${days} dia${days !== 1 ? "s" : ""}${nights > 0 ? ` / ${nights} noite${nights !== 1 ? "s" : ""}` : ""}`;
-      }
-
-      const totalAmount = Number(reservation.totalValue ?? 0);
-      const whatsappNumber = agencyPhone.replace(/\D/g, "");
-      const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : storeBase;
-      const voucherUrl = `${consultUrl}?code=${reservation.voucherCode ?? ""}`;
-
-      const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? orderNumber}`;
-      await enqueueReservationConfirmationEmail({
-        tenantId,
-        reservationId: reservation.reservationId,
-        subject,
-        props: {
-          reservationNumber: reservation.reservationNumber ?? orderNumber,
-          voucherCode: reservation.voucherCode ?? "",
-          clientName: customerName,
-          clientCpf: customerCpf ?? "",
-          clientEmail: customerEmail,
-          clientPhone: customerPhone ?? "",
-          tripTitle: reservation.tripName,
-          destination: reservation.tripDestination,
-          departureDate: departureDateStr,
-          duration,
-          seats: reservation.seats ?? [],
-          totalAmount,
-          amountPaid: 0,
-          amountPending: totalAmount,
-          paymentMethod: paymentMethod ?? "pix",
-          paymentStatus: STORE_PAYMENT_STATUS.PENDING,
-          agencyName,
-          agencyLogo,
-          agencyPhone,
-          agencyEmail,
-          agencyWebsite: storeBase,
-          voucherUrl,
-          consultUrl,
-          whatsappUrl,
-          ...(credentials ? {
-            credentials: {
-              email: credentials.email,
-              setupUrl: credentials.setupUrl,
-              loginUrl: credentials.loginUrl,
-              ...(credentials.plainTextPassword ? { plainTextPassword: credentials.plainTextPassword } : {}),
-            },
-          } : {}),
-        },
-      });
-    }
   } catch (err) {
-    console.error("[checkout/post-booking] Error sending post-booking email:", err);
-  }
-
-  try {
-    const reservationRows = await db
-      .select({ id: reservationsTable.id })
-      .from(reservationsTable)
-      .where(
-        and(
-          eq(reservationsTable.storeOrderId, orderNumber),
-          eq(reservationsTable.tenantId, tenantId),
-        ),
-      );
-
-    const settled = await Promise.allSettled(
-      reservationRows.map((r) =>
-        enqueueNewBookingNotificationEmail(r.id, tenantId),
-      ),
-    );
-    for (const result of settled) {
-      if (result.status === "rejected") {
-        console.error(
-          "[checkout/post-booking] Failed to enqueue agency new-booking notification:",
-          result.reason,
-        );
-      }
-    }
-  } catch (notifyErr) {
-    console.error(
-      "[checkout/post-booking] Failed to load reservations for agency notification:",
-      notifyErr,
-    );
+    console.error("[checkout/post-payment] Failed to provision portal account:", err);
   }
 }

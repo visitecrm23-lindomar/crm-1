@@ -120,23 +120,11 @@ vi.mock("../queues/whatsapp-helpers.js", () => ({
   dispatchWhatsAppReferralBonusReleased: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Post-payment side effects are not invoked from the checkout route under test,
+// so this is a no-op stub that simply prevents the real module (and its Clerk
+// imports) from loading.
 vi.mock("../services/checkout/post-booking.js", () => ({
-  runPostBookingSideEffects: vi.fn().mockImplementation(async (args: {
-    store: { tenantId: string; name: string };
-    customerEmail: string;
-    customerName: string;
-    orderNumber: string;
-  }) => {
-    await mockEnqueueConfirmation({
-      tenantId: args.store.tenantId,
-      subject: `Reserva Confirmada — ${args.orderNumber}`,
-      props: {
-        reservationNumber: args.orderNumber,
-        clientEmail: args.customerEmail,
-        clientName: args.customerName,
-      },
-    });
-  }),
+  runPostPaymentSideEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/id.js", () => ({
@@ -785,16 +773,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("totalAmount");
   });
 
-  // ── 8. Post-booking confirmation email (task #22) ─────────────────────────
+  // ── 8. Post-booking side effects are deferred to payment (task #17 hardening) ──
 
-  it("calls enqueueReservationConfirmationEmail with tenant, customerEmail and orderNumber after a successful trip order", async () => {
+  it("does not enqueue the reservation confirmation email at checkout (deferred to payment)", async () => {
     const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
     const availableTrip = { availableSeats: 10 };
 
-    // All mockLimit slots must be queued upfront in call order:
-    // 1. getActiveStore, 2. product fetch, 3. trip seat check,
-    // 4. admin user (inside tx), 5. upsertCheckoutClient (inside tx),
-    // 6. post-tx order re-fetch
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
       .mockResolvedValueOnce([tripProduct])           // product fetch
@@ -810,16 +794,9 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
 
     expect(res.status).toBe(200);
 
-    await vi.waitFor(() => {
-      expect(mockEnqueueConfirmation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenantId: FAKE_STORE.tenantId,
-          props: expect.objectContaining({
-            clientEmail: VALID_BODY.customerEmail,
-            clientName: VALID_BODY.customerName,
-          }),
-        }),
-      );
-    });
+    // Allow any fire-and-forget async to settle, then assert no confirmation email
+    // was enqueued during checkout — it is deferred to the payment-confirmation path.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockEnqueueConfirmation).not.toHaveBeenCalled();
   });
 });

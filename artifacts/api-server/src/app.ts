@@ -207,6 +207,17 @@ const referralValidateLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
+// Separate instance from referralValidateLimiter so a legitimate landing-page
+// /referral/info lookup does not consume the customer's /validate budget (and
+// vice-versa). Bounds anonymous brute-forcing of referral codes via /info.
+const referralInfoLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
 const priceAlertSubscribeLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,
@@ -227,6 +238,7 @@ app.use("/api/public", publicGeneralLimiter);
 app.post("/api/public/store/:slug/orders", publicOrderLimiter);
 app.get("/api/public/store/:slug/orders/:orderNumber", orderLookupLimiter);
 app.post("/api/public/store/:slug/referral/validate", referralValidateLimiter);
+app.get("/api/public/store/:slug/referral/info", referralInfoLimiter);
 app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
 
 app.use("/api", router);

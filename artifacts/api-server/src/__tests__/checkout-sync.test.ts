@@ -425,9 +425,15 @@ describe("POST /api/public/store/:slug/orders — welcome email for new portal u
     } as never);
   });
 
-  // ── (c) sendWelcomeEmail receives plainTextPassword ──────────────────────
+  // ── (c) account provisioning is NOT done at checkout (payment-gated design) ──
+  //
+  // ensurePortalAccount (Clerk account + welcome email with a temporary password)
+  // must only run after the order's payment is confirmed. An anonymous, non-paying
+  // visitor must not be able to provision a portal account just by submitting the
+  // checkout form. The welcome email is now dispatched from runPostPaymentSideEffects
+  // at payment time.
 
-  it("(c) calls sendWelcomeEmail with a non-empty plainTextPassword for a brand-new customer", async () => {
+  it("(c) does not call sendWelcomeEmail at checkout (account provisioning deferred to payment)", async () => {
     setupNewUserCheckoutQueue();
 
     const res = await request(buildApp())
@@ -436,12 +442,10 @@ describe("POST /api/public/store/:slug/orders — welcome email for new portal u
 
     expect(res.status).toBe(200);
 
-    await vi.waitFor(() => expect(mockSendWelcomeEmail).toHaveBeenCalledOnce());
+    // Allow any fire-and-forget async to settle, then assert no provisioning occurred.
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const [welcomeProps] = mockSendWelcomeEmail.mock.calls[0] as [Record<string, unknown>];
-    expect(typeof welcomeProps.plainTextPassword).toBe("string");
-    expect((welcomeProps.plainTextPassword as string).length).toBeGreaterThan(0);
-    expect(welcomeProps.clientEmail).toBe(VALID_BODY.customerEmail);
+    expect(mockSendWelcomeEmail).not.toHaveBeenCalled();
   });
 
   // ── (d) enqueueReservationConfirmationEmail is NOT sent at checkout (payment-gated design)
