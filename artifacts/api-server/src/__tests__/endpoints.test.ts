@@ -18,7 +18,17 @@ import type { AddressInfo } from "node:net";
 // vi.hoisted: shared mock builders must exist before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
-const { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction, capturedInserts } = vi.hoisted(() => {
+const {
+  mockLimit,
+  mockWhere,
+  mockFrom,
+  mockSelect,
+  mockTransaction,
+  capturedInserts,
+  mockUpdate,
+  mockUpdateSet,
+  mockUpdateExecute,
+} = vi.hoisted(() => {
   const capturedInserts: Record<string, unknown>[] = [];
 
   const mockLimit = vi.fn();
@@ -28,7 +38,31 @@ const { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction, capturedIns
 
   const mockTransaction = vi.fn();
 
-  return { mockLimit, mockWhere, mockFrom, mockSelect, mockTransaction, capturedInserts };
+  // db.update(...).set(...).where(...) chain. The result of `.where()` must be
+  // both awaitable (some handlers do `.where(...).catch(...)`) AND expose an
+  // `.execute()` method (the suspended-referral-attempt fire-and-forget update
+  // does `.where(...).execute().catch(...)`).
+  const mockUpdateExecute = vi.fn(() => Promise.resolve([]));
+  const mockUpdateWhere = vi.fn(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const thenable: any = Promise.resolve([]);
+    thenable.execute = mockUpdateExecute;
+    return thenable;
+  });
+  const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
+  const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
+
+  return {
+    mockLimit,
+    mockWhere,
+    mockFrom,
+    mockSelect,
+    mockTransaction,
+    capturedInserts,
+    mockUpdate,
+    mockUpdateSet,
+    mockUpdateExecute,
+  };
 });
 
 // ---------------------------------------------------------------------------
@@ -39,7 +73,7 @@ vi.mock("@workspace/db", () => ({
   db: {
     select: mockSelect,
     insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+    update: mockUpdate,
     transaction: mockTransaction,
   },
   storesTable: {},
@@ -660,6 +694,81 @@ describe("GET /api/public/store/:slug/trips/:tripId/seats/stream — public seat
     expect(removeSeatClientMock).toHaveBeenCalledWith("trip-001", expect.anything());
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: POST /api/public/store/:slug/referral/validate — suspended attempt tracking
+//
+// When a referral code whose status is not "active" is validated, the handler
+// fires a best-effort `db.update(clientsTable).set({ referralSuspendedAttemptAt })`
+// and rejects with REFERRAL_CODE_SUSPENDED. These tests assert that the
+// fire-and-forget timestamp update is actually triggered.
+// ---------------------------------------------------------------------------
+
+describe("POST /api/public/store/:slug/referral/validate — suspended attempt tracking", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLimit.mockReset();
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+  });
+
+  it("records referralSuspendedAttemptAt and returns REFERRAL_CODE_SUSPENDED for a blocked code", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                       // getActiveStore
+      .mockResolvedValueOnce([{ settings: {} }])                 // tenant settings
+      .mockResolvedValueOnce([{                                  // referrer lookup
+        id: "client-001",
+        name: "Maria Souza",
+        email: "maria@example.com",
+        referralCode: "MARIA2026",
+        referralCodeStatus: "blocked",
+        successfulReferrals: 0,
+      }]);
+
+    const res = await request(app)
+      .post("/api/public/store/minha-loja/referral/validate")
+      .send({ code: "MARIA2026" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: "REFERRAL_CODE_SUSPENDED", valid: false });
+
+    // The fire-and-forget suspended-attempt update must have been triggered.
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
+    );
+    expect(mockUpdateExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT record a suspended attempt for an active code (passes the status gate)", async () => {
+    const app = buildStorePublicApp();
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                       // getActiveStore
+      .mockResolvedValueOnce([{ settings: {} }])                 // tenant settings
+      .mockResolvedValueOnce([{                                  // referrer lookup
+        id: "client-001",
+        name: "Maria Souza",
+        email: "maria@example.com",
+        referralCode: "MARIA2026",
+        referralCodeStatus: "active",
+        successfulReferrals: 0,
+      }])
+      .mockResolvedValueOnce([]);                                // referral settings lookup
+
+    const res = await request(app)
+      .post("/api/public/store/minha-loja/referral/validate")
+      .send({ code: "MARIA2026" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ valid: true });
+    // No suspended-attempt timestamp update for active codes.
+    expect(mockUpdateSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ referralSuspendedAttemptAt: expect.any(Date) }),
+    );
   });
 });
 

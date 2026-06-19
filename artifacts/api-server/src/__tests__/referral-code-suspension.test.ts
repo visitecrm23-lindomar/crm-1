@@ -16,12 +16,13 @@ import { ROLES } from "@workspace/permissions";
 // vi.hoisted: shared mock primitives created before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
-const { mockSelectLimit, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock } =
+const { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock } =
   vi.hoisted(() => {
     const mockSelectLimit = vi.fn();
+    const mockSelectOrderBy = vi.fn();
     const mockUpdateReturning = vi.fn();
     const dispatchReferralCodeSuspendedEmailMock = vi.fn();
-    return { mockSelectLimit, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock };
+    return { mockSelectLimit, mockSelectOrderBy, mockUpdateReturning, dispatchReferralCodeSuspendedEmailMock };
   });
 
 // ---------------------------------------------------------------------------
@@ -32,7 +33,7 @@ vi.mock("@workspace/db", () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: mockSelectLimit })),
+        where: vi.fn(() => ({ limit: mockSelectLimit, orderBy: mockSelectOrderBy })),
       })),
     })),
     update: vi.fn(() => ({
@@ -329,5 +330,45 @@ describe("PATCH /api/clients/:id/referral-code — suspension email dispatch", (
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ emailSent: false });
     expect(dispatchReferralCodeSuspendedEmailMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/clients/:clientId/referral — suspended attempt timestamp in response
+// ---------------------------------------------------------------------------
+
+describe("GET /api/clients/:clientId/referral — response shape", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue(FAKE_USER as never);
+    mockSelectOrderBy.mockResolvedValue([]); // referrals list
+  });
+
+  it("includes referralSuspendedAttemptAt in the response", async () => {
+    const suspendedAt = new Date("2026-06-01T12:00:00.000Z");
+    mockSelectLimit.mockResolvedValue([
+      { ...FAKE_CLIENT, referralSuspendedAttemptAt: suspendedAt },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("referralSuspendedAttemptAt");
+    expect(res.body.referralSuspendedAttemptAt).toBe(suspendedAt.toISOString());
+  });
+
+  it("returns referralSuspendedAttemptAt: null when no suspended attempt was recorded", async () => {
+    mockSelectLimit.mockResolvedValue([
+      { ...FAKE_CLIENT, referralSuspendedAttemptAt: null },
+    ]);
+
+    const res = await request(buildClientsApp())
+      .get(`/api/clients/${FAKE_CLIENT.id}/referral`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("referralSuspendedAttemptAt", null);
   });
 });
