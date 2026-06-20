@@ -99,6 +99,7 @@ export default function Onboarding() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [skipLoading, setSkipLoading] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
   const [plans, setPlans] = useState<ApiPlan[]>(FALLBACK_PLANS);
@@ -160,6 +161,31 @@ export default function Onboarding() {
 
     return () => clearTimeout(timer);
   }, [form.slug]);
+
+  async function handleSkip() {
+    setSkipLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/onboarding/agency`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ skipSetup: true }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        toast({ title: err.error ?? "Erro ao configurar agência", variant: "destructive" });
+        return;
+      }
+
+      setLocation("/dashboard");
+      window.location.reload();
+    } catch {
+      toast({ title: "Erro de conexão. Tente novamente.", variant: "destructive" });
+    } finally {
+      setSkipLoading(false);
+    }
+  }
 
   async function handleSubmit() {
     if (!form.name.trim()) {
@@ -343,11 +369,26 @@ export default function Onboarding() {
                 <Button
                   className="w-full"
                   onClick={() => setStep(2)}
-                  disabled={!form.name.trim() || !form.slug.trim() || slugAvailable === false}
+                  disabled={!form.name.trim() || !form.slug.trim() || slugAvailable === false || skipLoading}
                 >
                   Continuar
                   <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
+                <div className="text-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground text-xs h-auto py-1"
+                    onClick={handleSkip}
+                    disabled={skipLoading || loading}
+                  >
+                    {skipLoading ? (
+                      <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Configurando...</>
+                    ) : (
+                      <>Pular por agora <ChevronRight className="w-3 h-3 ml-1" /></>
+                    )}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -427,10 +468,10 @@ export default function Onboarding() {
               </Card>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1" disabled={loading || skipLoading}>
                   Voltar
                 </Button>
-                <Button onClick={handleSubmit} disabled={loading} className="flex-1">
+                <Button onClick={handleSubmit} disabled={loading || skipLoading} className="flex-1">
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -441,6 +482,21 @@ export default function Onboarding() {
                       Começar gratuitamente
                       <ChevronRight className="w-4 h-4 ml-2" />
                     </>
+                  )}
+                </Button>
+              </div>
+              <div className="text-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground text-xs h-auto py-1"
+                  onClick={handleSkip}
+                  disabled={skipLoading || loading}
+                >
+                  {skipLoading ? (
+                    <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Configurando...</>
+                  ) : (
+                    <>Pular por agora <ChevronRight className="w-3 h-3 ml-1" /></>
                   )}
                 </Button>
               </div>

@@ -1,6 +1,6 @@
 import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, plansTable, storesTable } from "@workspace/db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, ilike } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { getAuth, clerkClient } from "@clerk/express";
@@ -45,7 +45,25 @@ const AgencyOnboardingBody = z.object({
     .min(2, "Slug deve ter pelo menos 2 caracteres")
     .regex(/^[a-z0-9-]+$/, "Slug deve conter apenas letras minúsculas, números e hífens"),
   planId: z.string().optional().default("starter"),
+  skipSetup: z.literal(false).optional(),
 });
+
+const SkipOnboardingBody = z.object({ skipSetup: z.literal(true) });
+
+/** Returns the first slug derived from `base` that is not already taken in tenants or stores. */
+async function findUniqueSlug(base: string): Promise<string> {
+  let candidate = base;
+  for (let attempt = 1; attempt <= 99; attempt++) {
+    const [[t], [s]] = await Promise.all([
+      db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, candidate)).limit(1),
+      db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, candidate)).limit(1),
+    ]);
+    if (!t && !s) return candidate;
+    candidate = `${base}-${attempt}`;
+  }
+  // Extremely unlikely fallback — append a random suffix
+  return `${base}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -93,21 +111,42 @@ router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<
       return;
     }
 
-    const parsed = AgencyOnboardingBody.safeParse(req.body);
-    if (!parsed.success) {
-      next(new ValidationError(String(parsed.error.message)));
-      return;
-    }
+    // ── Determine name/slug/planId — either from the form or auto-generated ──
+    let name: string, cnpj: string | undefined, phone: string | undefined, slug: string, planId: string;
 
-    const { name, cnpj, phone, slug, planId } = parsed.data;
+    if (SkipOnboardingBody.safeParse(req.body).success) {
+      // Skip path: auto-generate values, no user input required.
+      const baseSlug = `agencia-${auth.clerkId.slice(-6).toLowerCase()}`;
+      slug = await findUniqueSlug(baseSlug);
+      name = "Minha Agência";
+      cnpj = undefined;
+      phone = undefined;
+      // Use the Starter plan if it exists; fall back to the literal string "starter".
+      const [starterPlan] = await db
+        .select({ id: plansTable.id })
+        .from(plansTable)
+        .where(ilike(plansTable.name, "starter"))
+        .limit(1);
+      if (!starterPlan) {
+        req.log.warn("No Starter plan found in DB — using literal planId 'starter' for skip-onboarding path");
+      }
+      planId = starterPlan?.id ?? "starter";
+    } else {
+      const parsed = AgencyOnboardingBody.safeParse(req.body);
+      if (!parsed.success) {
+        next(new ValidationError(String(parsed.error.message)));
+        return;
+      }
+      ({ name, cnpj, phone, slug, planId } = parsed.data);
 
-    const [[existingTenantSlug], [existingStoreSlug]] = await Promise.all([
-      db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1),
-      db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, slug)).limit(1),
-    ]);
-    if (existingTenantSlug || existingStoreSlug) {
-      next(new ConflictError("Esse slug já está em uso. Escolha outro.", "SLUG_CONFLICT"));
-      return;
+      const [[existingTenantSlug], [existingStoreSlug]] = await Promise.all([
+        db.select({ id: tenantsTable.id }).from(tenantsTable).where(eq(tenantsTable.slug, slug)).limit(1),
+        db.select({ id: storesTable.id }).from(storesTable).where(eq(storesTable.slug, slug)).limit(1),
+      ]);
+      if (existingTenantSlug || existingStoreSlug) {
+        next(new ConflictError("Esse slug já está em uso. Escolha outro.", "SLUG_CONFLICT"));
+        return;
+      }
     }
 
     const tenantId = generateId();
