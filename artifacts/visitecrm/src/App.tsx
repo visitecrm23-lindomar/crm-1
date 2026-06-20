@@ -129,14 +129,17 @@ function RoleRedirect() {
   const [, setLocation] = useLocation();
   const [synced, setSynced] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const syncStartedRef = useRef(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => setTimedOut(true), 10000);
     return () => clearTimeout(timeout);
-  }, []);
+  }, [retryKey]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || syncStartedRef.current) return;
+    syncStartedRef.current = true;
     syncMe.mutate(
       {
         data: {
@@ -154,13 +157,10 @@ function RoleRedirect() {
         onError: () => setSynced(true),
       }
     );
-  }, [user?.id]);
+  }, [user?.id, retryKey]);
 
   useEffect(() => {
-    if (timedOut && !synced) {
-      setLocation("/sign-in");
-      return;
-    }
+    if (timedOut && !synced) return;
     if (!synced || isLoading) return;
     if (!me) {
       setLocation("/sign-in");
@@ -181,6 +181,24 @@ function RoleRedirect() {
       setLocation("/dashboard");
     }
   }, [synced, me, isLoading, timedOut]);
+
+  function handleRetry() {
+    syncStartedRef.current = false;
+    setTimedOut(false);
+    setSynced(false);
+    setRetryKey((k) => k + 1);
+  }
+
+  if (timedOut && !synced) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.
+        </p>
+        <Button onClick={handleRetry}>Tentar novamente</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center">
