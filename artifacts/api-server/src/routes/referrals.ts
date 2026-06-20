@@ -243,11 +243,17 @@ router.get("/referrals", async (req, res, next: NextFunction): Promise<void> => 
       }
     }
 
-    const BONUS_LOCK_DAYS = 30;
+    const [tenantRefSettings] = await db
+      .select({ gracePeriodDays: referralSettingsTable.gracePeriodDays })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+    const gracePeriodDays = tenantRefSettings?.gracePeriodDays ?? 30;
+
     const referrals = rows.map(({ referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, referrerSuccessfulReferrals, ...r }) => {
       const tracking = trackingMap.get(r.code);
       const bonusReleasesAt = r.convertedAt
-        ? new Date(new Date(r.convertedAt).getTime() + BONUS_LOCK_DAYS * 24 * 60 * 60 * 1000)
+        ? new Date(new Date(r.convertedAt).getTime() + gracePeriodDays * 24 * 60 * 60 * 1000)
         : null;
       const bonusBlocked =
         r.status === REFERRAL_STATUS.REVERSED ||
@@ -604,9 +610,14 @@ router.post("/referrals/:id/resend-bonus-release", async (req, res, next: NextFu
       return;
     }
 
-    const BONUS_LOCK_DAYS = 30;
+    const [payBonusRefSettings] = await db
+      .select({ gracePeriodDays: referralSettingsTable.gracePeriodDays })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+    const payBonusGracePeriodDays = payBonusRefSettings?.gracePeriodDays ?? 30;
     const bonusReleasesAt = row.convertedAt
-      ? new Date(new Date(row.convertedAt).getTime() + BONUS_LOCK_DAYS * 24 * 60 * 60 * 1000)
+      ? new Date(new Date(row.convertedAt).getTime() + payBonusGracePeriodDays * 24 * 60 * 60 * 1000)
       : null;
     const bonusBlocked = bonusReleasesAt !== null && new Date() < bonusReleasesAt;
     if (bonusBlocked) {
@@ -1464,6 +1475,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
       expiryWarning1DayEnabled: z.boolean().optional(),
       bonusReleaseEmailEnabled: z.boolean().optional(),
       pointsPerReferral: z.number().int().min(0).optional(),
+      gracePeriodDays: z.number().int().min(0).optional(),
       discountExpirationDays: z.number().int().min(0).optional(),
       minPurchaseAmount: z.number().min(0).optional(),
       maxReferralsPerUser: z.number().int().min(0).optional(),
@@ -1490,6 +1502,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
     if (parsed.data.pointsPerReferral != null) updates.pointsPerReferral = parsed.data.pointsPerReferral;
+    if (parsed.data.gracePeriodDays != null) updates.gracePeriodDays = parsed.data.gracePeriodDays;
     if (parsed.data.discountExpirationDays != null) updates.discountExpirationDays = parsed.data.discountExpirationDays;
     if (parsed.data.minPurchaseAmount != null) updates.minPurchaseAmount = parsed.data.minPurchaseAmount.toFixed(2);
     if (parsed.data.maxReferralsPerUser != null) updates.maxReferralsPerUser = parsed.data.maxReferralsPerUser;

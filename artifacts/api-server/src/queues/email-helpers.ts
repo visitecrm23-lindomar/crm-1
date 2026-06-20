@@ -1258,8 +1258,9 @@ export async function dispatchReferralReversedEmail(opts: {
   referredId: string | null;
   bonusAmount: string;
   tenantId: string;
+  reason?: string | null;
 }): Promise<void> {
-  const { referrerId, referredId, bonusAmount, tenantId } = opts;
+  const { referrerId, referredId, bonusAmount, tenantId, reason } = opts;
 
   const [referrer] = await db
     .select({ name: clientsTable.name, email: clientsTable.email, referralEarnings: clientsTable.referralEarnings })
@@ -1304,6 +1305,7 @@ export async function dispatchReferralReversedEmail(opts: {
     referredName,
     bonusAmount: bonusAmountNum,
     newPendingBalance,
+    reason: reason ?? null,
   });
 
   await db.insert(emailLogsTable).values({

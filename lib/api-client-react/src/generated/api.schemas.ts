@@ -2396,6 +2396,14 @@ export interface Referral {
   /** @nullable */
   convertedAt?: string | null;
   /** @nullable */
+  reversalReason?: string | null;
+  /** @nullable */
+  reversalAt?: string | null;
+  /** @nullable */
+  bonusReleasesAt?: string | null;
+  bonusBlocked?: boolean;
+  referrerSuccessfulReferrals?: number;
+  /** @nullable */
   expiryWarning7SentAt?: string | null;
   /** @nullable */
   expiryWarning1SentAt?: string | null;
@@ -2465,6 +2473,7 @@ export interface ReferralSettings {
   expiryWarning1DayEnabled: boolean;
   bonusReleaseEmailEnabled: boolean;
   pointsPerReferral: number;
+  gracePeriodDays: number;
   discountExpirationDays: number;
   /** @nullable */
   minPurchaseAmount?: string | null;
@@ -2493,6 +2502,7 @@ export interface UpdateReferralSettingsBody {
   expiryWarning1DayEnabled?: boolean;
   bonusReleaseEmailEnabled?: boolean;
   pointsPerReferral?: number;
+  gracePeriodDays?: number;
   discountExpirationDays?: number;
   minPurchaseAmount?: number;
   maxReferralsPerUser?: number;

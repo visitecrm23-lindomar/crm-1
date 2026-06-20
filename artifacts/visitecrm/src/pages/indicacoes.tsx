@@ -159,6 +159,8 @@ type EnrichedReferral = Referral & {
   bonusReleasesAt?: string | null;
   bonusBlocked?: boolean;
   referrerSuccessfulReferrals?: number | null;
+  reversalReason?: string | null;
+  reversalAt?: string | null;
 };
 
 const ALERTS_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -341,6 +343,7 @@ export default function Indicacoes() {
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
       pointsPerReferral: settings?.pointsPerReferral ?? 0,
+      gracePeriodDays: settings?.gracePeriodDays ?? 30,
       discountExpirationDays: settings?.discountExpirationDays ?? 30,
       minPurchaseAmount: settings?.minPurchaseAmount ?? null,
       maxReferralsPerUser: settings?.maxReferralsPerUser ?? 0,
@@ -371,6 +374,7 @@ export default function Indicacoes() {
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
           pointsPerReferral: localSettings.pointsPerReferral != null ? Number(localSettings.pointsPerReferral) : undefined,
+          gracePeriodDays: (localSettings as Record<string, unknown>).gracePeriodDays != null ? Number((localSettings as Record<string, unknown>).gracePeriodDays) : undefined,
           discountExpirationDays: (localSettings as Record<string, unknown>).discountExpirationDays != null ? Number((localSettings as Record<string, unknown>).discountExpirationDays) : undefined,
           minPurchaseAmount: (localSettings as Record<string, unknown>).minPurchaseAmount != null && String((localSettings as Record<string, unknown>).minPurchaseAmount).trim() !== "" ? parseFloat(String((localSettings as Record<string, unknown>).minPurchaseAmount)) : undefined,
           maxReferralsPerUser: (localSettings as Record<string, unknown>).maxReferralsPerUser != null ? Number((localSettings as Record<string, unknown>).maxReferralsPerUser) : undefined,
@@ -1612,6 +1616,13 @@ export default function Indicacoes() {
                                 <XCircle className="w-2.5 h-2.5" />
                                 Revertido
                               </p>
+                              {(r as EnrichedReferral).reversalReason && (
+                                <p className="text-xs text-red-400">
+                                  {(r as EnrichedReferral).reversalReason === "reservation_cancelled" ? "Reserva cancelada" :
+                                   (r as EnrichedReferral).reversalReason === "trip_cancelled" ? "Excursão cancelada" :
+                                   (r as EnrichedReferral).reversalReason}
+                                </p>
+                              )}
                             </div>
                           ) : r.status === REFERRAL_STATUS.COMPLETED ? (
                             <div>
@@ -2011,7 +2022,8 @@ export default function Indicacoes() {
                       <p className="text-red-500 font-semibold line-through">{fmtCurrency(selectedReferral.bonusAmount)}</p>
                       <p className="text-xs text-red-500 flex items-center gap-1">
                         <XCircle className="w-3 h-3" />
-                        Revertido — reserva cancelada
+                        Revertido
+                        {(selectedReferral as EnrichedReferral).reversalReason === "trip_cancelled" ? " — excursão cancelada" : " — reserva cancelada"}
                       </p>
                     </>
                   ) : (
@@ -2489,6 +2501,17 @@ export default function Indicacoes() {
             </div>
 
             <div className="space-y-1">
+              <Label>Período de carência do bônus (dias)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={(localSettings as Record<string, unknown>).gracePeriodDays as number ?? 30}
+                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), gracePeriodDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+              />
+              <p className="text-xs text-muted-foreground">Quantos dias após a conversão o bônus fica retido antes de ser liberado ao indicador. O bônus é revertido automaticamente se a reserva ou excursão for cancelada nesse período.</p>
+            </div>
+
+            <div className="space-y-1">
               <Label>Validade do desconto (dias)</Label>
               <Input
                 type="number"
@@ -2652,7 +2675,7 @@ export default function Indicacoes() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-normal">Aviso de bônus liberado</Label>
-                  <p className="text-xs text-muted-foreground">Envia e-mail ao indicador quando o período de carência de 30 dias expira e o bônus está disponível</p>
+                  <p className="text-xs text-muted-foreground">Envia e-mail ao indicador quando o período de carência de {(localSettings as Record<string, unknown>).gracePeriodDays != null ? Number((localSettings as Record<string, unknown>).gracePeriodDays) : (settings?.gracePeriodDays ?? 30)} dias expira e o bônus está disponível</p>
                 </div>
                 <Switch
                   checked={localSettings.bonusReleaseEmailEnabled ?? true}

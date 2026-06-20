@@ -55,6 +55,8 @@ export const referralsTable = pgTable("referrals", {
   bonusCreditOrderId: text("bonus_credit_order_id"),
   bonusCreditUsedAmount: numeric("bonus_credit_used_amount", { precision: 10, scale: 2 }),
   reversalWarningAcknowledgedAt: timestamp("reversal_warning_acknowledged_at", { withTimezone: true }),
+  reversalReason: text("reversal_reason"),
+  reversalAt: timestamp("reversal_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -115,6 +117,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
   bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),
   pointsPerReferral: integer("points_per_referral").notNull().default(0),
+  gracePeriodDays: integer("grace_period_days").notNull().default(30),
   discountExpirationDays: integer("discount_expiration_days").notNull().default(30),
   minPurchaseAmount: numeric("min_purchase_amount", { precision: 10, scale: 2 }),
   maxReferralsPerUser: integer("max_referrals_per_user").notNull().default(0),

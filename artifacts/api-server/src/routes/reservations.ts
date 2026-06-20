@@ -1318,8 +1318,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
                 eq(clientsTable.id, referralRecord.referrerId),
                 eq(clientsTable.tenantId, me.tenantId),
               ));
+            const reversalNow = new Date();
             await tx.update(referralsTable)
-              .set({ status: REFERRAL_STATUS.REVERSED, updatedAt: new Date() })
+              .set({ status: REFERRAL_STATUS.REVERSED, reversalReason: "reservation_cancelled", reversalAt: reversalNow, updatedAt: reversalNow })
               .where(eq(referralsTable.id, referralRecord.id));
             // Capture for post-transaction notification (#28)
             reversedReferralInfo = { referrerId: referralRecord.referrerId, referredId: referralRecord.referredId, bonusAmount: referralRecord.bonusAmount };
@@ -1702,7 +1703,7 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
     // #28: When a referral is reversed on cancellation, notify the referrer
     if (reversedReferralInfo) {
       const { referrerId: _rrReferrerId, referredId: _rrReferredId, bonusAmount: _rrBonusAmount } = reversedReferralInfo;
-      dispatchReferralReversedEmail({ referrerId: _rrReferrerId, referredId: _rrReferredId, bonusAmount: _rrBonusAmount, tenantId: me.tenantId })
+      dispatchReferralReversedEmail({ referrerId: _rrReferrerId, referredId: _rrReferredId, bonusAmount: _rrBonusAmount, tenantId: me.tenantId, reason: "reservation_cancelled" })
         .catch((err) => req.log.error({ err }, "Error enqueueing referral reversal notification email"));
     }
     broadcastSeatUpdate(existing.tripId, me.tenantId).catch(() => {});

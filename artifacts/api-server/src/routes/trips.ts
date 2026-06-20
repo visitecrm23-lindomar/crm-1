@@ -3,10 +3,10 @@ import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tryAddBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse";
 import { getClientIp } from "../lib/get-client-ip";
-import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable, tripCheckinsTable, tripGuideLocationsTable } from "@workspace/db";
+import { tripsTable, reservationsTable, passengersTable, clientsTable, tenantsTable, vehicleLayoutsTable, auditLogsTable, plansTable, tripMediaTable, tripCheckinsTable, tripGuideLocationsTable, referralsTable } from "@workspace/db";
 import { checkPlanLimit } from "../lib/planLimits";
 import type { LayoutCell, FixedCostItem, VariableCostItem, FreePassenger } from "@workspace/db";
-import { eq, and, ilike, sql, desc, asc, inArray, or, gt } from "drizzle-orm";
+import { eq, and, ilike, sql, desc, asc, inArray, or, gt, isNotNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser, MANAGEMENT_ROLES, ADMIN_ROLES } from "../lib/tenant";
 import { deleteOrphanedFile } from "../lib/uploadthing";
@@ -16,6 +16,7 @@ import { CreateTripBody, UpdateTripBody } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { scheduleCalendarSyncTrip, scheduleCalendarDeleteEventsForTrip } from "../lib/google-calendar/schedule-sync";
 import { sendManifestEmail } from "@workspace/email";
+import { dispatchReferralReversedEmail } from "../queues/email-helpers";
 import { getPdfQueue } from "../queues/index";
 import { areWorkersEnabled } from "../lib/redis";
 import { logger } from "../lib/logger";
@@ -23,7 +24,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
-import { RESERVATION_STATUS, type TripStatus, type ReservationStatus } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, type TripStatus, type ReservationStatus } from "@workspace/permissions";
 import { parseTripStatus } from "../lib/status-validators";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
@@ -573,6 +574,70 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
 
     await db.update(tripsTable).set(updates)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+
+    // Trip cancellation: batch-reverse any COMPLETED referrals linked to reservations on this trip.
+    if (parsed.data.status === "cancelled") {
+      try {
+        const tripReservations = await db
+          .select({ id: reservationsTable.id })
+          .from(reservationsTable)
+          .where(and(
+            eq(reservationsTable.tripId, req.params.id),
+            eq(reservationsTable.tenantId, me.tenantId),
+            isNotNull(reservationsTable.discountReferralCode),
+          ));
+        const reservationIds = tripReservations.map(r => r.id);
+        if (reservationIds.length > 0) {
+          const referralsToReverse = await db
+            .select({
+              id: referralsTable.id,
+              referrerId: referralsTable.referrerId,
+              referredId: referralsTable.referredId,
+              bonusAmount: referralsTable.bonusAmount,
+            })
+            .from(referralsTable)
+            .where(and(
+              eq(referralsTable.tenantId, me.tenantId),
+              eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+              inArray(referralsTable.reservationId, reservationIds),
+            ));
+          if (referralsToReverse.length > 0) {
+            const tripReversalNow = new Date();
+            await db.transaction(async (tx) => {
+              for (const ref of referralsToReverse) {
+                const bonusToReverse = Number(ref.bonusAmount);
+                await tx.execute(
+                  sql`SELECT id FROM clients WHERE id = ${ref.referrerId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+                );
+                await tx.update(clientsTable)
+                  .set({
+                    successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
+                    referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
+                  })
+                  .where(and(
+                    eq(clientsTable.id, ref.referrerId),
+                    eq(clientsTable.tenantId, me.tenantId),
+                  ));
+                await tx.update(referralsTable)
+                  .set({ status: REFERRAL_STATUS.REVERSED, reversalReason: "trip_cancelled", reversalAt: tripReversalNow, updatedAt: tripReversalNow })
+                  .where(eq(referralsTable.id, ref.id));
+              }
+            });
+            for (const ref of referralsToReverse) {
+              dispatchReferralReversedEmail({
+                referrerId: ref.referrerId,
+                referredId: ref.referredId,
+                bonusAmount: ref.bonusAmount,
+                tenantId: me.tenantId,
+                reason: "trip_cancelled",
+              }).catch((err) => req.log.error({ err, referralId: ref.id }, "Error sending trip cancellation referral reversal email"));
+            }
+          }
+        }
+      } catch (err) {
+        req.log.error({ err, tripId: req.params.id }, "Error reversing referrals on trip cancellation");
+      }
+    }
 
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))

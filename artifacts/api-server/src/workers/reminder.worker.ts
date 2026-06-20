@@ -1121,8 +1121,6 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 // Bonus release notifications (convertedAt + 30 days <= today)
 // ────────────────────────────────────────────────────────────
 
-const BONUS_LOCK_DAYS = 30;
-
 export async function processReferralBonusReleaseNotifications(): Promise<void> {
   const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
@@ -1131,6 +1129,7 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
     .select({
       tenantId: referralSettingsTable.tenantId,
       bonusReleaseEmailEnabled: referralSettingsTable.bonusReleaseEmailEnabled,
+      gracePeriodDays: referralSettingsTable.gracePeriodDays,
     })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.isEnabled, true));
@@ -1142,17 +1141,12 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
 
   const enabledTenantIds = tenantSettings.map((r) => r.tenantId);
 
-  // Map for O(1) per-tenant toggle lookup in the processing loop.
+  // Maps for O(1) per-tenant lookup in the processing loop.
   const bonusReleaseEnabledMap = new Map(
     tenantSettings.map((r) => [r.tenantId, r.bonusReleaseEmailEnabled]),
   );
-
-  // Find completed referrals where:
-  // - bonusPaid = false (bonus not yet paid)
-  // - bonusReleaseNotifiedAt IS NULL (notification not yet sent)
-  // - status = 'completed' (only notify on actually converted referrals)
-  // - status != 'reversed'
-  // - convertedAt + 30 days <= today (lock period has expired)
+  // Find completed referrals where the per-tenant grace period has passed.
+  // Join referralSettingsTable to evaluate gracePeriodDays inline in SQL.
   const releasedReferrals = await db
     .select({
       id: referralsTable.id,
@@ -1162,6 +1156,10 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
       convertedAt: referralsTable.convertedAt,
     })
     .from(referralsTable)
+    .innerJoin(
+      referralSettingsTable,
+      eq(referralsTable.tenantId, referralSettingsTable.tenantId),
+    )
     .where(
       and(
         eq(referralsTable.status, "completed"),
@@ -1169,7 +1167,7 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
         isNull(referralsTable.bonusReleaseNotifiedAt),
         isNotNull(referralsTable.convertedAt),
         inArray(referralsTable.tenantId, enabledTenantIds),
-        sql`(${referralsTable.convertedAt} AT TIME ZONE ${tz})::date + INTERVAL '${sql.raw(String(BONUS_LOCK_DAYS))} days' <= (NOW() AT TIME ZONE ${tz})::date`,
+        sql`(${referralsTable.convertedAt} AT TIME ZONE ${tz})::date + (${referralSettingsTable.gracePeriodDays} || ' days')::interval <= (NOW() AT TIME ZONE ${tz})::date`,
       ),
     );
 
@@ -1206,6 +1204,11 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
       // proceeds to dispatch; subsequent writers get an empty result and skip.
       // This prevents double-sending even when multiple cron instances overlap.
       //
+      // We also mark bonusPaid=true + bonusPaidAt=now() here — the grace period
+      // has elapsed so the bonus is officially released. This is the authoritative
+      // auto-release path; the manual "pay bonus" endpoint in referrals.ts remains
+      // available for early release after the grace period has already passed.
+      //
       // Trade-off: if the referrer currently has no email address the stamp is
       // set permanently (future runs will skip). This case is rare — a referrer
       // must have had an account (and email) to generate a code. If needed, an
@@ -1215,9 +1218,10 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
       // retries, bonusReleaseNotifiedAt will remain set and this cron will not
       // retry automatically. A dedicated retry path can be added later (see
       // retryFailedExpiryWarningEmails for the expiry-warning equivalent).
+      const releaseNow = new Date();
       const stamped = await db
         .update(referralsTable)
-        .set({ bonusReleaseNotifiedAt: new Date(), updatedAt: new Date() })
+        .set({ bonusReleaseNotifiedAt: releaseNow, bonusPaid: true, bonusPaidAt: releaseNow, updatedAt: releaseNow })
         .where(and(eq(referralsTable.id, referral.id), isNull(referralsTable.bonusReleaseNotifiedAt)))
         .returning({ id: referralsTable.id });
 

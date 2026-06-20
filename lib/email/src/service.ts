@@ -701,6 +701,7 @@ export interface SendReferralReversedEmailProps {
   referredName?: string | null;
   bonusAmount?: number | null;
   newPendingBalance?: number | null;
+  reason?: string | null;
 }
 
 export async function sendReferralReversedEmail(
@@ -719,9 +720,19 @@ export async function sendReferralReversedEmail(
       ? `<p>O bônus de <strong>R$ ${props.bonusAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> referente a essa indicação foi estornado do seu saldo.</p>`
       : `<p>Infelizmente, com o cancelamento, a indicação correspondente foi revertida e o bônus associado foi descontado do seu saldo.</p>`;
 
+    const reasonLabels: Record<string, string> = {
+      reservation_cancelled: 'cancelamento de reserva',
+      trip_cancelled: 'cancelamento da excursão',
+    };
+    const reasonLabel = props.reason ? (reasonLabels[props.reason] ?? props.reason) : null;
+
     const referredLine = props.referredName
       ? `<p>A reserva do(a) indicado(a) <strong>${props.referredName}</strong> foi cancelada pela agência <strong>${props.agencyName}</strong>.</p>`
       : `<p>Informamos que uma reserva vinculada à sua indicação foi cancelada pela agência <strong>${props.agencyName}</strong>.</p>`;
+
+    const reasonLine = reasonLabel
+      ? `<p><strong>Motivo:</strong> ${reasonLabel.charAt(0).toUpperCase() + reasonLabel.slice(1)}.</p>`
+      : '';
 
     const balanceLine = props.newPendingBalance != null
       ? `<p>Seu saldo de bônus atual é de <strong>R$ ${props.newPendingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.</p>`
@@ -729,6 +740,7 @@ export async function sendReferralReversedEmail(
 
     const htmlBody = `<p>Olá, <strong>${firstName}</strong>!</p>
 ${referredLine}
+${reasonLine}
 ${bonusLine}
 ${balanceLine}
 <p>Se você tiver dúvidas, entre em contato com a agência.</p>
