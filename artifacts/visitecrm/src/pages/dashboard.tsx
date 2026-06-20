@@ -15,6 +15,7 @@ import {
   Users, Map, DollarSign, Star, Briefcase, CalendarCheck, AlertTriangle, ArrowUpRight,
   Plus, Clock, Check, Trash2, TrendingDown, TrendingUp, AlertCircle, Percent,
   Target, Activity, BarChart2, Lightbulb, ChevronRight, UserCheck, Zap,
+  X, Settings,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -158,8 +159,23 @@ function SectionTitle({ icon: Icon, title, description }: { icon: ElementType; t
   );
 }
 
+const SETUP_BANNER_KEY = "visite-crm-setup-banner-dismissed";
+const AUTO_SLUG_RE = /^agencia-[a-z0-9]{6}(-\d+)?$/;
+
 function AgencyDashboard() {
   const [chartPeriod, setChartPeriod] = useState<"3m" | "6m" | "12m">("12m");
+  const [bannerDismissed, setBannerDismissed] = useState(() => localStorage.getItem(SETUP_BANNER_KEY) === "1");
+  const { data: me } = useGetMe();
+
+  const showSetupBanner =
+    !bannerDismissed &&
+    !!me?.tenant &&
+    (me.tenant.name === "Minha Agência" || AUTO_SLUG_RE.test(me.tenant.slug ?? ""));
+
+  function dismissBanner() {
+    localStorage.setItem(SETUP_BANNER_KEY, "1");
+    setBannerDismissed(true);
+  }
 
   const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary();
   const { data: charts, isLoading: loadingCharts } = useGetDashboardCharts({ period: chartPeriod as GetDashboardChartsPeriod });
@@ -224,6 +240,30 @@ function AgencyDashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Setup reminder banner — shown only for agencies that skipped onboarding */}
+      {showSetupBanner && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+          <p className="flex-1">
+            <span className="font-medium">Perfil da agência incompleto.</span>{" "}
+            Complete o perfil para ativar a sua vitrine pública e personalizar o CRM.
+          </p>
+          <Link href="/configuracoes">
+            <Button size="sm" variant="outline" className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-transparent dark:text-amber-200 h-7 px-3 text-xs shrink-0">
+              <Settings className="h-3 w-3 mr-1.5" />
+              Configurar agora
+            </Button>
+          </Link>
+          <button
+            onClick={dismissBanner}
+            aria-label="Dispensar aviso"
+            className="ml-1 rounded p-0.5 text-amber-500 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-900 shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
