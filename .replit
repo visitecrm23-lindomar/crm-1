@@ -160,13 +160,14 @@ timeoutMs = 300000
   [userenv]
 
   [userenv.production]
-FRONTEND_URL = "https://crm-1--lindomariracy.replit.app"
-ADDITIONAL_ORIGINS = "https://crm-1--lindomariracy.replit.app"
-VITE_APP_URL = "https://crm-1--lindomariracy.replit.app"
+FRONTEND_URL = "https://visite-cariri-cearense-receptivo.replit.app"
+ADDITIONAL_ORIGINS = "https://visite-cariri-cearense-receptivo.replit.app"
+VITE_APP_URL = "https://visite-cariri-cearense-receptivo.replit.app"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
 SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
 VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
+CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
 
   [userenv.development]
