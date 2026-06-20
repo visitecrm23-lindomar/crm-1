@@ -23,7 +23,7 @@ export const openai: OpenAI = new Proxy({} as OpenAI, {
     if (!_client) {
       _client = createOpenAIClient();
     }
-    const value = (_client as Record<string | symbol, unknown>)[prop];
+    const value = (_client as unknown as Record<string | symbol, unknown>)[prop];
     return typeof value === "function" ? value.bind(_client) : value;
   },
 });
