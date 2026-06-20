@@ -282,10 +282,23 @@ function OnboardingRoute() {
   const { user } = useUser();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
-  const [synced, setSynced] = useState(false);
+  // syncDone gates the form only for new users (me === null after loading).
+  // Already-synced users (me !== null) skip this gate entirely.
+  const [syncDone, setSyncDone] = useState(false);
+  const syncStartedRef = useRef(false);
 
   useEffect(() => {
-    if (!user) return;
+    // Already in DB — release the gate immediately, no sync needed.
+    if (!isLoading && me) {
+      setSyncDone(true);
+      return;
+    }
+    // Still loading or no Clerk user yet — wait.
+    if (isLoading || !user) return;
+    // me is null and loading is done → new user, needs sync. Run once.
+    if (syncStartedRef.current) return;
+    syncStartedRef.current = true;
+
     syncMe.mutate(
       {
         data: {
@@ -298,15 +311,15 @@ function OnboardingRoute() {
       {
         onSettled: () => {
           qc.invalidateQueries({ queryKey: ["/api/users/me"] });
-          refetch().then(() => setSynced(true));
+          refetch().then(() => setSyncDone(true));
         },
-        onError: () => setSynced(true),
+        onError: () => setSyncDone(true),
       }
     );
-  }, [user?.id]);
+  }, [user?.id, isLoading, !!me]);
 
   useEffect(() => {
-    if (!synced || isLoading || !me) return;
+    if (!syncDone || isLoading || !me) return;
     if (me.tenantId) {
       if (me.role === ROLES.SUPER_ADMIN) {
         setLocation("/admin");
@@ -318,9 +331,10 @@ function OnboardingRoute() {
         setLocation("/dashboard");
       }
     }
-  }, [synced, me, isLoading]);
+  }, [syncDone, me, isLoading]);
 
-  const ready = synced && !isLoading;
+  // Show form as soon as we're ready: either already synced or sync completed.
+  const ready = syncDone && !isLoading;
 
   return (
     <>

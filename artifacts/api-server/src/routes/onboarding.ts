@@ -56,30 +56,37 @@ router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<
       // Defensive upsert: the frontend should have called /users/me/sync first,
       // but if it didn't (e.g. direct navigation, network race), create the user
       // row now from Clerk data so the onboarding form submission can proceed.
+      let clerkUser: Awaited<ReturnType<typeof clerkClient.users.getUser>>;
       try {
-        const clerkUser = await clerkClient.users.getUser(auth.clerkId);
-        const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
-        const email = primaryEmail?.emailAddress ?? "";
-        const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || "Usuário";
-        const userId = generateId();
-        const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
-        const role = (superadminClerkId && auth.clerkId === superadminClerkId) ? ROLES.SUPER_ADMIN : ROLES.AGENCY_ADMIN;
-        await db.insert(usersTable).values({
-          id: userId, clerkId: auth.clerkId, tenantId: null, name, email,
-          avatarUrl: clerkUser.imageUrl ?? null, role, referralCode, referralBalance: "0",
-        });
-        const [created] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
-        if (!created) {
-          next(new AppError("Failed to provision user", 500, "USER_CREATE_FAILED"));
-          return;
-        }
-        user = created;
+        clerkUser = await clerkClient.users.getUser(auth.clerkId);
       } catch (clerkErr) {
-        req.log.error({ clerkErr, clerkId: auth.clerkId }, "Failed to auto-provision user from Clerk during onboarding");
+        req.log.error({ clerkErr, clerkId: auth.clerkId }, "Failed to fetch Clerk user during onboarding auto-provision");
         next(new NotFoundError("User not found. Please refresh and try again.", "USER_NOT_FOUND"));
         return;
       }
+
+      const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+      const email = primaryEmail?.emailAddress ?? "";
+      const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || "Usuário";
+      const userId = generateId();
+      const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
+      const role = (superadminClerkId && auth.clerkId === superadminClerkId) ? ROLES.SUPER_ADMIN : ROLES.AGENCY_ADMIN;
+
+      // Ignore unique-constraint violations — a concurrent /users/me/sync may
+      // have inserted the row while this request was in flight.
+      await db.insert(usersTable).values({
+        id: userId, clerkId: auth.clerkId, tenantId: null, name, email,
+        avatarUrl: clerkUser.imageUrl ?? null, role, referralCode, referralBalance: "0",
+      }).onConflictDoNothing();
+
+      // Re-read winner (our insert or the concurrent one).
+      const [provisioned] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
+      if (!provisioned) {
+        next(new AppError("Failed to provision user", 500, "USER_CREATE_FAILED"));
+        return;
+      }
+      user = provisioned;
     }
     if (user.tenantId) {
       next(new ConflictError("User already has a tenant assigned", "TENANT_ALREADY_ASSIGNED"));
