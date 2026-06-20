@@ -286,17 +286,19 @@ function OnboardingRoute() {
   // syncDone gates the form only for new users (me === null after loading).
   // Already-synced users (me !== null) skip this gate entirely.
   const [syncDone, setSyncDone] = useState(false);
+  const [syncStarted, setSyncStarted] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   // Incrementing retryKey re-triggers both the watchdog and sync effects.
   const [retryKey, setRetryKey] = useState(0);
   const syncStartedRef = useRef(false);
 
-  // 10-second watchdog. Cancelled when syncDone becomes true or on retry.
+  // 10-second watchdog. Only begins counting once syncMe.mutate() is called.
+  // Cancelled when syncDone becomes true (cleanup) or reset on retry.
   useEffect(() => {
-    if (syncDone) return;
+    if (!syncStarted || syncDone) return;
     const t = setTimeout(() => setTimedOut(true), 10_000);
     return () => clearTimeout(t);
-  }, [syncDone, retryKey]);
+  }, [syncStarted, syncDone, retryKey]);
 
   useEffect(() => {
     // Already in DB — release the gate immediately, no sync needed.
@@ -309,6 +311,9 @@ function OnboardingRoute() {
     // me is null and loading is done → new user, needs sync. Run once per retryKey.
     if (syncStartedRef.current) return;
     syncStartedRef.current = true;
+
+    // Signal that the API call is now in-flight — starts the watchdog.
+    setSyncStarted(true);
 
     syncMe.mutate(
       {
@@ -348,6 +353,7 @@ function OnboardingRoute() {
     syncStartedRef.current = false;
     setTimedOut(false);
     setSyncDone(false);
+    setSyncStarted(false);
     setRetryKey((k) => k + 1);
   }
 
