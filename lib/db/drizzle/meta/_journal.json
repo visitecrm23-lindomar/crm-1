@@ -71,6 +71,13 @@
       "when": 1800800000000,
       "tag": "0009_referral_attempt_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1800900000000,
+      "tag": "0010_pipeline_default_unique_index",
+      "breakpoints": true
     }
   ]
 }

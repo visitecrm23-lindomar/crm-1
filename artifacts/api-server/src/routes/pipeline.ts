@@ -59,22 +59,42 @@ const STAGE_RENAMES: { oldName: string; newName: string }[] = [
 ];
 
 async function ensureDefaultPipeline(tenantId: string): Promise<string> {
-  const existing = await db.select().from(pipelineStagesTable)
-    .where(eq(pipelineStagesTable.tenantId, tenantId));
-  if (existing.length > 0) {
+  // Key off the pipelines table (not stages) to avoid the race condition where
+  // two concurrent requests both see "no stages" and each create a full pipeline.
+  const existingPipelines = await db.select()
+    .from(pipelinesTable)
+    .where(eq(pipelinesTable.tenantId, tenantId))
+    .orderBy(asc(pipelinesTable.createdAt));
+
+  if (existingPipelines.length > 0) {
+    // Canonical = oldest pipeline. Extra pipelines (if any survived from a past
+    // race) are ignored here — the DB-level partial unique index on
+    // (tenant_id) WHERE is_default prevents new duplicates, and migration
+    // 0010 collapses any existing ones at deploy time.
+    const canonical = existingPipelines[0]!;
+    const canonicalId = canonical.id;
+
+    const stages = await db.select()
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.pipelineId, canonicalId));
+
+    // Apply legacy stage renames.
     for (const r of STAGE_RENAMES) {
       await db.update(pipelineStagesTable)
         .set({ name: r.newName })
-        .where(and(eq(pipelineStagesTable.tenantId, tenantId), eq(pipelineStagesTable.name, r.oldName)));
+        .where(and(
+          eq(pipelineStagesTable.pipelineId, canonicalId),
+          eq(pipelineStagesTable.name, r.oldName),
+        ));
     }
-    // Add "Perdido" stage if missing
-    const hasPerdido = existing.some(s => s.name.toLowerCase() === "perdido");
+
+    // Add "Perdido" stage if missing.
+    const hasPerdido = stages.some(s => s.name.toLowerCase() === "perdido");
     if (!hasPerdido) {
-      const pipelineId = existing[0].pipelineId;
       await db.insert(pipelineStagesTable).values({
         id: generateId(),
         tenantId,
-        pipelineId,
+        pipelineId: canonicalId,
         name: "Perdido",
         order: 7,
         color: "#EF4444",
@@ -82,8 +102,13 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
         isDefaultWeb: false,
       }).onConflictDoNothing();
     }
-    return existing[0].pipelineId;
+
+    return canonicalId;
   }
+
+  // No pipeline exists — create the default one.
+  // ON CONFLICT DO NOTHING absorbs a concurrent insert that beats us to it
+  // (the partial unique index on (tenant_id) WHERE is_default enforces at most one).
   const pipelineId = generateId();
   await db.insert(pipelinesTable).values({
     id: pipelineId,
@@ -91,20 +116,39 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
     name: "Pipeline Principal",
     isDefault: true,
     isActive: true,
-  });
-  for (const stage of DEFAULT_STAGES) {
-    await db.insert(pipelineStagesTable).values({
-      id: generateId(),
-      tenantId,
-      pipelineId,
-      name: stage.name,
-      order: stage.order,
-      color: stage.color,
-      isFinal: stage.isFinal,
-      isDefaultWeb: stage.isDefaultWeb,
-    });
+  }).onConflictDoNothing();
+
+  // Re-fetch to get the winner's id (ours or a concurrent request's).
+  const [canonical] = await db.select()
+    .from(pipelinesTable)
+    .where(eq(pipelinesTable.tenantId, tenantId))
+    .orderBy(asc(pipelinesTable.createdAt))
+    .limit(1);
+
+  const actualPipelineId = canonical?.id ?? pipelineId;
+
+  // Create default stages only if none exist for this pipeline yet.
+  const existingStages = await db.select({ id: pipelineStagesTable.id })
+    .from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.pipelineId, actualPipelineId))
+    .limit(1);
+
+  if (existingStages.length === 0) {
+    for (const stage of DEFAULT_STAGES) {
+      await db.insert(pipelineStagesTable).values({
+        id: generateId(),
+        tenantId,
+        pipelineId: actualPipelineId,
+        name: stage.name,
+        order: stage.order,
+        color: stage.color,
+        isFinal: stage.isFinal,
+        isDefaultWeb: stage.isDefaultWeb,
+      }).onConflictDoNothing();
+    }
   }
-  return pipelineId;
+
+  return actualPipelineId;
 }
 
 function formatStage(s: typeof pipelineStagesTable.$inferSelect) {
