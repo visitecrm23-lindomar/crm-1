@@ -248,11 +248,13 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     const parsed = CreateClientBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 
-    let cleanedCpf: string;
-    try {
-      cleanedCpf = validateCPF(parsed.data.cpf);
-    } catch (err) {
-      next(new ValidationError(err instanceof Error ? err.message : "CPF inválido", "CPF_INVALID")); return;
+    let cleanedCpf: string | null = null;
+    if (parsed.data.cpf != null && parsed.data.cpf.trim() !== "") {
+      try {
+        cleanedCpf = validateCPF(parsed.data.cpf);
+      } catch (err) {
+        next(new ValidationError(err instanceof Error ? err.message : "CPF inválido", "CPF_INVALID")); return;
+      }
     }
 
     const sharedFields = {
@@ -285,11 +287,14 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
 
     const id = generateId();
     const [upserted] = await db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select({ id: clientsTable.id })
-        .from(clientsTable)
-        .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.cpf, cleanedCpf)))
-        .limit(1);
+      let existing: { id: string } | undefined;
+      if (cleanedCpf) {
+        [existing] = await tx
+          .select({ id: clientsTable.id })
+          .from(clientsTable)
+          .where(and(eq(clientsTable.tenantId, me.tenantId), eq(clientsTable.cpf, cleanedCpf)))
+          .limit(1);
+      }
 
       let customerCode: string | null = null;
       if (!existing) {

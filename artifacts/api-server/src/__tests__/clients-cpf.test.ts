@@ -135,7 +135,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
-  eq:      vi.fn(() => "eq"),
+  eq:      vi.fn((_col, val) => `eq:${String(val)}`),
   and:     vi.fn((...a: unknown[]) => a),
   or:      vi.fn((...a: unknown[]) => a),
   inArray: vi.fn(() => "inArray"),
@@ -207,9 +207,10 @@ vi.mock("../lib/ai-client.js", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Import route + middleware AFTER all mocks
+// Import route + middleware AFTER all mocks; import eq for call inspection
 // ---------------------------------------------------------------------------
 
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant.js";
 import clientsRouter from "../routes/clients.js";
 import { errorHandler } from "../middlewares/errorHandler.js";
@@ -316,6 +317,11 @@ function queueSingleClientGet(client = makeFakeClient()) {
   );
 }
 
+/** Returns the second argument of every `eq(col, val)` mock call. */
+function eqValues() {
+  return vi.mocked(eq).mock.calls.map(([, val]) => val);
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/clients?cpf= — CPF filter
 // ---------------------------------------------------------------------------
@@ -329,7 +335,7 @@ describe("GET /api/clients?cpf= — CPF exact-match filter", () => {
     requireAuthMock.mockResolvedValue(FAKE_USER as never);
   });
 
-  it("returns the matching client for an exact 11-digit unformatted CPF", async () => {
+  it("returns the matching client for an exact 11-digit unformatted CPF and applies the eq filter", async () => {
     queueSingleClientGet();
 
     const res = await request(app).get(`/api/clients?cpf=${VALID_CPF_RAW}`);
@@ -338,9 +344,11 @@ describe("GET /api/clients?cpf= — CPF exact-match filter", () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].id).toBe("client-001");
     expect(res.body.total).toBe(1);
+    // eq() must have been called with the exact cleaned CPF value
+    expect(eqValues()).toContain(VALID_CPF_RAW);
   });
 
-  it("cleans formatting characters (dots and dash) before applying the exact-match filter", async () => {
+  it("cleans formatting characters (dots and dash) and applies eq filter with the 11-digit cleaned value", async () => {
     // "529.982.247-25" → cleanCPF → "52998224725" (11 digits) → eq filter applied
     queueSingleClientGet();
 
@@ -349,30 +357,33 @@ describe("GET /api/clients?cpf= — CPF exact-match filter", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
-    // Response carries the stored cleaned CPF
     expect(res.body.data[0].cpf).toBe(VALID_CPF_RAW);
+    // eq() called with the cleaned (no formatting) CPF — not the raw formatted param
+    expect(eqValues()).toContain(VALID_CPF_RAW);
+    expect(eqValues()).not.toContain(VALID_CPF_FORMATTED);
   });
 
-  it("does not apply a CPF exact-match filter when the param cleans to fewer than 11 digits", async () => {
-    // "529" → cleanCPF → "529" (3 digits) → condition skipped, no 400 error
+  it("does not apply a CPF eq filter when the cleaned param has fewer than 11 digits", async () => {
+    // "529" → cleanCPF → "529" (3 digits) → condition skipped, only tenant filter present
     queueSingleClientGet();
 
     const res = await request(app).get("/api/clients?cpf=529");
 
-    // Route returns normally — no CPF filter applied, no validation error
     expect(res.status).toBe(200);
-    expect(res.body.data).toBeDefined();
+    // Tenant predicate is always present
+    expect(eqValues()).toContain(FAKE_USER.tenantId);
+    // CPF short param value ("529") must NOT appear as an eq argument
+    expect(eqValues()).not.toContain("529");
   });
 
-  it("enforces tenant isolation: requireAuth is called and its tenantId scopes all DB queries", async () => {
+  it("always includes the tenant predicate in the query regardless of which filters are present", async () => {
     queueSingleClientGet();
 
     const res = await request(app).get(`/api/clients?cpf=${VALID_CPF_RAW}`);
 
     expect(res.status).toBe(200);
-    // requireAuth is the single gate for tenant context; every DB condition
-    // uses the tenantId it returns, preventing cross-tenant data leakage.
-    expect(requireAuthMock).toHaveBeenCalledTimes(1);
+    // tenantId must appear as a value in one of the eq() calls — the tenant isolation filter
+    expect(eqValues()).toContain(FAKE_USER.tenantId);
   });
 });
 
@@ -437,8 +448,7 @@ describe("POST /api/clients — CPF upsert / deduplication", () => {
         const txInsertOnConflict = vi.fn(() => ({ returning: txInsertReturning }));
         const txInsertValues     = vi.fn(() => ({ onConflictDoUpdate: txInsertOnConflict }));
         const txInsert           = vi.fn(() => ({ values: txInsertValues }));
-        // tx.update not called when existing CPF found (no seq bump needed)
-        const txUpdate = vi.fn(() => ({
+        const txUpdate           = vi.fn(() => ({
           set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })),
         }));
         return cb({ select: txSelect, update: txUpdate, insert: txInsert });
@@ -464,14 +474,38 @@ describe("POST /api/clients — CPF upsert / deduplication", () => {
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 
-  it("returns HTTP 400 when CPF is absent from the request body, bypassing the deduplication transaction", async () => {
-    // cpf is zod.string() (required) in CreateClientBody; missing CPF fails
-    // schema parsing and no DB transaction is triggered.
-    const { cpf: _omit, ...bodyWithoutCpf } = VALID_BODY;
+  it("creates the client and returns HTTP 201 when CPF is absent, bypassing the deduplication select entirely", async () => {
+    // cpf is now optional (zod.string().nullish()). When absent, cleanedCpf stays null,
+    // so the `if (cleanedCpf)` guard in the route skips the dedup tx.select() call.
+    // The insert proceeds normally; the partial unique index (IS NOT NULL) means null
+    // CPF rows never trigger the onConflictDoUpdate clause.
+    const newClient = makeFakeClient({ id: "gen-id", cpf: null });
+    let txSelectWasCalled = false;
 
+    mockTransaction.mockImplementationOnce(
+      async (cb: (tx: unknown) => Promise<unknown>) => {
+        const txSelect = vi.fn((..._args: unknown[]) => {
+          txSelectWasCalled = true;
+          return makeChain([]);
+        });
+        const txUpdateReturning  = vi.fn().mockResolvedValue(TENANT_UPDATE_RESULT);
+        const txUpdateWhere      = vi.fn(() => ({ returning: txUpdateReturning }));
+        const txUpdateSet        = vi.fn(() => ({ where: txUpdateWhere }));
+        const txUpdate           = vi.fn(() => ({ set: txUpdateSet }));
+        const txInsertReturning  = vi.fn().mockResolvedValue([newClient]);
+        const txInsertOnConflict = vi.fn(() => ({ returning: txInsertReturning }));
+        const txInsertValues     = vi.fn(() => ({ onConflictDoUpdate: txInsertOnConflict }));
+        const txInsert           = vi.fn(() => ({ values: txInsertValues }));
+        return cb({ select: txSelect, update: txUpdate, insert: txInsert });
+      },
+    );
+
+    const { cpf: _omit, ...bodyWithoutCpf } = VALID_BODY;
     const res = await request(app).post("/api/clients").send(bodyWithoutCpf);
 
-    expect(res.status).toBe(400);
-    expect(mockTransaction).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(res.body.isNew).toBe(true);
+    // The deduplication select query must NOT have fired — null CPF bypasses it
+    expect(txSelectWasCalled).toBe(false);
   });
 });

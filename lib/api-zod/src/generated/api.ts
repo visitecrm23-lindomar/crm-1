@@ -825,7 +825,7 @@ export const CreateClientBody = zod.object({
   email: zod.string(),
   whatsapp: zod.string(),
   phone: zod.string().nullish(),
-  cpf: zod.string(),
+  cpf: zod.string().nullish(),
   rg: zod.string().nullish(),
   birthDate: zod.string().nullish(),
   gender: zod.string().nullish(),
