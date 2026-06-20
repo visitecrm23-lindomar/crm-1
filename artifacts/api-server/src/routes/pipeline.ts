@@ -58,57 +58,105 @@ const STAGE_RENAMES: { oldName: string; newName: string }[] = [
   { oldName: "Pós-venda", newName: "Pós Viagem" },
 ];
 
+async function applyStageUpgrades(tenantId: string, pipelineId: string): Promise<void> {
+  const stages = await db.select()
+    .from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.pipelineId, pipelineId));
+
+  for (const r of STAGE_RENAMES) {
+    await db.update(pipelineStagesTable)
+      .set({ name: r.newName })
+      .where(and(
+        eq(pipelineStagesTable.pipelineId, pipelineId),
+        eq(pipelineStagesTable.name, r.oldName),
+      ));
+  }
+
+  const hasPerdido = stages.some(s => s.name.toLowerCase() === "perdido");
+  if (!hasPerdido) {
+    await db.insert(pipelineStagesTable).values({
+      id: generateId(),
+      tenantId,
+      pipelineId,
+      name: "Perdido",
+      order: 7,
+      color: "#EF4444",
+      isFinal: false,
+      isDefaultWeb: false,
+    }).onConflictDoNothing();
+  }
+}
+
 async function ensureDefaultPipeline(tenantId: string): Promise<string> {
-  // Key off the pipelines table (not stages) to avoid the race condition where
-  // two concurrent requests both see "no stages" and each create a full pipeline.
   const existingPipelines = await db.select()
     .from(pipelinesTable)
     .where(eq(pipelinesTable.tenantId, tenantId))
     .orderBy(asc(pipelinesTable.createdAt));
 
   if (existingPipelines.length > 0) {
-    // Canonical = oldest pipeline. Extra pipelines (if any survived from a past
-    // race) are ignored here — the DB-level partial unique index on
-    // (tenant_id) WHERE is_default prevents new duplicates, and migration
-    // 0010 collapses any existing ones at deploy time.
-    const canonical = existingPipelines[0]!;
+    const defaultPipelines = existingPipelines.filter(p => p.isDefault);
+
+    // Zero-default guard: pipelines exist but none is marked default.
+    // Pick the oldest and mark it as the default.
+    if (defaultPipelines.length === 0) {
+      const canonical = existingPipelines[0]!;
+      await db.update(pipelinesTable)
+        .set({ isDefault: true })
+        .where(eq(pipelinesTable.id, canonical.id));
+      await applyStageUpgrades(tenantId, canonical.id);
+      return canonical.id;
+    }
+
+    // Happy path: exactly one default pipeline — apply upgrades and return.
+    if (defaultPipelines.length === 1) {
+      const canonical = defaultPipelines[0]!;
+      await applyStageUpgrades(tenantId, canonical.id);
+      return canonical.id;
+    }
+
+    // Duplicate-default self-healing: more than one pipeline has is_default=true.
+    // Pick the oldest as canonical, remap deals from each extra pipeline's stages
+    // to the matching canonical stage (by name, fallback to canonical's first stage),
+    // then delete the extras (pipeline_stages cascade-delete automatically).
+    const canonical = defaultPipelines[0]!; // already sorted by createdAt asc
     const canonicalId = canonical.id;
 
-    const stages = await db.select()
-      .from(pipelineStagesTable)
-      .where(eq(pipelineStagesTable.pipelineId, canonicalId));
+    await db.transaction(async (tx) => {
+      const canonicalStages = await tx.select()
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.pipelineId, canonicalId))
+        .orderBy(asc(pipelineStagesTable.order));
 
-    // Apply legacy stage renames.
-    for (const r of STAGE_RENAMES) {
-      await db.update(pipelineStagesTable)
-        .set({ name: r.newName })
-        .where(and(
-          eq(pipelineStagesTable.pipelineId, canonicalId),
-          eq(pipelineStagesTable.name, r.oldName),
-        ));
-    }
+      const fallbackStageId = canonicalStages[0]?.id;
 
-    // Add "Perdido" stage if missing.
-    const hasPerdido = stages.some(s => s.name.toLowerCase() === "perdido");
-    if (!hasPerdido) {
-      await db.insert(pipelineStagesTable).values({
-        id: generateId(),
-        tenantId,
-        pipelineId: canonicalId,
-        name: "Perdido",
-        order: 7,
-        color: "#EF4444",
-        isFinal: false,
-        isDefaultWeb: false,
-      }).onConflictDoNothing();
-    }
+      for (const extra of defaultPipelines.slice(1)) {
+        const extraStages = await tx.select()
+          .from(pipelineStagesTable)
+          .where(eq(pipelineStagesTable.pipelineId, extra.id));
 
+        for (const extraStage of extraStages) {
+          const target = canonicalStages.find(s => s.name === extraStage.name);
+          const targetId = target?.id ?? fallbackStageId;
+          if (targetId) {
+            await tx.update(dealsTable)
+              .set({ stageId: targetId })
+              .where(eq(dealsTable.stageId, extraStage.id));
+          }
+        }
+
+        // Delete extra pipeline — pipeline_stages cascade-delete automatically.
+        await tx.delete(pipelinesTable)
+          .where(eq(pipelinesTable.id, extra.id));
+      }
+    });
+
+    await applyStageUpgrades(tenantId, canonicalId);
     return canonicalId;
   }
 
-  // No pipeline exists — create the default one.
-  // ON CONFLICT DO NOTHING absorbs a concurrent insert that beats us to it
-  // (the partial unique index on (tenant_id) WHERE is_default enforces at most one).
+  // No pipeline exists for this tenant — create the default one.
+  // ON CONFLICT DO NOTHING (via the partial unique index on is_default=true)
+  // absorbs concurrent races where two requests both see zero pipelines.
   const pipelineId = generateId();
   await db.insert(pipelinesTable).values({
     id: pipelineId,
@@ -119,33 +167,27 @@ async function ensureDefaultPipeline(tenantId: string): Promise<string> {
   }).onConflictDoNothing();
 
   // Re-fetch to get the winner's id (ours or a concurrent request's).
-  const [canonical] = await db.select()
+  const [winner] = await db.select()
     .from(pipelinesTable)
     .where(eq(pipelinesTable.tenantId, tenantId))
     .orderBy(asc(pipelinesTable.createdAt))
     .limit(1);
 
-  const actualPipelineId = canonical?.id ?? pipelineId;
+  const actualPipelineId = winner?.id ?? pipelineId;
 
-  // Create default stages only if none exist for this pipeline yet.
-  const existingStages = await db.select({ id: pipelineStagesTable.id })
-    .from(pipelineStagesTable)
-    .where(eq(pipelineStagesTable.pipelineId, actualPipelineId))
-    .limit(1);
-
-  if (existingStages.length === 0) {
-    for (const stage of DEFAULT_STAGES) {
-      await db.insert(pipelineStagesTable).values({
-        id: generateId(),
-        tenantId,
-        pipelineId: actualPipelineId,
-        name: stage.name,
-        order: stage.order,
-        color: stage.color,
-        isFinal: stage.isFinal,
-        isDefaultWeb: stage.isDefaultWeb,
-      }).onConflictDoNothing();
-    }
+  // Create default stages — ON CONFLICT DO NOTHING on (pipeline_id, name)
+  // unique index absorbs concurrent stage inserts from two racing requests.
+  for (const stage of DEFAULT_STAGES) {
+    await db.insert(pipelineStagesTable).values({
+      id: generateId(),
+      tenantId,
+      pipelineId: actualPipelineId,
+      name: stage.name,
+      order: stage.order,
+      color: stage.color,
+      isFinal: stage.isFinal,
+      isDefaultWeb: stage.isDefaultWeb,
+    }).onConflictDoNothing();
   }
 
   return actualPipelineId;

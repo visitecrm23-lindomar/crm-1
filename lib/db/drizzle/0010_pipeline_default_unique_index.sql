@@ -23,13 +23,20 @@ DECLARE
   canonical_id      TEXT;
   fallback_stage_id TEXT;
 BEGIN
+  -- Only target tenants with more than one is_default=true pipeline.
+  -- Non-default pipelines legitimately created by users are NOT touched.
   FOR tenant_rec IN
-    SELECT tenant_id FROM pipelines GROUP BY tenant_id HAVING count(*) > 1
+    SELECT tenant_id
+      FROM pipelines
+     WHERE is_default = true
+     GROUP BY tenant_id
+    HAVING count(*) > 1
   LOOP
-    -- Oldest pipeline (by created_at) becomes the canonical one.
+    -- Canonical = oldest is_default=true pipeline for this tenant.
     SELECT id INTO canonical_id
       FROM pipelines
      WHERE tenant_id = tenant_rec.tenant_id
+       AND is_default = true
      ORDER BY created_at ASC
      LIMIT 1;
 
@@ -40,10 +47,12 @@ BEGIN
      ORDER BY "order" ASC
      LIMIT 1;
 
-    -- Process every extra pipeline for this tenant.
+    -- Process every extra is_default=true pipeline (not the canonical).
     FOR extra_rec IN
       SELECT id FROM pipelines
-       WHERE tenant_id = tenant_rec.tenant_id AND id != canonical_id
+       WHERE tenant_id = tenant_rec.tenant_id
+         AND is_default = true
+         AND id != canonical_id
     LOOP
       -- Remap deals whose stage belongs to the extra pipeline.
       -- Try to find a same-named stage in the canonical pipeline; fall back to

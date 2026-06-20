@@ -78,6 +78,13 @@
       "when": 1800900000000,
       "tag": "0010_pipeline_default_unique_index",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1801000000000,
+      "tag": "0011_pipeline_stages_unique_name",
+      "breakpoints": true
     }
   ]
 }

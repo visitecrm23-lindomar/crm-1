@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, numeric, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -33,7 +33,9 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   isFinal: boolean("is_final").notNull().default(false),
   isDefaultWeb: boolean("is_default_web").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("pipeline_stages_pipeline_id_name_idx").on(table.pipelineId, table.name),
+]);
 
 export const insertPipelineStageSchema = createInsertSchema(pipelineStagesTable).omit({ createdAt: true });
 export type InsertPipelineStage = z.infer<typeof insertPipelineStageSchema>;
