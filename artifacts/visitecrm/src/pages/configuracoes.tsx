@@ -270,6 +270,7 @@ function AgencyProfileTab() {
   const updateTenant = useUpdateTenant();
 
   const [form, setForm] = useState<UpdateTenantBody>({});
+  const [prefixError, setPrefixError] = useState<string | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
   const handleUploadingChange = useCallback((uploading: boolean) => {
     setUploadingCount((n) => Math.max(0, n + (uploading ? 1 : -1)));
@@ -303,13 +304,23 @@ function AgencyProfileTab() {
       toast({ title: "Não foi possível identificar a agência", variant: "destructive" });
       return;
     }
+    if (form.reservationPrefix != null && form.reservationPrefix !== "" && !/^[A-Z]{1,5}$/.test(form.reservationPrefix)) {
+      setPrefixError("O prefixo deve conter apenas letras (1–5 caracteres)");
+      return;
+    }
+    setPrefixError(null);
     try {
       await updateTenant.mutateAsync({ id: tenantId, data: form });
       toast({ title: "Perfil da agência atualizado" });
       await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
       refetchMe();
-    } catch {
-      toast({ title: "Erro ao salvar", variant: "destructive" });
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { code?: string; error?: string } } })?.response?.data;
+      if (data?.code === "PREFIX_INVALID" || data?.code === "PREFIX_LOCKED") {
+        setPrefixError(data.error ?? "Erro no prefixo");
+      } else {
+        toast({ title: extractApiError(err), variant: "destructive" });
+      }
     }
   }
 
@@ -405,28 +416,37 @@ function AgencyProfileTab() {
         </div>
         <div className="flex flex-col gap-1.5">
           {fullTenant?.prefixLocked ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted font-mono text-sm w-36">
-                <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span>{fullTenant.reservationPrefix || "—"}</span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted font-mono text-sm w-36">
+                  <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span>{fullTenant.reservationPrefix || "—"}</span>
+                </div>
               </div>
-              <span className="text-xs text-muted-foreground">O prefixo não pode ser alterado após a primeira definição.</span>
+              <p className="text-xs text-muted-foreground">Configurado permanentemente — não pode ser alterado.</p>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Input
-                value={form.reservationPrefix ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 5);
-                  setForm((f) => ({ ...f, reservationPrefix: v }));
-                }}
-                placeholder="Ex: CHQ, AGT..."
-                className="font-mono w-36"
-                maxLength={5}
-              />
-              <span className="text-xs text-muted-foreground">1–5 letras. Será fixado ao salvar.</span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={form.reservationPrefix ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 5);
+                    setForm((f) => ({ ...f, reservationPrefix: v }));
+                    setPrefixError(null);
+                  }}
+                  placeholder="Ex: CHQ, AGT..."
+                  className={`font-mono w-36 ${prefixError ? "border-destructive" : ""}`}
+                  maxLength={5}
+                />
+                <span className="text-xs text-muted-foreground">1–5 letras. Será fixado permanentemente ao salvar.</span>
+              </div>
+              {prefixError && (
+                <p className="text-xs text-destructive">{prefixError}</p>
+              )}
             </div>
           )}
+          <p className="text-xs text-muted-foreground">Usado nos códigos de reservas e nos códigos de registro de clientes.</p>
           <div className="text-xs text-muted-foreground space-y-0.5">
             {(() => {
               const now = new Date();
