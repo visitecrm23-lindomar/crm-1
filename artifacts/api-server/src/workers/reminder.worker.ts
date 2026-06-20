@@ -1118,18 +1118,29 @@ async function processExpiringSoonReferralNotifications(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
-// Bonus release notifications (convertedAt + 30 days <= today)
+// Bonus release: auto-pay + optional email notification
 // ────────────────────────────────────────────────────────────
+//
+// Two independent concerns handled in a single run:
+//
+//  1. AUTO-RELEASE (always): mark bonusPaid=true for every eligible row
+//     (status=completed, bonusPaid=false, convertedAt + gracePeriodDays <= today).
+//     This is independent of the email toggle — bonuses are released regardless
+//     of whether the notification email is enabled.
+//
+//  2. EMAIL NOTIFICATION (conditional): for tenants with bonusReleaseEmailEnabled,
+//     send the "bonus released" email once per row (bonusReleaseNotifiedAt IS NULL
+//     as the idempotency guard). The notification stamp is separate from the
+//     bonusPaid stamp so one doesn't block the other.
 
 export async function processReferralBonusReleaseNotifications(): Promise<void> {
   const tz = process.env["REMINDER_TZ"] ?? "America/Sao_Paulo";
 
-  // Fetch per-tenant settings. Only consider tenants with referrals enabled (isEnabled=true).
+  // Fetch per-tenant settings — all tenants with referrals enabled.
   const tenantSettings = await db
     .select({
       tenantId: referralSettingsTable.tenantId,
       bonusReleaseEmailEnabled: referralSettingsTable.bonusReleaseEmailEnabled,
-      gracePeriodDays: referralSettingsTable.gracePeriodDays,
     })
     .from(referralSettingsTable)
     .where(eq(referralSettingsTable.isEnabled, true));
@@ -1140,20 +1151,22 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
   }
 
   const enabledTenantIds = tenantSettings.map((r) => r.tenantId);
-
-  // Maps for O(1) per-tenant lookup in the processing loop.
-  const bonusReleaseEnabledMap = new Map(
+  const bonusReleaseEmailEnabledMap = new Map(
     tenantSettings.map((r) => [r.tenantId, r.bonusReleaseEmailEnabled]),
   );
-  // Find completed referrals where the per-tenant grace period has passed.
-  // Join referralSettingsTable to evaluate gracePeriodDays inline in SQL.
-  const releasedReferrals = await db
+
+  // Find all completed referrals where the per-tenant grace period has elapsed
+  // and the bonus has not yet been paid.
+  // NOTE: bonusReleaseNotifiedAt is NOT a filter here — auto-release must
+  // happen regardless of prior notification attempts.
+  const eligibleReferrals = await db
     .select({
       id: referralsTable.id,
       referrerId: referralsTable.referrerId,
       tenantId: referralsTable.tenantId,
       bonusAmount: referralsTable.bonusAmount,
       convertedAt: referralsTable.convertedAt,
+      bonusReleaseNotifiedAt: referralsTable.bonusReleaseNotifiedAt,
     })
     .from(referralsTable)
     .innerJoin(
@@ -1164,74 +1177,73 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
       and(
         eq(referralsTable.status, "completed"),
         eq(referralsTable.bonusPaid, false),
-        isNull(referralsTable.bonusReleaseNotifiedAt),
         isNotNull(referralsTable.convertedAt),
         inArray(referralsTable.tenantId, enabledTenantIds),
         sql`(${referralsTable.convertedAt} AT TIME ZONE ${tz})::date + (${referralSettingsTable.gracePeriodDays} || ' days')::interval <= (NOW() AT TIME ZONE ${tz})::date`,
       ),
     );
 
-  if (releasedReferrals.length === 0) {
-    logger.info("[bonus-release] No referrals with newly released bonuses — skipping");
+  if (eligibleReferrals.length === 0) {
+    logger.info("[bonus-release] No referrals with elapsed grace periods — skipping");
     return;
   }
 
-  logger.info({ count: releasedReferrals.length }, "[bonus-release] Found referrals with released bonuses to notify");
+  logger.info({ count: eligibleReferrals.length }, "[bonus-release] Found referrals eligible for auto-release");
 
-  let notified = 0, skippedDisabled = 0, errors = 0;
+  let released = 0, notified = 0, skippedEmailDisabled = 0, skippedAlreadyNotified = 0, errors = 0;
 
-  for (const referral of releasedReferrals) {
+  const releaseDate = new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: tz,
+  });
+
+  for (const referral of eligibleReferrals) {
     try {
-      // Respect the per-tenant toggle flag.
-      const emailEnabled = bonusReleaseEnabledMap.get(referral.tenantId);
-      if (emailEnabled === false) {
-        skippedDisabled++;
-        logger.info({ referralId: referral.id }, "[bonus-release] Skipping — bonus release email disabled for tenant");
+      // ── Step 1: Auto-release ─────────────────────────────────────────────
+      // Atomically mark paid. The bonusPaid=false guard prevents double-release
+      // when concurrent cron instances overlap.
+      const releaseNow = new Date();
+      const paidRows = await db
+        .update(referralsTable)
+        .set({ bonusPaid: true, bonusPaidAt: releaseNow, updatedAt: releaseNow })
+        .where(and(eq(referralsTable.id, referral.id), eq(referralsTable.bonusPaid, false)))
+        .returning({ id: referralsTable.id });
+
+      if (paidRows.length > 0) released++;
+      // Even if this was a no-op (concurrent run beat us), continue to
+      // the email step — email idempotency is guarded separately below.
+
+      // ── Step 2: Email notification (tenant opt-in) ───────────────────────
+      const emailEnabled = bonusReleaseEmailEnabledMap.get(referral.tenantId);
+      if (!emailEnabled) {
+        skippedEmailDisabled++;
         continue;
       }
 
-      const bonusAmount = parseFloat(String(referral.bonusAmount ?? "0"));
-      const releaseDate = new Date().toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        timeZone: tz,
-      });
+      // Already notified on a prior run — skip to avoid double-sending.
+      if (referral.bonusReleaseNotifiedAt !== null) {
+        skippedAlreadyNotified++;
+        continue;
+      }
 
-      // Atomically claim this referral BEFORE dispatching the email.
-      // The IS NULL guard in the WHERE clause means only one concurrent cron run
-      // can win the race: the first writer gets a non-empty RETURNING result and
-      // proceeds to dispatch; subsequent writers get an empty result and skip.
-      // This prevents double-sending even when multiple cron instances overlap.
-      //
-      // We also mark bonusPaid=true + bonusPaidAt=now() here — the grace period
-      // has elapsed so the bonus is officially released. This is the authoritative
-      // auto-release path; the manual "pay bonus" endpoint in referrals.ts remains
-      // available for early release after the grace period has already passed.
-      //
-      // Trade-off: if the referrer currently has no email address the stamp is
-      // set permanently (future runs will skip). This case is rare — a referrer
-      // must have had an account (and email) to generate a code. If needed, an
-      // operator can manually reset bonusReleaseNotifiedAt on the row.
-      //
-      // NOTE: if the email job is enqueued but the email worker later exhausts
-      // retries, bonusReleaseNotifiedAt will remain set and this cron will not
-      // retry automatically. A dedicated retry path can be added later (see
-      // retryFailedExpiryWarningEmails for the expiry-warning equivalent).
-      const releaseNow = new Date();
+      // Atomically claim the notification slot. The IS NULL guard in the WHERE
+      // clause ensures only one concurrent run dispatches the email.
+      const notifyNow = new Date();
       const stamped = await db
         .update(referralsTable)
-        .set({ bonusReleaseNotifiedAt: releaseNow, bonusPaid: true, bonusPaidAt: releaseNow, updatedAt: releaseNow })
+        .set({ bonusReleaseNotifiedAt: notifyNow, updatedAt: notifyNow })
         .where(and(eq(referralsTable.id, referral.id), isNull(referralsTable.bonusReleaseNotifiedAt)))
         .returning({ id: referralsTable.id });
 
       if (stamped.length === 0) {
-        // Another concurrent run already claimed this referral — skip dispatch
-        // to avoid a double-send. The winning run will (or already did) dispatch.
-        logger.info({ referralId: referral.id }, "[bonus-release] Stamp was no-op — concurrent run already claimed this referral, skipping dispatch");
+        // A concurrent run already claimed the notification slot.
+        skippedAlreadyNotified++;
         continue;
       }
 
+      const bonusAmount = parseFloat(String(referral.bonusAmount ?? "0"));
       await dispatchReferralBonusReleasedEmail(
         referral.referrerId,
         referral.tenantId,
@@ -1245,12 +1257,15 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
       errors++;
       logger.error(
         { err, referralId: referral.id, referrerId: referral.referrerId, tenantId: referral.tenantId },
-        "[bonus-release] Failed to notify bonus release",
+        "[bonus-release] Failed to process referral auto-release",
       );
     }
   }
 
-  logger.info({ notified, skippedDisabled, errors, total: releasedReferrals.length }, "[bonus-release] Bonus release notification run complete");
+  logger.info(
+    { released, notified, skippedEmailDisabled, skippedAlreadyNotified, errors, total: eligibleReferrals.length },
+    "[bonus-release] Bonus auto-release run complete",
+  );
 }
 
 // ────────────────────────────────────────────────────────────

@@ -572,23 +572,20 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       }
     }
 
-    await db.update(tripsTable).set(updates)
-      .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
-
-    // Trip cancellation: batch-reverse any COMPLETED referrals linked to reservations on this trip.
+    // When cancelling, wrap the trip update and any referral reversals in a single
+    // transaction so both succeed or both roll back atomically.
     if (parsed.data.status === "cancelled") {
-      try {
-        const tripReservations = await db
-          .select({ id: reservationsTable.id })
-          .from(reservationsTable)
-          .where(and(
-            eq(reservationsTable.tripId, req.params.id),
-            eq(reservationsTable.tenantId, me.tenantId),
-            isNotNull(reservationsTable.discountReferralCode),
-          ));
-        const reservationIds = tripReservations.map(r => r.id);
-        if (reservationIds.length > 0) {
-          const referralsToReverse = await db
+      const tripReservations = await db
+        .select({ id: reservationsTable.id })
+        .from(reservationsTable)
+        .where(and(
+          eq(reservationsTable.tripId, req.params.id),
+          eq(reservationsTable.tenantId, me.tenantId),
+          isNotNull(reservationsTable.discountReferralCode),
+        ));
+      const cancellationReservationIds = tripReservations.map(r => r.id);
+      const referralsToReverse = cancellationReservationIds.length > 0
+        ? await db
             .select({
               id: referralsTable.id,
               referrerId: referralsTable.referrerId,
@@ -599,44 +596,47 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
             .where(and(
               eq(referralsTable.tenantId, me.tenantId),
               eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
-              inArray(referralsTable.reservationId, reservationIds),
+              inArray(referralsTable.reservationId, cancellationReservationIds),
+            ))
+        : [];
+
+      const tripReversalNow = new Date();
+      await db.transaction(async (tx) => {
+        await tx.update(tripsTable).set(updates)
+          .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
+        for (const ref of referralsToReverse) {
+          const bonusToReverse = Number(ref.bonusAmount);
+          await tx.execute(
+            sql`SELECT id FROM clients WHERE id = ${ref.referrerId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+          );
+          await tx.update(clientsTable)
+            .set({
+              successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
+              referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
+            })
+            .where(and(
+              eq(clientsTable.id, ref.referrerId),
+              eq(clientsTable.tenantId, me.tenantId),
             ));
-          if (referralsToReverse.length > 0) {
-            const tripReversalNow = new Date();
-            await db.transaction(async (tx) => {
-              for (const ref of referralsToReverse) {
-                const bonusToReverse = Number(ref.bonusAmount);
-                await tx.execute(
-                  sql`SELECT id FROM clients WHERE id = ${ref.referrerId} AND tenant_id = ${me.tenantId} FOR UPDATE`
-                );
-                await tx.update(clientsTable)
-                  .set({
-                    successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
-                    referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
-                  })
-                  .where(and(
-                    eq(clientsTable.id, ref.referrerId),
-                    eq(clientsTable.tenantId, me.tenantId),
-                  ));
-                await tx.update(referralsTable)
-                  .set({ status: REFERRAL_STATUS.REVERSED, reversalReason: "trip_cancelled", reversalAt: tripReversalNow, updatedAt: tripReversalNow })
-                  .where(eq(referralsTable.id, ref.id));
-              }
-            });
-            for (const ref of referralsToReverse) {
-              dispatchReferralReversedEmail({
-                referrerId: ref.referrerId,
-                referredId: ref.referredId,
-                bonusAmount: ref.bonusAmount,
-                tenantId: me.tenantId,
-                reason: "trip_cancelled",
-              }).catch((err) => req.log.error({ err, referralId: ref.id }, "Error sending trip cancellation referral reversal email"));
-            }
-          }
+          await tx.update(referralsTable)
+            .set({ status: REFERRAL_STATUS.REVERSED, reversalReason: "trip_cancelled", reversalAt: tripReversalNow, updatedAt: tripReversalNow })
+            .where(eq(referralsTable.id, ref.id));
         }
-      } catch (err) {
-        req.log.error({ err, tripId: req.params.id }, "Error reversing referrals on trip cancellation");
+      });
+
+      // Fire-and-forget reversal emails after the transaction commits.
+      for (const ref of referralsToReverse) {
+        dispatchReferralReversedEmail({
+          referrerId: ref.referrerId,
+          referredId: ref.referredId,
+          bonusAmount: ref.bonusAmount,
+          tenantId: me.tenantId,
+          reason: "trip_cancelled",
+        }).catch((err) => req.log.error({ err, referralId: ref.id }, "Error sending trip cancellation referral reversal email"));
       }
+    } else {
+      await db.update(tripsTable).set(updates)
+        .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
     }
 
     const [trip] = await db.select().from(tripsTable)

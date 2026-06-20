@@ -396,12 +396,17 @@ router.post("/referrals/:id/pay-bonus", async (req, res, next: NextFunction): Pr
       next(new AppError("Bônus já foi pago anteriormente", 422, "UNPROCESSABLE"));
       return;
     }
+    const [payBonusSettings] = await db
+      .select({ gracePeriodDays: referralSettingsTable.gracePeriodDays })
+      .from(referralSettingsTable)
+      .where(eq(referralSettingsTable.tenantId, me.tenantId))
+      .limit(1);
+    const payBonusGracePeriod = payBonusSettings?.gracePeriodDays ?? 30;
     if (row.convertedAt) {
-      const lockUntil = new Date(row.convertedAt);
-      lockUntil.setDate(lockUntil.getDate() + 30);
+      const lockUntil = new Date(new Date(row.convertedAt).getTime() + payBonusGracePeriod * 24 * 60 * 60 * 1000);
       if (new Date() < lockUntil) {
         const releaseDate = lockUntil.toLocaleDateString("pt-BR");
-        next(new AppError(`Bônus disponível somente 30 dias após a reserva. Liberação em ${releaseDate}`, 422, "BONUS_LOCKED")); 
+        next(new AppError(`Bônus disponível somente após o período de carência de ${payBonusGracePeriod} dias. Liberação em ${releaseDate}`, 422, "BONUS_LOCKED"));
         return;
       }
     }
