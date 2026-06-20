@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -884,6 +884,23 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                 <div>
                   <DialogTitle className="text-left">{client.name}</DialogTitle>
                   <p className="text-sm text-muted-foreground">{client.email}</p>
+                  {client.customerCode && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-muted-foreground">Código de Registro:</span>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 font-mono text-xs px-1.5 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
+                        title="Copiar código do cliente"
+                        onClick={() => {
+                          navigator.clipboard.writeText(client.customerCode!);
+                          toast({ title: "Código copiado!" });
+                        }}
+                      >
+                        {client.customerCode}
+                        <Copy className="w-3 h-3 ml-0.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {(() => {
                   const s = STATUS_LABELS[client.status];
