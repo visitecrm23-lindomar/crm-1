@@ -27,6 +27,7 @@ export const tenantsTable = pgTable("tenants", {
   settings: json("settings").$type<Record<string, unknown>>(),
   website: text("website"),
   reservationPrefix: text("reservation_prefix"),
+  prefixLocked: boolean("prefix_locked").notNull().default(false),
   lastClientSeq: integer("last_client_seq").notNull().default(0),
   maxUsersOverride: integer("max_users_override"),
   maxClientsOverride: integer("max_clients_override"),

@@ -4252,6 +4252,7 @@ export const GetTenantResponse = zod.object({
   secondaryColor: zod.string().nullish(),
   website: zod.string().nullish(),
   reservationPrefix: zod.string().nullish(),
+  prefixLocked: zod.boolean().nullish(),
   createdAt: zod.string(),
 });
 
@@ -4298,6 +4299,7 @@ export const UpdateTenantResponse = zod.object({
   secondaryColor: zod.string().nullish(),
   website: zod.string().nullish(),
   reservationPrefix: zod.string().nullish(),
+  prefixLocked: zod.boolean().nullish(),
   createdAt: zod.string(),
 });
 

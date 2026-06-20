@@ -2210,6 +2210,8 @@ export interface Tenant {
   website?: string | null;
   /** @nullable */
   reservationPrefix?: string | null;
+  /** @nullable */
+  prefixLocked?: boolean | null;
   createdAt: string;
 }
 

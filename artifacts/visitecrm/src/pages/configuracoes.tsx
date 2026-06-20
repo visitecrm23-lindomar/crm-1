@@ -394,21 +394,51 @@ function AgencyProfileTab() {
         </div>
       </div>
       <div className="space-y-1">
-        <Label>Prefixo de Reservas e Código de Cliente</Label>
+        <div className="flex items-center gap-2">
+          <Label>Prefixo de Identificação</Label>
+          {fullTenant?.prefixLocked && (
+            <Badge variant="secondary" className="text-xs gap-1">
+              <Lock className="w-3 h-3" />
+              Fixado
+            </Badge>
+          )}
+        </div>
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <Input
-              value={form.reservationPrefix ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, reservationPrefix: e.target.value.toUpperCase().slice(0, 5) }))}
-              placeholder="Ex: CHQ, AGT..."
-              className="font-mono w-36"
-              maxLength={5}
-            />
-            <span className="text-xs text-muted-foreground">1–5 letras maiúsculas</span>
-          </div>
+          {fullTenant?.prefixLocked ? (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted font-mono text-sm w-36">
+                <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span>{fullTenant.reservationPrefix || "—"}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">O prefixo não pode ser alterado após a primeira definição.</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Input
+                value={form.reservationPrefix ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 5);
+                  setForm((f) => ({ ...f, reservationPrefix: v }));
+                }}
+                placeholder="Ex: CHQ, AGT..."
+                className="font-mono w-36"
+                maxLength={5}
+              />
+              <span className="text-xs text-muted-foreground">1–5 letras. Será fixado ao salvar.</span>
+            </div>
+          )}
           <div className="text-xs text-muted-foreground space-y-0.5">
-            <p>Reservas: <span className="font-mono font-semibold text-foreground">{form.reservationPrefix || "CLI"}-EXC-202604-00001</span></p>
-            <p>Código de cliente: <span className="font-mono font-semibold text-foreground">{form.reservationPrefix || "CLI"}-{new Date().toISOString().slice(0, 7).replace("-", "")}-00043</span></p>
+            {(() => {
+              const now = new Date();
+              const yyyymm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+              const prefix = (fullTenant?.prefixLocked ? fullTenant.reservationPrefix : form.reservationPrefix) || "CLI";
+              return (
+                <>
+                  <p>Reservas: <span className="font-mono font-semibold text-foreground">{prefix}-EXC-{yyyymm}-00001</span></p>
+                  <p>Código de cliente: <span className="font-mono font-semibold text-foreground">{prefix}-{yyyymm}-00043</span></p>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

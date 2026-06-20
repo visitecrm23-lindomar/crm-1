@@ -30,6 +30,7 @@ const UpdateTenantBody = z.object({
   maxTripsOverride: z.number().int().nullable().optional(),
   website: z.string().nullable().optional(),
   reservationPrefix: z.string().max(5).optional().nullable(),
+  unlockPrefix: z.boolean().optional(),
   birthdayMessagesEnabled: z.boolean().nullable().optional(),
   couponsEnabled: z.boolean().nullable().optional(),
   referralsEnabled: z.boolean().nullable().optional(),
@@ -151,7 +152,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
-    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, ...rest } = parsed.data;
+    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, unlockPrefix: _unlockPrefix, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
@@ -161,9 +162,26 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
       delete updateData.maxTripsOverride;
     }
     if (updateData.reservationPrefix != null) {
-      updateData.reservationPrefix = (updateData.reservationPrefix as string).trim().toUpperCase().slice(0, 5) || null;
+      const rawPrefix = (updateData.reservationPrefix as string).trim().toUpperCase();
+      if (rawPrefix !== "" && !/^[A-Z]{1,5}$/.test(rawPrefix)) {
+        next(new ValidationError("O prefixo deve conter apenas letras (1–5 caracteres)", "PREFIX_INVALID"));
+        return;
+      }
+      updateData.reservationPrefix = rawPrefix || null;
     }
-    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl, planId: tenantsTable.planId }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl, planId: tenantsTable.planId, prefixLocked: tenantsTable.prefixLocked }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+    if (updateData.reservationPrefix != null && existing?.prefixLocked) {
+      if (me.role !== ROLES.SUPER_ADMIN) {
+        next(new ForbiddenError("O prefixo de identificação já foi definido e não pode ser alterado", "PREFIX_LOCKED"));
+        return;
+      }
+      if (parsed.data.unlockPrefix) {
+        updateData.prefixLocked = false;
+      }
+    }
+    if (updateData.reservationPrefix != null && !existing?.prefixLocked) {
+      updateData.prefixLocked = true;
+    }
     if (me.role !== ROLES.SUPER_ADMIN) {
       const rawPlanId = existing?.planId ?? "starter";
       const [planRow] = await db.select({ slug: plansTable.slug }).from(plansTable).where(eq(plansTable.id, rawPlanId)).limit(1);
