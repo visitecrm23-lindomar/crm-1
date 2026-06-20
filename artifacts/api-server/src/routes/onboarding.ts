@@ -3,7 +3,7 @@ import { db, tenantsTable, usersTable, plansTable, storesTable } from "@workspac
 import { eq, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES } from "@workspace/permissions";
 
@@ -51,10 +51,35 @@ router.post("/onboarding/agency", async (req, res, next: NextFunction): Promise<
   try {
     const auth = requireAuthLight(req);
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
+    let [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
     if (!user) {
-      next(new NotFoundError("User not found. Please sync first.", "USER_NOT_FOUND"));
-      return;
+      // Defensive upsert: the frontend should have called /users/me/sync first,
+      // but if it didn't (e.g. direct navigation, network race), create the user
+      // row now from Clerk data so the onboarding form submission can proceed.
+      try {
+        const clerkUser = await clerkClient.users.getUser(auth.clerkId);
+        const primaryEmail = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+        const email = primaryEmail?.emailAddress ?? "";
+        const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || "Usuário";
+        const userId = generateId();
+        const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const superadminClerkId = process.env.SUPERADMIN_CLERK_ID;
+        const role = (superadminClerkId && auth.clerkId === superadminClerkId) ? ROLES.SUPER_ADMIN : ROLES.AGENCY_ADMIN;
+        await db.insert(usersTable).values({
+          id: userId, clerkId: auth.clerkId, tenantId: null, name, email,
+          avatarUrl: clerkUser.imageUrl ?? null, role, referralCode, referralBalance: "0",
+        });
+        const [created] = await db.select().from(usersTable).where(eq(usersTable.clerkId, auth.clerkId)).limit(1);
+        if (!created) {
+          next(new AppError("Failed to provision user", 500, "USER_CREATE_FAILED"));
+          return;
+        }
+        user = created;
+      } catch (clerkErr) {
+        req.log.error({ clerkErr, clerkId: auth.clerkId }, "Failed to auto-provision user from Clerk during onboarding");
+        next(new NotFoundError("User not found. Please refresh and try again.", "USER_NOT_FOUND"));
+        return;
+      }
     }
     if (user.tenantId) {
       next(new ConflictError("User already has a tenant assigned", "TENANT_ALREADY_ASSIGNED"));

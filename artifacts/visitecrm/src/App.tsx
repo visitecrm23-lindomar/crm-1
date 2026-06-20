@@ -277,11 +277,36 @@ function RoleGate({
 }
 
 function OnboardingRoute() {
-  const { data: me, isLoading } = useGetMe();
+  const syncMe = useSyncMe();
+  const { data: me, isLoading, refetch } = useGetMe();
+  const { user } = useUser();
+  const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const [synced, setSynced] = useState(false);
 
   useEffect(() => {
-    if (isLoading || !me) return;
+    if (!user) return;
+    syncMe.mutate(
+      {
+        data: {
+          clerkId: user.id,
+          name: user.fullName ?? user.firstName ?? "Usuário",
+          email: user.primaryEmailAddress?.emailAddress ?? "",
+          avatarUrl: user.imageUrl ?? undefined,
+        },
+      },
+      {
+        onSettled: () => {
+          qc.invalidateQueries({ queryKey: ["/api/users/me"] });
+          refetch().then(() => setSynced(true));
+        },
+        onError: () => setSynced(true),
+      }
+    );
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!synced || isLoading || !me) return;
     if (me.tenantId) {
       if (me.role === ROLES.SUPER_ADMIN) {
         setLocation("/admin");
@@ -293,12 +318,20 @@ function OnboardingRoute() {
         setLocation("/dashboard");
       }
     }
-  }, [me, isLoading]);
+  }, [synced, me, isLoading]);
+
+  const ready = synced && !isLoading;
 
   return (
     <>
       <Show when="signed-in">
-        {!isLoading && <OnboardingPage />}
+        {ready ? (
+          <OnboardingPage />
+        ) : (
+          <div className="flex min-h-screen items-center justify-center">
+            <div className="animate-pulse text-muted-foreground text-sm">Carregando...</div>
+          </div>
+        )}
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
