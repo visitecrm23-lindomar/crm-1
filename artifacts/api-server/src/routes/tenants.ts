@@ -4,7 +4,7 @@ import { eq, desc, count, or } from "drizzle-orm";
 import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
-import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { ROLES } from "@workspace/permissions";
 import { canEnableFeature, getFeatureLabel, getFeatureRequiredPlanLabel, hasSeatMapFeature } from "../lib/plan-features";

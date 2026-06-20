@@ -310,7 +310,11 @@ function AgencyProfileTab() {
     }
     setPrefixError(null);
     try {
-      await updateTenant.mutateAsync({ id: tenantId, data: form });
+      const submitData = { ...form };
+      if (fullTenant?.prefixLocked) {
+        delete submitData.reservationPrefix;
+      }
+      await updateTenant.mutateAsync({ id: tenantId, data: submitData });
       toast({ title: "Perfil da agência atualizado" });
       await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
       refetchMe();

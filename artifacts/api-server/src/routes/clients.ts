@@ -478,6 +478,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     if (me.role === ROLES.CLIENT) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const existing = await requireClientAccess(me, req.params.id);
 
+    delete (req.body as Record<string, unknown>).customerCode;
     const parsed = UpdateClientBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
 

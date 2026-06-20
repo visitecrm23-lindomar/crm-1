@@ -571,18 +571,21 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
           <div className="flex items-center gap-3 flex-wrap">
             <DialogTitle>{isEditing ? `Editar: ${editClient?.name}` : "Novo Cliente"}</DialogTitle>
             {isEditing && editClient?.customerCode && (
-              <button
-                type="button"
-                className="flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
-                title="Copiar código do cliente"
-                onClick={() => {
-                  navigator.clipboard.writeText(editClient.customerCode!);
-                  toast({ title: "Código copiado!" });
-                }}
-              >
-                {editClient.customerCode}
-                <Copy className="w-3 h-3 ml-0.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-normal">Código de Registro:</span>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded bg-muted border hover:bg-muted/70 transition-colors text-muted-foreground"
+                  title="Copiar código do cliente"
+                  onClick={() => {
+                    navigator.clipboard.writeText(editClient.customerCode!);
+                    toast({ title: "Código copiado!" });
+                  }}
+                >
+                  {editClient.customerCode}
+                  <Copy className="w-3 h-3 ml-0.5" />
+                </button>
+              </div>
             )}
           </div>
         </DialogHeader>
