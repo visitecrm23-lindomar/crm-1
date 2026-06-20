@@ -5,6 +5,7 @@ import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { useSyncMe, useGetMe } from "@workspace/api-client-react";
 
 import Layout from "@/components/layout";
@@ -285,7 +286,17 @@ function OnboardingRoute() {
   // syncDone gates the form only for new users (me === null after loading).
   // Already-synced users (me !== null) skip this gate entirely.
   const [syncDone, setSyncDone] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  // Incrementing retryKey re-triggers both the watchdog and sync effects.
+  const [retryKey, setRetryKey] = useState(0);
   const syncStartedRef = useRef(false);
+
+  // 10-second watchdog. Cancelled when syncDone becomes true or on retry.
+  useEffect(() => {
+    if (syncDone) return;
+    const t = setTimeout(() => setTimedOut(true), 10_000);
+    return () => clearTimeout(t);
+  }, [syncDone, retryKey]);
 
   useEffect(() => {
     // Already in DB — release the gate immediately, no sync needed.
@@ -295,7 +306,7 @@ function OnboardingRoute() {
     }
     // Still loading or no Clerk user yet — wait.
     if (isLoading || !user) return;
-    // me is null and loading is done → new user, needs sync. Run once.
+    // me is null and loading is done → new user, needs sync. Run once per retryKey.
     if (syncStartedRef.current) return;
     syncStartedRef.current = true;
 
@@ -316,7 +327,7 @@ function OnboardingRoute() {
         onError: () => setSyncDone(true),
       }
     );
-  }, [user?.id, isLoading, !!me]);
+  }, [user?.id, isLoading, !!me, retryKey]);
 
   useEffect(() => {
     if (!syncDone || isLoading || !me) return;
@@ -333,7 +344,14 @@ function OnboardingRoute() {
     }
   }, [syncDone, me, isLoading]);
 
-  // Show form as soon as we're ready: either already synced or sync completed.
+  function handleRetry() {
+    syncStartedRef.current = false;
+    setTimedOut(false);
+    setSyncDone(false);
+    setRetryKey((k) => k + 1);
+  }
+
+  // Show form as soon as we're ready; ready takes precedence over timedOut.
   const ready = syncDone && !isLoading;
 
   return (
@@ -341,6 +359,13 @@ function OnboardingRoute() {
       <Show when="signed-in">
         {ready ? (
           <OnboardingPage />
+        ) : timedOut ? (
+          <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.
+            </p>
+            <Button onClick={handleRetry}>Tentar novamente</Button>
+          </div>
         ) : (
           <div className="flex min-h-screen items-center justify-center">
             <div className="animate-pulse text-muted-foreground text-sm">Carregando...</div>
