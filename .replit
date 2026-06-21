@@ -162,11 +162,10 @@ timeoutMs = 300000
   [userenv]
 
   [userenv.production]
-FRONTEND_URL = "https://visite-cariri-cearense-receptivo.replit.app"
-ADDITIONAL_ORIGINS = "https://visite-cariri-cearense-receptivo.replit.app"
-VITE_APP_URL = "https://visite-cariri-cearense-receptivo.replit.app"
-CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
-VITE_CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
+FRONTEND_URL = "https://visitecrm.pro"
+ADDITIONAL_ORIGINS = "https://visitecariri.com.br,https://visite-cariri-cearense-receptivo.replit.app"
+VITE_APP_URL = "https://visitecrm.pro"
+CLERK_PROXY_URL = "https://visitecrm.pro/api/__clerk"
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
 

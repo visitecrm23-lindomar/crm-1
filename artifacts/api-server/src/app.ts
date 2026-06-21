@@ -43,10 +43,21 @@ const additionalOrigins = (process.env["ADDITIONAL_ORIGINS"] ?? "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+// REPLIT_DOMAINS is a platform-managed secret containing all domains attached to this
+// deployment (custom domains + the generated .replit.app subdomain), comma-separated.
+// Parsing it here ensures every domain gets CORS + Clerk authorizedParties coverage
+// automatically, without having to enumerate each one manually in ADDITIONAL_ORIGINS.
+const replitDomains = (process.env["REPLIT_DOMAINS"] ?? "")
+  .split(",")
+  .map((d) => d.trim())
+  .filter(Boolean)
+  .map((d) => (d.startsWith("https://") || d.startsWith("http://") ? d : `https://${d}`));
+
 const ALLOWED_ORIGINS = new Set(
   [
     process.env["FRONTEND_URL"],
     process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+    ...replitDomains,
     ...additionalOrigins,
   ].filter(Boolean) as string[]
 );
@@ -142,6 +153,7 @@ const authorizedParties = [
   process.env["FRONTEND_URL"],
   clerkProxyOrigin,
   process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
+  ...replitDomains,
   ...additionalOrigins,
 ].filter(Boolean) as string[];
 

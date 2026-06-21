@@ -81,22 +81,22 @@ import ParceirosPortal from "@/pages/parceiros/index";
 import { ROLES, ADMIN_ROLES } from "@workspace/permissions";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-// In development (Replit preview is a cross-site iframe over HTTPS), route
-// Clerk's Frontend API through the same-origin backend proxy at /api/__clerk so
-// its cookies are first-party and reach the API. The backend mirrors this by
-// deriving CLERK_PROXY_URL from REPLIT_DEV_DOMAIN. Without this, the frontend
+// Route Clerk's Frontend API through the same-origin backend proxy at /api/__clerk so
+// its cookies are first-party and reach the API. Without this, the frontend
 // talks directly to Clerk's FAPI, its cookies are third-party (blocked in the
 // iframe), every /api request is unauthenticated, and RoleRedirect loops to
-// /sign-in. Clerk always loads its clerk-js script over HTTPS, so we only engage
-// the proxy when the current origin is itself HTTPS; on plain http://localhost
-// we fall back to Clerk's direct FAPI (which is reachable over HTTPS). In
-// production VITE_CLERK_PROXY_URL is honored if set; otherwise no proxy is used
-// (the deployed app is a top-level context, so direct FAPI works).
+// /sign-in.
+//
+// We derive the proxy URL from window.location.origin so it always points to the
+// CURRENT domain — whether that is visitecrm.pro, visitecariri.com.br or the
+// .replit.app fallback. This eliminates the need for a hardcoded VITE_CLERK_PROXY_URL
+// and ensures multi-domain setups work without any extra env-var configuration.
+// A VITE_CLERK_PROXY_URL override is still respected when explicitly set.
+// On plain http://localhost (no HTTPS) we skip the proxy and let Clerk use its
+// direct FAPI, which is reachable over HTTPS from an HTTP page.
 const clerkProxyUrl: string | undefined =
   import.meta.env.VITE_CLERK_PROXY_URL ||
-  (import.meta.env.DEV &&
-  typeof window !== "undefined" &&
-  window.location.protocol === "https:"
+  (typeof window !== "undefined" && window.location.protocol === "https:"
     ? `${window.location.origin}/api/__clerk`
     : undefined);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
