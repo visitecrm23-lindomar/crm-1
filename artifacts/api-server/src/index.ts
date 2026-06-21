@@ -88,6 +88,15 @@ if (Number.isNaN(port) || port <= 0) {
   }
 }
 
+// UploadThing token validation — warn at startup so missing config is immediately visible.
+if (!process.env["UPLOADTHING_TOKEN"]) {
+  logger.warn(
+    "⚠️  UPLOADTHING_TOKEN is not set; all file upload endpoints (/api/uploadthing) will fail with 'Missing token' until it is configured.",
+  );
+} else {
+  logger.info("[uploadthing] UPLOADTHING_TOKEN is configured — file uploads are enabled.");
+}
+
 const __serverDir = path.dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = path.resolve(__serverDir, "../../../lib/db/drizzle");
 
