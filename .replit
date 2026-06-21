@@ -165,6 +165,8 @@ timeoutMs = 300000
 FRONTEND_URL = "https://visite-cariri-cearense-receptivo.replit.app"
 ADDITIONAL_ORIGINS = "https://visite-cariri-cearense-receptivo.replit.app"
 VITE_APP_URL = "https://visite-cariri-cearense-receptivo.replit.app"
+CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
+VITE_CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
