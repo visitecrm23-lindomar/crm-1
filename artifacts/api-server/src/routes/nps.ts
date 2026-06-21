@@ -6,6 +6,15 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function classifyScore(score: number): "promoter" | "passive" | "detractor" {
   if (score >= 9) return "promoter";
   if (score >= 7) return "passive";
@@ -42,7 +51,7 @@ function thankYouHtml(agencyName: string, score: number): string {
     <div class="score">${score}</div>
     <h1>Obrigado pela sua avaliação!</h1>
     <p>${message}</p>
-    <p class="agency">${agencyName}</p>
+    <p class="agency">${escapeHtml(agencyName)}</p>
   </div>
 </body>
 </html>`;

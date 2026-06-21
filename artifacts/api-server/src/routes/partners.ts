@@ -473,7 +473,10 @@ router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promi
     if (!me) return;
     if (!MANAGEMENT_ROLES.includes(me.role as never)) { next(new ForbiddenError("Acesso restrito", "FORBIDDEN_ROLE")); return; }
     const { period } = req.query;
-    const currentPeriod = typeof period === "string" ? period : new Date().toISOString().slice(0, 7);
+    const rawPeriod = typeof period === "string" ? period : "";
+    const currentPeriod = /^\d{4}-(0[1-9]|1[0-2])$/.test(rawPeriod)
+      ? rawPeriod
+      : new Date().toISOString().slice(0, 7);
 
     const rows = await db
       .select({
@@ -500,10 +503,13 @@ router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promi
       const totalGross = rows.reduce((s, r) => s + Number(r.grossAmount), 0);
       const totalPartner = rows.reduce((s, r) => s + Number(r.partnerAmount), 0);
       const totalAgency = rows.reduce((s, r) => s + Number(r.agencyAmount), 0);
+      const escHtml = (v: string | null | undefined) => String(v ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
       const rowsHtml = rows.map(r => `
         <tr>
-          <td>${r.partnerName ?? ""}</td>
-          <td>${r.partnerEmail ?? ""}</td>
+          <td>${escHtml(r.partnerName)}</td>
+          <td>${escHtml(r.partnerEmail)}</td>
           <td class="text-right">${r.orderCount}</td>
           <td class="text-right">${brl(Number(r.grossAmount))}</td>
           <td class="text-right">${brl(Number(r.partnerAmount))}</td>
