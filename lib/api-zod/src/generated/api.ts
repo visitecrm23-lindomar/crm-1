@@ -3889,6 +3889,9 @@ export const CreateCampaignBody = zod.object({
   content: zod.string(),
   targetSegment: zod.record(zod.string(), zod.unknown()),
   scheduledAt: zod.string().nullish(),
+  triggerType: zod.string().optional(),
+  triggerConfig: zod.record(zod.string(), zod.unknown()).nullish(),
+  autoEnabled: zod.boolean().optional(),
 });
 
 /**

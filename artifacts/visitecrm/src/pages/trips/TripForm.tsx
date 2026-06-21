@@ -876,7 +876,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
               </DialogHeader>
               <div className="space-y-3">
                 <CoverImageUpload
-                  value={newPhotoUrl}
+                  value={newPhotoUrl ?? ""}
                   onChange={(url) => setNewPhotoUrl(url)}
                   onUploadingChange={(u) => setAddingPhoto(u)}
                   disabled={addingPhoto || savingPhoto}

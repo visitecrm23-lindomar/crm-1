@@ -136,7 +136,7 @@ export function BoardingControlPage({ tripId }: { tripId: string }) {
         });
         markerRef.current = L.marker([latN, lngN], { icon: busIcon })
           .addTo(map)
-          .bindPopup(data.guideLocation.guideName ? `Guia: ${data.guideLocation.guideName}` : "Localização do guia");
+          .bindPopup(data.guideLocation?.guideName ? `Guia: ${data.guideLocation.guideName}` : "Localização do guia");
         map.setView([latN, lngN], 14);
       }
     });

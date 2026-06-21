@@ -1984,6 +1984,10 @@ export interface CreateCampaignBody {
   targetSegment: CreateCampaignBodyTargetSegment;
   /** @nullable */
   scheduledAt?: string | null;
+  triggerType?: string;
+  /** @nullable */
+  triggerConfig?: Record<string, unknown> | null;
+  autoEnabled?: boolean;
 }
 
 export interface UpdateCampaignBody {
@@ -2474,6 +2478,7 @@ export interface ReferralSettings {
   bonusReleaseEmailEnabled: boolean;
   pointsPerReferral: number;
   gracePeriodDays: number;
+  bonusValidityDays: number;
   discountExpirationDays: number;
   /** @nullable */
   minPurchaseAmount?: string | null;
@@ -2503,6 +2508,7 @@ export interface UpdateReferralSettingsBody {
   bonusReleaseEmailEnabled?: boolean;
   pointsPerReferral?: number;
   gracePeriodDays?: number;
+  bonusValidityDays?: number;
   discountExpirationDays?: number;
   minPurchaseAmount?: number;
   maxReferralsPerUser?: number;
