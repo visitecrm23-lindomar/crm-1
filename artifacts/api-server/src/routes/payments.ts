@@ -14,7 +14,7 @@ import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib
 import { syncReservationPaymentStatus } from "../lib/reservation-payments";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
-import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
+import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, hasPermission, RESOURCES, ACTIONS, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
 import { moveDealToStage } from "../services/pipeline-automation";
 
@@ -245,6 +245,7 @@ router.get("/trips/:tripId/financial-report", async (req, res, next: NextFunctio
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const { tripId } = req.params;
 
     const tripReservations = await db.select().from(reservationsTable)
@@ -327,6 +328,7 @@ router.get("/payments/summary", async (req, res, next: NextFunction): Promise<vo
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -409,8 +411,11 @@ router.get("/payments", async (req, res, next: NextFunction): Promise<void> => {
       } else {
         conditions.push(inArray(paymentsTable.clientId, sellerClientIds));
       }
-    } else if (clientIdParam) {
-      conditions.push(eq(paymentsTable.clientId, clientIdParam));
+    } else {
+      if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) {
+        next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
+      }
+      if (clientIdParam) conditions.push(eq(paymentsTable.clientId, clientIdParam));
     }
 
     const payments = await db.select().from(paymentsTable)
@@ -555,6 +560,8 @@ async function requirePaymentAccess(
     if (!clientRecord || clientRecord.createdById !== me.id) {
       throw new NotFoundError("Payment not found", "NOT_FOUND");
     }
+  } else if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) {
+    throw new ForbiddenError("Forbidden", "FORBIDDEN_ROLE");
   }
   return payment;
 }
@@ -639,6 +646,7 @@ router.get("/expenses", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const { tripId, status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const pageNum = parseInt(page) || 1;
@@ -667,6 +675,7 @@ router.post("/expenses", async (req, res, next: NextFunction): Promise<void> => 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.CREATE)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateExpenseBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message))); return; }
 

@@ -78,10 +78,11 @@ async function resolveInviteForUser(
         eq(invitesTable.id, inviteIdFromMeta),
         eq(invitesTable.accepted, false),
         eq(invitesTable.email, canonicalEmail),
+        gt(invitesTable.expiresAt, new Date()),
       ))
       .limit(1);
     if (byId) return byId;
-    log.warn({ clerkId, inviteIdFromMeta }, "Clerk metadata inviteId found but email mismatch — ignoring for security");
+    log.warn({ clerkId, inviteIdFromMeta }, "Clerk metadata inviteId found but email mismatch or expired — ignoring for security");
   }
 
   const [byEmail] = await db.select().from(invitesTable)

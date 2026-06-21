@@ -69,7 +69,7 @@ const AGENCY_NAVIGATION: NavItem[] = [
   { name: "Viagens", href: "/trips", icon: Map },
   { name: "Reservas", href: "/reservations", icon: CalendarCheck },
   { name: "Vouchers", href: "/vouchers", icon: QrCode },
-  { name: "Financeiro", href: "/financeiro", icon: DollarSign },
+  { name: "Financeiro", href: "/financeiro", icon: DollarSign, hiddenFor: [ROLES.SUPPORT] },
   { name: "Comunicação", href: "/comunicacao", icon: MessageSquare },
   { name: "Campanhas", href: "/comunicacao/campanhas", icon: Megaphone },
   { name: "Automações", href: "/automacoes", icon: Zap },
@@ -205,7 +205,9 @@ export default function Layout({ children }: { children: ReactNode }) {
       };
     }
     return item;
-  }).filter((item) => item.href !== "/indicacoes" || referralsEnabled);
+  })
+    .filter((item) => item.href !== "/indicacoes" || referralsEnabled)
+    .filter((item) => !item.hiddenFor || !userRole || !item.hiddenFor.includes(userRole));
 
   const navItems = userRole === ROLES.SALES ? VENDOR_NAVIGATION : agencyNav;
 

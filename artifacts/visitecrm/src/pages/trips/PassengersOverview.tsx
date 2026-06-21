@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useListTrips, useGetTrip, useListReservations, useUpdateReservation } from "@workspace/api-client-react";
-import { RESERVATION_STATUS, type ReservationStatus } from "@workspace/permissions";
+import { useListTrips, useGetTrip, useListReservations, useUpdateReservation, useGetMe } from "@workspace/api-client-react";
+import { RESERVATION_STATUS, hasPermission, RESOURCES, ACTIONS, type ReservationStatus } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -58,6 +58,8 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const { data: reservations, refetch: refetchReservations } = useListReservations({ tripId, limit: 200 });
   const updateReservation = useUpdateReservation();
+  const { data: me } = useGetMe();
+  const canViewFinancial = me ? hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW) : false;
   const { data: financialReport, isLoading: loadingReport } = useQuery<TripFinancialReport>({
     queryKey: ["trip-financial-report", tripId],
     queryFn: async () => {
@@ -65,7 +67,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    enabled: financialReportOpen && !!tripId,
+    enabled: financialReportOpen && !!tripId && canViewFinancial,
   });
 
   const filteredReservations = useMemo(() => {
@@ -611,18 +613,22 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <Link href={`/reservations?tripId=${tripId}&new=true`}><Button><Plus className="w-4 h-4 mr-2" />Adicionar Passageiro</Button></Link>
           <Button variant="outline"><Download className="w-4 h-4 mr-2" />Exportar PDF</Button>
           <Button variant="outline"><Send className="w-4 h-4 mr-2" />Enviar WhatsApp</Button>
-          <Button variant="outline" onClick={() => setFinancialReportOpen(true)}>
-            <DollarSign className="w-4 h-4 mr-2" />Relatório Financeiro
-          </Button>
+          {canViewFinancial && (
+            <Button variant="outline" onClick={() => setFinancialReportOpen(true)}>
+              <DollarSign className="w-4 h-4 mr-2" />Relatório Financeiro
+            </Button>
+          )}
           <Button variant="outline" className="text-destructive border-destructive/40 hover:bg-destructive/10"><X className="w-4 h-4 mr-2" />Encerrar Viagem</Button>
         </div>
       </div>
 
-      <PassengersOverviewFinancialDialog
-        open={financialReportOpen} onClose={setFinancialReportOpen}
-        loadingReport={loadingReport} financialReport={financialReport as never}
-        tripName={trip?.name}
-      />
+      {canViewFinancial && (
+        <PassengersOverviewFinancialDialog
+          open={financialReportOpen} onClose={setFinancialReportOpen}
+          loadingReport={loadingReport} financialReport={financialReport as never}
+          tripName={trip?.name}
+        />
+      )}
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
 
       <AlertDialog open={bulkCancelOpen} onOpenChange={o => { if (!o) setBulkCancelOpen(false); }}>

@@ -5,8 +5,8 @@ import { eq, and } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
-import { EXPENSE_STATUS } from "@workspace/permissions";
+import { ADMIN_ROLES } from '../lib/tenant';
+import { EXPENSE_STATUS, hasPermission, RESOURCES, ACTIONS } from "@workspace/permissions";
 
 const router = Router();
 
@@ -34,6 +34,7 @@ router.get("/trips/:id/costs", async (req, res, next: NextFunction): Promise<voi
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const [trip] = await db.select({ id: tripsTable.id })
       .from(tripsTable)
@@ -51,7 +52,7 @@ router.get("/trips/:id/costs", async (req, res, next: NextFunction): Promise<voi
       confirmedSeats: tripsTable.confirmedSeats,
       fixedCosts: tripsTable.fixedCosts,
       variableCosts: tripsTable.variableCosts,
-    }).from(tripsTable).where(eq(tripsTable.id, req.params.id)).limit(1);
+    }).from(tripsTable).where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId))).limit(1);
 
     const totalRealCosts = costs.reduce((s, c) => s + Number(c.amount), 0);
     const totalPaidCosts = costs.filter(c => c.status === EXPENSE_STATUS.PAID).reduce((s, c) => s + Number(c.amount), 0);
@@ -92,7 +93,7 @@ router.post("/trips/:id/costs", async (req, res, next: NextFunction): Promise<vo
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ALL_STAFF_ROLES.includes(me.role)) {
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.CREATE)) {
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
@@ -125,7 +126,7 @@ router.post("/trips/:id/costs", async (req, res, next: NextFunction): Promise<vo
       notes: notes ? String(notes) : null,
     });
 
-    const [cost] = await db.select().from(tripCostsTable).where(eq(tripCostsTable.id, id)).limit(1);
+    const [cost] = await db.select().from(tripCostsTable).where(and(eq(tripCostsTable.id, id), eq(tripCostsTable.tenantId, me.tenantId))).limit(1);
     res.status(201).json(formatCost(cost!));
   } catch (err) {
     next(err);
@@ -136,7 +137,7 @@ router.put("/trips/:id/costs/:costId", async (req, res, next: NextFunction): Pro
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
-    if (!ALL_STAFF_ROLES.includes(me.role)) {
+    if (!hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.EDIT)) {
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
@@ -168,9 +169,9 @@ router.put("/trips/:id/costs/:costId", async (req, res, next: NextFunction): Pro
     if (notes !== undefined) updates.notes = notes ? String(notes) : null;
 
     await db.update(tripCostsTable).set(updates)
-      .where(eq(tripCostsTable.id, req.params.costId));
+      .where(and(eq(tripCostsTable.id, req.params.costId), eq(tripCostsTable.tenantId, me.tenantId)));
 
-    const [cost] = await db.select().from(tripCostsTable).where(eq(tripCostsTable.id, req.params.costId)).limit(1);
+    const [cost] = await db.select().from(tripCostsTable).where(and(eq(tripCostsTable.id, req.params.costId), eq(tripCostsTable.tenantId, me.tenantId))).limit(1);
     res.json(formatCost(cost!));
   } catch (err) {
     next(err);
@@ -196,7 +197,7 @@ router.delete("/trips/:id/costs/:costId", async (req, res, next: NextFunction): 
     if (!existing) { next(new NotFoundError("Custo não encontrado", "NOT_FOUND")); return; }
 
     await db.delete(tripCostsTable)
-      .where(eq(tripCostsTable.id, req.params.costId));
+      .where(and(eq(tripCostsTable.id, req.params.costId), eq(tripCostsTable.tenantId, me.tenantId)));
 
     res.json({ success: true });
   } catch (err) {

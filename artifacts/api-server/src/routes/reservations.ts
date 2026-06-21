@@ -125,16 +125,16 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
 }
 
 async function formatReservation(r: typeof reservationsTable.$inferSelect) {
-  const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, r.tripId)).limit(1);
-  const [client] = r.clientId ? await db.select().from(clientsTable).where(eq(clientsTable.id, r.clientId)).limit(1) : [];
+  const [trip] = await db.select().from(tripsTable).where(and(eq(tripsTable.id, r.tripId), eq(tripsTable.tenantId, r.tenantId))).limit(1);
+  const [client] = r.clientId ? await db.select().from(clientsTable).where(and(eq(clientsTable.id, r.clientId), eq(clientsTable.tenantId, r.tenantId))).limit(1) : [];
   const [autoRetryLog] = await db.select({ id: emailLogsTable.id })
     .from(emailLogsTable)
-    .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true)))
+    .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true), eq(emailLogsTable.tenantId, r.tenantId)))
     .limit(1);
   const [layoutRow] = trip?.layoutId
     ? await db.select({ numberingType: vehicleLayoutsTable.numberingType })
         .from(vehicleLayoutsTable)
-        .where(eq(vehicleLayoutsTable.id, trip.layoutId))
+        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, r.tenantId)))
         .limit(1)
     : [undefined];
   const numberingType = layoutRow?.numberingType ?? null;

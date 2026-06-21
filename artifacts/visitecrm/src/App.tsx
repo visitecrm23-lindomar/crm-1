@@ -209,6 +209,8 @@ function HomeRedirect() {
 }
 
 const AGENCY_ROLES = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SUPPORT, ROLES.SUPER_ADMIN] as const;
+// Finance pages expose tenant-wide financial data; restricted to roles with FINANCIAL view in the permission matrix (excludes SUPPORT).
+const FINANCE_ROLES = [ROLES.AGENCY_ADMIN, ROLES.AGENCY_MANAGER, ROLES.SUPER_ADMIN] as const;
 const SUPERADMIN_ONLY = [ROLES.SUPER_ADMIN] as const;
 const VENDEDOR_ONLY = [ROLES.SALES] as const;
 const CLIENTE_ONLY = [ROLES.CLIENT] as const;
@@ -426,9 +428,9 @@ function Router() {
 
       {/* Agency-only routes — vendedor redirected to /meu-painel */}
       <Route path="/financial" component={() => <Redirect to="/financeiro" />} />
-      <Route path="/financeiro" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Financial} />} />
-      <Route path="/financeiro/commissions" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Commissions} />} />
-      <Route path="/financeiro/expenses" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Expenses} />} />
+      <Route path="/financeiro" component={() => <RoleGate allowedRoles={FINANCE_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Financial} />} />
+      <Route path="/financeiro/commissions" component={() => <RoleGate allowedRoles={FINANCE_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Commissions} />} />
+      <Route path="/financeiro/expenses" component={() => <RoleGate allowedRoles={FINANCE_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Expenses} />} />
       <Route path="/comunicacao" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Communication} />} />
       <Route path="/communication" component={() => <Redirect to="/comunicacao" />} />
       <Route path="/comunicacao/campanhas" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Campaigns} />} />
@@ -451,7 +453,7 @@ function Router() {
 
       {/* Analytics */}
       <Route path="/analytics" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Analytics} />} />
-      <Route path="/analytics/revenue" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Revenue} />} />
+      <Route path="/analytics/revenue" component={() => <RoleGate allowedRoles={FINANCE_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Revenue} />} />
       <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
       <Route path="/analytics/vendedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Vendedores} />} />
       <Route path="/insights" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Insights} />} />

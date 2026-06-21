@@ -235,10 +235,23 @@ const orderLookupLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
+// Dedicated limiter for the referral visit-tracking write endpoint. It is more
+// generous than /validate and /info (it fires per storefront page view) but
+// still bounds anonymous write amplification against referral_tracking, which
+// the shared publicGeneralLimiter alone does not isolate.
+const referralTrackLimiter = rateLimit({
+  windowMs: 60_000,
+  max: parseRateLimitEnv("RATE_LIMIT_REFERRAL_TRACK_MAX", 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
 app.use("/api/public", publicGeneralLimiter);
 app.post("/api/public/store/:slug/orders", publicOrderLimiter);
 app.get("/api/public/store/:slug/orders/:orderNumber", orderLookupLimiter);
 app.post("/api/public/store/:slug/referral/validate", referralValidateLimiter);
+app.post("/api/public/store/:slug/referral/track", referralTrackLimiter);
 app.get("/api/public/store/:slug/referral/info", referralInfoLimiter);
 app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
 

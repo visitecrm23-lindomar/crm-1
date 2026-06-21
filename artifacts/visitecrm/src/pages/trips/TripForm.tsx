@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations, useGetCurrentSubscription } from "@workspace/api-client-react";
+import { useGetTrip, useCreateTrip, useUpdateTrip, useListLayouts, useListBoardingLocations, useGetCurrentSubscription, useGetMe } from "@workspace/api-client-react";
 import { PlanLimitWall, usePlanLimitError } from "@/components/plan-limit-wall";
 import { CoverImageUpload } from "@/components/cover-image-upload";
 import { GalleryUpload } from "@/components/gallery-upload";
@@ -19,7 +19,7 @@ import { TiptapEditor } from "./TiptapEditor";
 import { LayoutMiniPreview, TripCostsTab } from "./TripCostsSection";
 import { formatCurrency } from "./utils";
 import { TRIP_TYPES, TRIP_TYPE_LABELS, VEHICLE_TYPES, FIXED_COST_CATEGORIES, VARIABLE_COST_CATEGORIES } from "./constants";
-import { TRIP_STATUS, type TripStatus } from "@workspace/permissions";
+import { TRIP_STATUS, hasPermission, RESOURCES, ACTIONS, type TripStatus } from "@workspace/permissions";
 import { type TripFormData, EMPTY_FORM, toTripFormData, newBP, newDay } from "./types";
 import { TripFormPricesTab } from "./TripFormPricesTab";
 import { TripFormTransportTab } from "./TripFormTransportTab";
@@ -29,6 +29,8 @@ const TRIP_FORM_API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 export function TripForm({ tripId }: { tripId?: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { data: me } = useGetMe();
+  const canViewFinancial = me ? hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW) : false;
   const [tab, setTab] = useState("basico");
   const [form, setForm] = useState<TripFormData>(EMPTY_FORM);
   const [memoryPhotos, setMemoryPhotos] = useState<Array<{ id: string; url: string; type: string; caption: string | null; createdAt: string }>>([]);
@@ -334,7 +336,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
     { id: "inclusoes", label: "Inclusões / Exclusões" },
     { id: "transporte", label: "Transporte e Hospedagem" },
     { id: "midia", label: "Mídia" },
-    ...(tripId ? [{ id: "custos", label: "Custos" }] : []),
+    ...(tripId && canViewFinancial ? [{ id: "custos", label: "Custos" }] : []),
   ];
 
   const canSave = !!form.name && !!form.destination && !!form.destinationCity && !!form.destinationState && !!form.departureDate && !!form.priceAdult;
@@ -901,7 +903,7 @@ export function TripForm({ tripId }: { tripId?: string }) {
           </Dialog>
         </TabsContent>
 
-        {tripId && (
+        {tripId && canViewFinancial && (
           <TabsContent value="custos" className="space-y-4 mt-6">
             <TripCostsTab tripId={tripId} />
           </TabsContent>
