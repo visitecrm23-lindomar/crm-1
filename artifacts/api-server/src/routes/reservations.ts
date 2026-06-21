@@ -124,20 +124,15 @@ async function syncClientDeal(clientId: string, tenantId: string, tripId: string
   }
 }
 
-async function formatReservation(r: typeof reservationsTable.$inferSelect) {
-  const [trip] = await db.select().from(tripsTable).where(and(eq(tripsTable.id, r.tripId), eq(tripsTable.tenantId, r.tenantId))).limit(1);
-  const [client] = r.clientId ? await db.select().from(clientsTable).where(and(eq(clientsTable.id, r.clientId), eq(clientsTable.tenantId, r.tenantId))).limit(1) : [];
-  const [autoRetryLog] = await db.select({ id: emailLogsTable.id })
-    .from(emailLogsTable)
-    .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true), eq(emailLogsTable.tenantId, r.tenantId)))
-    .limit(1);
-  const [layoutRow] = trip?.layoutId
-    ? await db.select({ numberingType: vehicleLayoutsTable.numberingType })
-        .from(vehicleLayoutsTable)
-        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, r.tenantId)))
-        .limit(1)
-    : [undefined];
-  const numberingType = layoutRow?.numberingType ?? null;
+type ReservationRelations = {
+  trip?: typeof tripsTable.$inferSelect;
+  client?: typeof clientsTable.$inferSelect;
+  hasAutoRetry: boolean;
+  numberingType: string | null;
+};
+
+function buildReservationView(r: typeof reservationsTable.$inferSelect, rel: ReservationRelations) {
+  const { trip, client, hasAutoRetry, numberingType } = rel;
   return {
     id: r.id,
     tripId: r.tripId,
@@ -179,7 +174,7 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
     discountTotal: r.discountTotal != null ? Number(r.discountTotal) : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
-    hasAutoRetry: autoRetryLog !== undefined,
+    hasAutoRetry,
     trip: trip ? {
       id: trip.id,
       name: trip.name,
@@ -200,6 +195,81 @@ async function formatReservation(r: typeof reservationsTable.$inferSelect) {
       birthDate: client.birthDate?.toISOString() ?? null,
     } : { id: r.clientId, name: "Unknown", email: "", whatsapp: "", cpf: null, birthDate: null },
   };
+}
+
+async function formatReservation(r: typeof reservationsTable.$inferSelect) {
+  const [trip] = await db.select().from(tripsTable).where(and(eq(tripsTable.id, r.tripId), eq(tripsTable.tenantId, r.tenantId))).limit(1);
+  const [client] = r.clientId ? await db.select().from(clientsTable).where(and(eq(clientsTable.id, r.clientId), eq(clientsTable.tenantId, r.tenantId))).limit(1) : [];
+  const [autoRetryLog] = await db.select({ id: emailLogsTable.id })
+    .from(emailLogsTable)
+    .where(and(eq(emailLogsTable.reservationId, r.id), eq(emailLogsTable.isAutoRetry, true), eq(emailLogsTable.tenantId, r.tenantId)))
+    .limit(1);
+  const [layoutRow] = trip?.layoutId
+    ? await db.select({ numberingType: vehicleLayoutsTable.numberingType })
+        .from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, r.tenantId)))
+        .limit(1)
+    : [undefined];
+  return buildReservationView(r, {
+    trip,
+    client,
+    hasAutoRetry: autoRetryLog !== undefined,
+    numberingType: layoutRow?.numberingType ?? null,
+  });
+}
+
+// Batch-format a page of reservations without per-row queries (avoids N+1):
+// fetches all related trips, clients, auto-retry email logs and vehicle layouts
+// in at most four queries regardless of page size.
+async function batchFormatReservations(
+  rows: (typeof reservationsTable.$inferSelect)[],
+  tenantId: string,
+) {
+  if (rows.length === 0) return [];
+
+  const tripIds = [...new Set(rows.map(r => r.tripId))];
+  const clientIds = [...new Set(rows.map(r => r.clientId).filter((id): id is string => id != null))];
+  const reservationIds = rows.map(r => r.id);
+
+  const [trips, clients, autoRetryLogs] = await Promise.all([
+    tripIds.length
+      ? db.select().from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), inArray(tripsTable.id, tripIds)))
+      : Promise.resolve([] as (typeof tripsTable.$inferSelect)[]),
+    clientIds.length
+      ? db.select().from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), inArray(clientsTable.id, clientIds)))
+      : Promise.resolve([] as (typeof clientsTable.$inferSelect)[]),
+    db.selectDistinct({ reservationId: emailLogsTable.reservationId })
+      .from(emailLogsTable)
+      .where(and(
+        eq(emailLogsTable.tenantId, tenantId),
+        eq(emailLogsTable.isAutoRetry, true),
+        inArray(emailLogsTable.reservationId, reservationIds),
+      )),
+  ]);
+
+  const tripMap = new Map(trips.map(t => [t.id, t]));
+  const clientMap = new Map(clients.map(c => [c.id, c]));
+  const autoRetrySet = new Set(autoRetryLogs.map(l => l.reservationId).filter((id): id is string => id != null));
+
+  const layoutIds = [...new Set(trips.map(t => t.layoutId).filter((id): id is string => id != null))];
+  const layouts = layoutIds.length
+    ? await db.select({ id: vehicleLayoutsTable.id, numberingType: vehicleLayoutsTable.numberingType })
+        .from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.tenantId, tenantId), inArray(vehicleLayoutsTable.id, layoutIds)))
+    : [];
+  const layoutMap = new Map(layouts.map(l => [l.id, l.numberingType]));
+
+  return rows.map(r => {
+    const trip = tripMap.get(r.tripId);
+    const client = r.clientId ? clientMap.get(r.clientId) : undefined;
+    const numberingType = trip?.layoutId ? (layoutMap.get(trip.layoutId) ?? null) : null;
+    return buildReservationView(r, {
+      trip,
+      client,
+      hasAutoRetry: autoRetrySet.has(r.id),
+      numberingType,
+    });
+  });
 }
 
 function formatPassenger(p: typeof passengersTable.$inferSelect) {
@@ -602,7 +672,7 @@ router.get("/reservations", async (req, res, next: NextFunction): Promise<void> 
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(reservationsTable).where(and(...conditions));
 
-    const data = await Promise.all(reservations.map(formatReservation));
+    const data = await batchFormatReservations(reservations, me.tenantId);
     res.json({ data, total: Number(countResult?.count ?? 0), page: pageNum, limit: limitNum });
   } catch (err) {
     next(err);
