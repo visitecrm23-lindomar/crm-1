@@ -94,9 +94,13 @@ function resolveCallbackUrl(): string | undefined {
   if (process.env["UPLOADTHING_CALLBACK_URL"]) {
     return process.env["UPLOADTHING_CALLBACK_URL"];
   }
-  if (process.env["REPLIT_DEV_DOMAIN"]) {
-    return `https://${process.env["REPLIT_DEV_DOMAIN"]}/api/uploadthing`;
+  // In development, UploadThing uses a dev-hook: the server calls itself.
+  // Use the internal URL to avoid a slow internet roundtrip that silently times out.
+  if (process.env["NODE_ENV"] === "development") {
+    const port = process.env["PORT"] ?? "8080";
+    return `http://localhost:${port}/api/uploadthing`;
   }
+  // In production, UploadThing's CDN makes the callback — must be the public URL.
   if (process.env["FRONTEND_URL"]) {
     return `${process.env["FRONTEND_URL"].replace(/\/$/, "")}/api/uploadthing`;
   }
