@@ -90,4 +90,20 @@ export const uploadRouter = {
     }),
 } satisfies FileRouter;
 
-export const uploadthingRouter = createRouteHandler({ router: uploadRouter });
+function resolveCallbackUrl(): string | undefined {
+  if (process.env["UPLOADTHING_CALLBACK_URL"]) {
+    return process.env["UPLOADTHING_CALLBACK_URL"];
+  }
+  if (process.env["REPLIT_DEV_DOMAIN"]) {
+    return `https://${process.env["REPLIT_DEV_DOMAIN"]}/api/uploadthing`;
+  }
+  if (process.env["FRONTEND_URL"]) {
+    return `${process.env["FRONTEND_URL"].replace(/\/$/, "")}/api/uploadthing`;
+  }
+  return undefined;
+}
+
+export const uploadthingRouter = createRouteHandler({
+  router: uploadRouter,
+  config: { callbackUrl: resolveCallbackUrl() },
+});
