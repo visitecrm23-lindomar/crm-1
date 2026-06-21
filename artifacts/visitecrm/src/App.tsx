@@ -5,8 +5,9 @@ import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { useSyncMe, useGetMe } from "@workspace/api-client-react";
+import { useApiTimeout } from "@/hooks/useApiTimeout";
+import { ApiTimeoutFallback } from "@/components/api-timeout-fallback";
 
 import Layout from "@/components/layout";
 import AdminLayout from "@/components/admin-layout";
@@ -128,14 +129,9 @@ function RoleRedirect() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [synced, setSynced] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
   const syncStartedRef = useRef(false);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => setTimedOut(true), 10000);
-    return () => clearTimeout(timeout);
-  }, [retryKey]);
+  const { timedOut, retryKey, reset } = useApiTimeout();
 
   useEffect(() => {
     if (!user || syncStartedRef.current) return;
@@ -184,20 +180,12 @@ function RoleRedirect() {
 
   function handleRetry() {
     syncStartedRef.current = false;
-    setTimedOut(false);
     setSynced(false);
-    setRetryKey((k) => k + 1);
+    reset();
   }
 
   if (timedOut && !synced) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-sm text-muted-foreground max-w-xs">
-          Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.
-        </p>
-        <Button onClick={handleRetry}>Tentar novamente</Button>
-      </div>
-    );
+    return <ApiTimeoutFallback onRetry={handleRetry} />;
   }
 
   return (
@@ -256,10 +244,30 @@ function RoleGate({
   vendedorFallback,
   requireTenant = true,
 }: RoleGateProps) {
-  const { data: me, isLoading } = useGetMe();
+  const { data: me, isLoading, refetch } = useGetMe();
   const role = me?.role;
   const clientNotAllowed =
     allowedRoles === "*" || !(allowedRoles as readonly string[]).includes(ROLES.CLIENT);
+
+  const { timedOut, reset } = useApiTimeout({ enabled: isLoading });
+
+  function handleRetry() {
+    reset();
+    refetch();
+  }
+
+  if (timedOut && isLoading) {
+    return (
+      <>
+        <Show when="signed-out">
+          <Redirect to={signedOutPath} />
+        </Show>
+        <Show when="signed-in">
+          <ApiTimeoutFallback onRetry={handleRetry} />
+        </Show>
+      </>
+    );
+  }
 
   let content: ReactNode = null;
   if (!isLoading && !me) {
@@ -305,18 +313,10 @@ function OnboardingRoute() {
   // Already-synced users (me !== null) skip this gate entirely.
   const [syncDone, setSyncDone] = useState(false);
   const [syncStarted, setSyncStarted] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  // Incrementing retryKey re-triggers both the watchdog and sync effects.
-  const [retryKey, setRetryKey] = useState(0);
   const syncStartedRef = useRef(false);
 
   // 10-second watchdog. Only begins counting once syncMe.mutate() is called.
-  // Cancelled when syncDone becomes true (cleanup) or reset on retry.
-  useEffect(() => {
-    if (!syncStarted || syncDone) return;
-    const t = setTimeout(() => setTimedOut(true), 10_000);
-    return () => clearTimeout(t);
-  }, [syncStarted, syncDone, retryKey]);
+  const { timedOut, retryKey, reset } = useApiTimeout({ enabled: syncStarted && !syncDone });
 
   useEffect(() => {
     // Already in DB — release the gate immediately, no sync needed.
@@ -369,10 +369,9 @@ function OnboardingRoute() {
 
   function handleRetry() {
     syncStartedRef.current = false;
-    setTimedOut(false);
     setSyncDone(false);
     setSyncStarted(false);
-    setRetryKey((k) => k + 1);
+    reset();
   }
 
   // Show form as soon as we're ready; ready takes precedence over timedOut.
@@ -384,12 +383,7 @@ function OnboardingRoute() {
         {ready ? (
           <OnboardingPage />
         ) : timedOut ? (
-          <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.
-            </p>
-            <Button onClick={handleRetry}>Tentar novamente</Button>
-          </div>
+          <ApiTimeoutFallback onRetry={handleRetry} />
         ) : (
           <div className="flex min-h-screen items-center justify-center">
             <div className="animate-pulse text-muted-foreground text-sm">Carregando...</div>
