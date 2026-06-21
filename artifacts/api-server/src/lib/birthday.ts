@@ -4,12 +4,7 @@ import { generateId } from "./id";
 import { logger } from "./logger";
 import { sendBirthdayEmail } from "@workspace/email";
 import { getBirthdayEmailQueue } from "../queues/index";
-
-interface EvolutionConfig {
-  apiUrl: string;
-  apiKey: string;
-  instanceName: string;
-}
+import { sendTenantWhatsAppMessage } from "./whatsapp";
 
 interface BirthdaySettings {
   enabled: boolean;
@@ -100,29 +95,6 @@ export async function generateBirthdayCoupon(
   return { id, code };
 }
 
-async function sendWhatsAppMessage(
-  config: EvolutionConfig,
-  phone: string,
-  message: string
-): Promise<void> {
-  const cleanPhone = phone.replace(/\D/g, "");
-  const number = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-
-  const url = `${config.apiUrl.replace(/\/$/, "")}/message/sendText/${config.instanceName}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: config.apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ number, text: message }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Evolution API error ${response.status}: ${body}`);
-  }
-}
 
 export async function processBirthdayForClient(
   tenantId: string,
@@ -211,14 +183,17 @@ export async function processBirthdayForClient(
 
   if (settings.sendWhatsapp && client.whatsappOptIn !== false && client.whatsapp) {
     try {
-      const evolutionConfig = await getSystemConfig<EvolutionConfig>(tenantId, "whatsapp_evolution");
-      if (evolutionConfig?.apiUrl && evolutionConfig?.apiKey && evolutionConfig?.instanceName) {
-        const defaultMsg = settings.whatsappMessage
-          ? interpolateTemplate(settings.whatsappMessage)
-          : `🎂 Feliz Aniversário, ${firstName}!\n\nA ${agencyName} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveite para planejar a viagem dos seus sonhos! 🌍`;
+      const defaultMsg = settings.whatsappMessage
+        ? interpolateTemplate(settings.whatsappMessage)
+        : `🎂 Feliz Aniversário, ${firstName}!\n\nA ${agencyName} tem um presente especial para você: *${settings.discountPercent}% de desconto* na sua próxima viagem!\n\nUse o cupom: *${couponCode}*\nVálido até ${validUntilStr}\n\nAproveite para planejar a viagem dos seus sonhos! 🌍`;
 
-        await sendWhatsAppMessage(evolutionConfig, client.whatsapp, defaultMsg);
+      const result = await sendTenantWhatsAppMessage(tenantId, client.whatsapp, defaultMsg);
+      if (result.success) {
         sentWhatsapp = true;
+        logger.info({ tenantId, clientId }, "[birthday] WhatsApp sent via tenant integration");
+      } else if (result.error !== "credentials_not_configured") {
+        whatsappError = result.error;
+        logger.warn({ tenantId, clientId, error: result.error }, "[birthday] WhatsApp send failed");
       }
     } catch (err) {
       whatsappError = err instanceof Error ? err.message : String(err);

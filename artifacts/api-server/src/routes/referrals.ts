@@ -9,7 +9,7 @@ import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
-import { sendWhatsAppMessage, sendTenantWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
+import { sendTenantWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
 
