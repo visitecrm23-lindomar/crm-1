@@ -66,6 +66,9 @@ export interface ClientReferral {
   bonusCreditUsedAmount: string | null;
   createdAt: string;
   expiresAt: string | null;
+  bonusReleasesAt: string | null;
+  bonusBlocked: boolean;
+  reversalReason: string | null;
 }
 
 export interface ClientPortalProfile {

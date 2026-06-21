@@ -480,3 +480,86 @@ describe("GET /api/clients/:clientId/referral — response shape", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: PATCH /api/clients/:id — auto-block referral code on deactivation
+//
+// When a client's general status is set to a deactivating value
+// (inactive | blocked | cancelled) AND their referral code is currently
+// "active", the handler must auto-set referralCodeStatus to "blocked" and
+// dispatch a suspension email (always with status "blocked"). It must NOT
+// fire again if the code is already blocked, nor when re-activating, nor when
+// the status field is absent from the request.
+// ---------------------------------------------------------------------------
+
+describe("PATCH /api/clients/:id — auto-block referral code on deactivation", () => {
+  const requireAuthMock = vi.mocked(requireAuth);
+
+  const ACTIVE_CLIENT = {
+    ...FAKE_CLIENT,
+    status: "active",
+    referralCodeStatus: "active",
+    totalSpent: "0",
+    outstandingBalance: "0",
+    birthDate: null,
+    lastContactAt: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue(FAKE_USER as never);
+    // requireClientAccess (1st select) + the post-update re-fetch (2nd select)
+    // both resolve through mockSelectLimit.
+    mockSelectLimit.mockResolvedValue([ACTIVE_CLIENT]);
+    dispatchReferralCodeSuspendedEmailMock.mockResolvedValue(true);
+  });
+
+  for (const status of ["inactive", "blocked", "cancelled"] as const) {
+    it(`auto-blocks the referral code and dispatches a suspension email when status="${status}"`, async () => {
+      const res = await request(buildClientsApp())
+        .patch(`/api/clients/${FAKE_CLIENT.id}`)
+        .send({ status });
+
+      expect(res.status).toBe(200);
+      expect(dispatchReferralCodeSuspendedEmailMock).toHaveBeenCalledTimes(1);
+      // The auto-block path always reports status "blocked", regardless of the
+      // deactivating status that triggered it.
+      expect(dispatchReferralCodeSuspendedEmailMock).toHaveBeenCalledWith({
+        clientId: FAKE_CLIENT.id,
+        tenantId: FAKE_USER.tenantId,
+        status: "blocked",
+      });
+    });
+  }
+
+  it('does NOT dispatch the email again when the referral code is already "blocked"', async () => {
+    mockSelectLimit.mockResolvedValue([{ ...ACTIVE_CLIENT, referralCodeStatus: "blocked" }]);
+
+    const res = await request(buildClientsApp())
+      .patch(`/api/clients/${FAKE_CLIENT.id}`)
+      .send({ status: "inactive" });
+
+    expect(res.status).toBe(200);
+    expect(dispatchReferralCodeSuspendedEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT block the referral code when status is set to "active"', async () => {
+    const res = await request(buildClientsApp())
+      .patch(`/api/clients/${FAKE_CLIENT.id}`)
+      .send({ status: "active" });
+
+    expect(res.status).toBe(200);
+    expect(dispatchReferralCodeSuspendedEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("does NOT block the referral code when the request carries no status change", async () => {
+    const res = await request(buildClientsApp())
+      .patch(`/api/clients/${FAKE_CLIENT.id}`)
+      .send({ name: "Novo Nome" });
+
+    expect(res.status).toBe(200);
+    expect(dispatchReferralCodeSuspendedEmailMock).not.toHaveBeenCalled();
+  });
+});

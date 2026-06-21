@@ -68,6 +68,15 @@ function ReferralStatusBadge({ status }: { status: string }) {
   );
 }
 
+const REVERSAL_REASON_LABELS: Record<string, string> = {
+  trip_cancelled: "Viagem cancelada",
+  reservation_cancelled: "Reserva cancelada",
+};
+
+function reversalReasonLabel(reason: string): string {
+  return REVERSAL_REASON_LABELS[reason] ?? reason;
+}
+
 function maskName(name: string | null): string {
   if (!name) return "Pessoa indicada";
   const parts = name.trim().split(/\s+/);
@@ -112,12 +121,19 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
             ✕ Bônus de {bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} revertido
           </p>
         )}
+        {r.status === "reversed" && r.reversalReason && (
+          <p className="text-[11px] text-red-400 mt-0.5">
+            Motivo: {reversalReasonLabel(r.reversalReason)}
+          </p>
+        )}
         {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${
             r.bonusCreditUsedAt
               ? "text-purple-600"
               : r.bonusPaid
               ? "text-green-600"
+              : r.bonusBlocked
+              ? "text-blue-600"
               : "text-orange-500"
           }`}>
             {r.bonusCreditUsedAt
@@ -127,6 +143,8 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
                 })()
               : r.bonusPaid
               ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
+              : r.bonusBlocked && r.bonusReleasesAt
+              ? `🔒 Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} disponível em ${new Date(r.bonusReleasesAt).toLocaleDateString("pt-BR")}`
               : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
           </p>
         )}

@@ -1206,6 +1206,7 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
         bonusCreditUsedAmount: referralsTable.bonusCreditUsedAmount,
         createdAt: referralsTable.createdAt,
         expiresAt: referralsTable.expiresAt,
+        reversalReason: referralsTable.reversalReason,
       })
       .from(referralsTable)
       .where(
@@ -1221,7 +1222,10 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
     ).length;
 
     const [refSettings] = await db
-      .select({ tiersConfig: referralSettingsTable.tiersConfig })
+      .select({
+        tiersConfig: referralSettingsTable.tiersConfig,
+        gracePeriodDays: referralSettingsTable.gracePeriodDays,
+      })
       .from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, me.tenantId))
       .limit(1);
@@ -1231,22 +1235,36 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
       refSettings?.tiersConfig ?? null,
     );
 
+    const gracePeriodDays = refSettings?.gracePeriodDays ?? 30;
+
     res.json({
-      data: rows.map((r) => ({
-        id: r.id,
-        referredName: r.referredName ?? null,
-        referredEmail: r.referredEmail ? maskEmail(r.referredEmail) : null,
-        status: r.status,
-        convertedAt: r.convertedAt ? (r.convertedAt as unknown as Date).toISOString() : null,
-        bonusAmount: r.bonusAmount,
-        bonusPaid: r.bonusPaid,
-        bonusPaidAt: r.bonusPaidAt ? (r.bonusPaidAt as unknown as Date).toISOString() : null,
-        bonusCreditUsedAt: r.bonusCreditUsedAt ? (r.bonusCreditUsedAt as unknown as Date).toISOString() : null,
-        bonusCreditOrderId: r.bonusCreditOrderId ?? null,
-        bonusCreditUsedAmount: r.bonusCreditUsedAmount ?? null,
-        createdAt: (r.createdAt as unknown as Date).toISOString(),
-        expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
-      })),
+      data: rows.map((r) => {
+        const convertedAtDate = r.convertedAt ? (r.convertedAt as unknown as Date) : null;
+        const bonusReleasesAt = convertedAtDate
+          ? new Date(convertedAtDate.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000)
+          : null;
+        const bonusBlocked =
+          r.status === REFERRAL_STATUS.REVERSED ||
+          (bonusReleasesAt !== null && new Date() < bonusReleasesAt);
+        return {
+          id: r.id,
+          referredName: r.referredName ?? null,
+          referredEmail: r.referredEmail ? maskEmail(r.referredEmail) : null,
+          status: r.status,
+          convertedAt: convertedAtDate ? convertedAtDate.toISOString() : null,
+          bonusAmount: r.bonusAmount,
+          bonusPaid: r.bonusPaid,
+          bonusPaidAt: r.bonusPaidAt ? (r.bonusPaidAt as unknown as Date).toISOString() : null,
+          bonusCreditUsedAt: r.bonusCreditUsedAt ? (r.bonusCreditUsedAt as unknown as Date).toISOString() : null,
+          bonusCreditOrderId: r.bonusCreditOrderId ?? null,
+          bonusCreditUsedAmount: r.bonusCreditUsedAmount ?? null,
+          createdAt: (r.createdAt as unknown as Date).toISOString(),
+          expiresAt: r.expiresAt ? (r.expiresAt as unknown as Date).toISOString() : null,
+          bonusReleasesAt: bonusReleasesAt ? bonusReleasesAt.toISOString() : null,
+          bonusBlocked,
+          reversalReason: r.reversalReason ?? null,
+        };
+      }),
       tier: {
         currentTierLevel: currentTier.level,
         currentTierLabel: currentTier.label,
