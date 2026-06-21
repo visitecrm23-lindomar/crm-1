@@ -2,6 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, expensesTable, reservationsTable, clientsTable, commissionRulesTable, commissionsTable, usersTable, salesGoalsTable } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { formatBRL } from "@workspace/shared";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser } from "../lib/tenant";
 import { CreatePaymentBody, UpdatePaymentBody, CreateExpenseBody, UpdateExpenseBody } from "@workspace/api-zod";
@@ -520,7 +521,7 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
     CalendarSyncService.syncPayment(id)
       .catch((err) => req.log.warn({ err, context: "payment.create", paymentId: id, reservationId: parsed.data.reservationId }, "Calendar sync falhou — continuando"));
     if (effectiveClientId && parsed.data.reservationId && explicitStatus === PAYMENT_STATUS.PAID) {
-      const amountFormatted = Number(parsed.data.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      const amountFormatted = formatBRL(Number(parsed.data.amount));
       writeClientActivity(effectiveClientId, "payment", `Pagamento de ${amountFormatted} recebido`, me.id, { amount: parsed.data.amount, reservationId: parsed.data.reservationId })
         .catch(() => {});
     }

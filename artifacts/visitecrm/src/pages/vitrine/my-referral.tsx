@@ -37,6 +37,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
+import { formatBRL } from "@workspace/shared";
 
 interface Props {
   slug: string;
@@ -118,7 +119,7 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
         <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
         {r.status === "reversed" && bonusValue > 0 && (
           <p className="text-xs mt-1 font-medium text-red-500">
-            ✕ Bônus de {bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} revertido
+            ✕ Bônus de {formatBRL(bonusValue)} revertido
           </p>
         )}
         {r.status === "reversed" && r.reversalReason && (
@@ -139,13 +140,13 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
             {r.bonusCreditUsedAt
               ? (() => {
                   const usedAmt = r.bonusCreditUsedAmount ? parseFloat(r.bonusCreditUsedAmount) : bonusValue;
-                  return `✓ Crédito de ${usedAmt.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} usado no checkout`;
+                  return `✓ Crédito de ${formatBRL(usedAmt)} usado no checkout`;
                 })()
               : r.bonusPaid
-              ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago`
+              ? `✓ Bônus de ${formatBRL(bonusValue)} pago`
               : r.bonusBlocked && r.bonusReleasesAt
-              ? `🔒 Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} disponível em ${new Date(r.bonusReleasesAt).toLocaleDateString("pt-BR")}`
-              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
+              ? `🔒 Bônus de ${formatBRL(bonusValue)} disponível em ${new Date(r.bonusReleasesAt).toLocaleDateString("pt-BR")}`
+              : `⏳ Bônus de ${formatBRL(bonusValue)} aguardando pagamento`}
           </p>
         )}
       </div>

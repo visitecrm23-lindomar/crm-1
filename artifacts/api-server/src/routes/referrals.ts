@@ -12,6 +12,7 @@ import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
 import { sendTenantWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
+import { formatBRL } from "@workspace/shared";
 
 const router = Router();
 
@@ -1854,7 +1855,7 @@ router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunct
     const agencyName = tenant?.name ?? "Agência";
     const bonusValue = parseFloat(String(settings?.bonusValue ?? "10")) || 10;
     const bonusValFormatted = bonusValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const bonusCurrencyFormatted = bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const bonusCurrencyFormatted = formatBRL(bonusValue);
 
     let message: string;
     const { messageType } = parsed.data;

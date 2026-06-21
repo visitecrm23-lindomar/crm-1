@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { createHmac, scryptSync, randomBytes, timingSafeEqual } from "crypto";
+import { formatBRL } from "@workspace/shared";
 import { db } from "@workspace/db";
 import {
   partnersTable,
@@ -499,7 +500,7 @@ router.get("/parceiros/commissions", async (req, res, next: NextFunction): Promi
       const [year, month] = currentPeriod.split("-");
       const monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
       const formattedPeriod = `${monthNames[parseInt(month ?? "1") - 1] ?? month} de ${year}`;
-      const brl = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+      const brl = (v: number) => formatBRL(v);
       const totalGross = rows.reduce((s, r) => s + Number(r.grossAmount), 0);
       const totalPartner = rows.reduce((s, r) => s + Number(r.partnerAmount), 0);
       const totalAgency = rows.reduce((s, r) => s + Number(r.agencyAmount), 0);

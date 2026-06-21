@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatCurrency } from "@/lib/utils";
 import {
   useListPlans,
   useCreatePlan,
@@ -209,7 +210,7 @@ export default function AdminPlans() {
   }
 
   function formatPrice(price: string) {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(price));
+    return formatCurrency(Number(price));
   }
 
   return (

@@ -6,6 +6,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 import { normalizeOrderEmail, roundMoney } from "../lib/pricing";
+import { formatBRL } from "@workspace/shared";
 import { getTenantUser } from "../lib/tenant";
 import {
   storesTable,
@@ -952,8 +953,7 @@ router.post("/public/store/:slug/orders", async (req, res, next: NextFunction): 
     }
 
     if (reservationClientId) {
-      const totalFormatted = Number(order?.totalAmount ?? 0)
-        .toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      const totalFormatted = formatBRL(Number(order?.totalAmount ?? 0));
       writeClientActivity(
         reservationClientId,
         "order_created",

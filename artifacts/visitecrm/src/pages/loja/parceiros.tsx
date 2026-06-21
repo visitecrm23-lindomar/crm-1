@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 function fmt(v: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+  return formatCurrency(v);
 }
 
 // ─── Create Partner Dialog ────────────────────────────────────────────────────

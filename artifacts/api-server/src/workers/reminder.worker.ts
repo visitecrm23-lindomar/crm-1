@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import { sendPushNotification } from "../lib/push-notifications";
 import type { ReminderJobData } from "../queues/index";
+import { formatBRL } from "@workspace/shared";
 import { RESERVATION_STATUS, PAYMENT_STATUS, ROLES } from "@workspace/permissions";
 import { buildEmailPropsFromReservation } from "../queues/email-helpers";
 import { generateId } from "../lib/id";
@@ -218,10 +219,10 @@ async function processPaymentReminders(): Promise<void> {
   for (const row of rows) {
     if (!row.clientEmail) continue;
 
-    const balance = Number(row.balance ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    const total = Number(row.totalValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    const paid = Number(row.paidValue ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    const paymentAmount = Number(row.paymentAmount ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const balance = formatBRL(Number(row.balance ?? 0));
+    const total = formatBRL(Number(row.totalValue ?? 0));
+    const paid = formatBRL(Number(row.paidValue ?? 0));
+    const paymentAmount = formatBRL(Number(row.paymentAmount ?? 0));
     const dueStr = row.dueDate
       ? (row.dueDate as unknown as Date).toLocaleDateString("pt-BR", {
           day: "2-digit",
@@ -1321,7 +1322,7 @@ export async function processInstallmentDueReminders(): Promise<void> {
   for (const row of rows) {
     if (!row.clientEmail) continue;
 
-    const amount = Number(row.amount ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const amount = formatBRL(Number(row.amount ?? 0));
     const dueStr = row.dueDate
       ? (row.dueDate as unknown as Date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
       : "Em 3 dias";

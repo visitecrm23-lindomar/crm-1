@@ -64,6 +64,7 @@ import {
   Medal,
 } from "lucide-react";
 import { formatCurrencyBRL as fmtCurrency, formatDateShort } from "@/lib/utils";
+import { formatBRL } from "@workspace/shared";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pending:   { label: "Aguardando",  variant: "secondary" },
@@ -1006,7 +1007,7 @@ function ReservasTab({
       const result = await clientPortalApi.redeemLoyaltyPoints(redeemReservationId, pts);
       toast({
         title: "Pontos resgatados com sucesso!",
-        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de desconto aplicado.`,
+        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${formatBRL(result.discountAmount)} de desconto aplicado.`,
       });
       setRedeemOpen(false);
       setRedeemPoints("");
@@ -1101,7 +1102,7 @@ function ReservasTab({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Desconto estimado:</span>
                 <span className="font-bold text-green-600">
-                  {estimatedDiscount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  {formatBRL(estimatedDiscount)}
                 </span>
               </div>
             </div>
@@ -1618,8 +1619,8 @@ function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: str
         {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
             {r.bonusPaid
-              ? `✓ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR")}`
-              : `⏳ Bônus de ${bonusValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} aguardando pagamento`}
+              ? `✓ Bônus de ${formatBRL(bonusValue)} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR")}`
+              : `⏳ Bônus de ${formatBRL(bonusValue)} aguardando pagamento`}
           </p>
         )}
       </div>
@@ -1875,7 +1876,7 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
               <CardContent className="pt-4 pb-3 text-center">
                 <Clock className="w-5 h-5 mx-auto mb-1.5 text-orange-400" />
                 <p className="text-xl font-bold text-orange-500">
-                  {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  {formatBRL(pendingBonus)}
                 </p>
                 <p className="text-xs text-muted-foreground">Bônus a receber</p>
               </CardContent>
@@ -1884,7 +1885,7 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
               <CardContent className="pt-4 pb-3 text-center">
                 <Wallet className="w-5 h-5 mx-auto mb-1.5 text-green-500" />
                 <p className="text-xl font-bold text-green-600">
-                  {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  {formatBRL(paidBonus)}
                 </p>
                 <p className="text-xs text-muted-foreground">Bônus recebido</p>
               </CardContent>
@@ -1945,13 +1946,13 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
               {paidBonus > 0 && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
                   <CheckCircle className="w-3.5 h-3.5" />
-                  {paidBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} recebido
+                  {formatBRL(paidBonus)} recebido
                 </span>
               )}
               {pendingBonus > 0 && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
                   <Clock className="w-3.5 h-3.5" />
-                  {pendingBonus.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} a receber
+                  {formatBRL(pendingBonus)} a receber
                 </span>
               )}
             </div>
@@ -2094,7 +2095,7 @@ function FidelidadeTab({
       const result = await clientPortalApi.redeemLoyaltyPoints(redeemReservationId, pts);
       toast({
         title: "Pontos resgatados com sucesso!",
-        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} de desconto aplicado.`,
+        description: `${result.pointsRedeemed.toLocaleString("pt-BR")} pts → ${formatBRL(result.discountAmount)} de desconto aplicado.`,
       });
       setRedeemOpen(false);
       setRedeemPoints("");
@@ -2131,10 +2132,7 @@ function FidelidadeTab({
     ? Math.min(((loyalty.totalPoints - tierCfg.min) / (tierCfg.next - tierCfg.min)) * 100, 100)
     : 100;
   const pointsToNext = tierCfg.next !== null ? Math.max(tierCfg.next - loyalty.totalPoints, 0) : 0;
-  const equivalentValue = (loyalty.availablePoints * loyalty.realPerPoint).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  const equivalentValue = formatBRL(loyalty.availablePoints * loyalty.realPerPoint);
 
   const pendingReservations = reservations.filter(
     (r) => r.balance > 0 && r.status !== "cancelled",
@@ -2269,7 +2267,7 @@ function FidelidadeTab({
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{r.tripName}</p>
                     <p className="text-xs text-muted-foreground">
-                      Saldo pendente: {r.balance.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      Saldo pendente: {formatBRL(r.balance)}
                     </p>
                   </div>
                   <Button
@@ -2326,7 +2324,7 @@ function FidelidadeTab({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Desconto estimado:</span>
                     <span className="font-bold text-green-600">
-                      {estimatedDiscount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      {formatBRL(estimatedDiscount)}
                     </span>
                   </div>
                 </div>

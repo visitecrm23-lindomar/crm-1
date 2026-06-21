@@ -5,6 +5,7 @@ import { getWhatsAppQueue } from "./index";
 import { logger } from "../lib/logger";
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { areWorkersEnabled } from "../lib/redis";
+import { formatBRL } from "@workspace/shared";
 
 const DEFAULT_CONVERTED_MESSAGE =
   "Boa notícia! {{nome}} usou seu código {{codigo}} e comprou com a {{agencia}}. Seu bônus de R$ {{valor}} está sendo processado.";
@@ -130,7 +131,7 @@ export async function dispatchWhatsAppReferralBonusPaid(opts: {
   const message = interpolateWhatsAppMessage(template, {
     nome: referrerName ?? "",
     codigo: referralCode ?? "",
-    bonus: bonusAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    bonus: formatBRL(bonusAmount),
     valor: bonusAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     agencia: tenantName,
   });

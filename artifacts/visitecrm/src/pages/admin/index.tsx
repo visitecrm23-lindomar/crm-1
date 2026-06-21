@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatCurrency } from "@/lib/utils";
 import { useGetAdminStats, useGetSystemHealth, getGetSystemHealthQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp, History } from "lucide-react";
@@ -28,7 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatMRR(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  return formatCurrency(value);
 }
 
 const REDIS_STATUS_CONFIG = {

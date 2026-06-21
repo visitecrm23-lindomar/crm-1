@@ -2,6 +2,7 @@ import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { reservationsTable, passengersTable, tripsTable, clientsTable, storeCouponsTable, storesTable, storeOrdersTable, loyaltyMembersTable, loyaltyTransactionsTable, loyaltyProgramsTable, referralsTable, referralSettingsTable, referralCampaignsTable, dealsTable, pipelineStagesTable, tenantsTable, emailLogsTable, paymentsTable, commissionsTable, vehicleLayoutsTable, reservationInstallmentsTable } from "@workspace/db";
 import { eq, and, sql, desc, asc, inArray, notInArray, or, ilike } from "drizzle-orm";
+import { formatBRL } from "@workspace/shared";
 import { generateId, generateVoucherCode } from "../lib/id";
 import { getTenantReservationPrefix, tripTypeToCode, getYearMonth, nextReservationSequence, buildReservationNumber } from "../lib/reservation-number";
 import { requireAuth, getTenantUser } from "../lib/tenant";
@@ -1014,7 +1015,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
     if (reservation.clientId) {
       syncClientDeal(reservation.clientId, me.tenantId, reservation.tripId, Number(reservation.totalValue), me.id, id)
         .catch((err) => req.log.error({ err }, "Error syncing deal after reservation creation"));
-      const totalFormatted = Number(reservation.totalValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      const totalFormatted = formatBRL(Number(reservation.totalValue));
       writeClientActivity(reservation.clientId, "reservation_created", `Reserva ${voucherCode} criada — ${totalFormatted}`, me.id, { voucherCode, totalValue: Number(reservation.totalValue) })
         .catch((err) => req.log.error({ err }, "Error writing reservation creation activity"));
     }

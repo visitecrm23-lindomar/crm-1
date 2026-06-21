@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatCurrency } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -78,7 +79,7 @@ export function PublicLayoutSeatPicker({
   );
 
   function formatPrice(price: number) {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
+    return formatCurrency(price);
   }
 
   function SeatCell({ seat }: { seat: PublicSeatEntry }) {

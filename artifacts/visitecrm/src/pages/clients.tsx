@@ -270,7 +270,7 @@ function CommissionPreview({
     <div className="flex items-center gap-2 mt-1 p-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-800">
       <span className="text-xs text-green-700 dark:text-green-300 flex-1">
         Comissão estimada:{" "}
-        <strong>{estimated.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>
+        <strong>{formatCurrency(estimated)}</strong>
         {data.commissionType === "percentage" && ` (${data.commissionRate}%)`}
         {data.commissionType === "fixed" && " (valor fixo)"}
       </span>

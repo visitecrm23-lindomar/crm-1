@@ -7,6 +7,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { AGENCY_STAFF_ROLES } from '../lib/tenant';
 import { PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS, REFERRAL_STATUS, ROLES } from "@workspace/permissions";
 import { findReferralReversalGaps, countReferralReversalGaps } from "../lib/referral-reversal-gaps";
+import { formatBRL } from "@workspace/shared";
 
 const router = Router();
 
@@ -174,7 +175,7 @@ router.get("/alerts", async (req, res, next: NextFunction): Promise<void> => {
     ]);
 
     const alerts: Alert[] = [];
-    const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const fmt = (v: number) => formatBRL(v);
 
     const receivableTodayCount = Number(receivableDueTodayRows[0]?.count ?? 0);
     const receivableTodayTotal = Number(receivableDueTodayRows[0]?.total ?? 0);

@@ -4,6 +4,7 @@ import { tripsTable, paymentsTable, clientsTable, systemConfigsTable, reservatio
 import { eq, and, lt, gte, lte, gt } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, TRIP_STATUS } from "@workspace/permissions";
+import { formatBRLPlain } from "@workspace/shared";
 
 const router = Router();
 
@@ -126,7 +127,7 @@ router.get("/notifications", async (req, res, next: NextFunction): Promise<void>
           type: "overdue_payment",
           severity: "error",
           title: "Pagamentos vencidos",
-          message: `${overduePayments.length} pagamento(s) vencido(s) — R$ ${totalOverdue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          message: `${overduePayments.length} pagamento(s) vencido(s) — ${formatBRLPlain(totalOverdue)}`,
           link: "/financial",
           entityId: null,
         });
@@ -151,7 +152,7 @@ router.get("/notifications", async (req, res, next: NextFunction): Promise<void>
           type: "unpaid_reservation",
           severity: "warning",
           title: "Reservas confirmadas sem pagamento",
-          message: `${confirmedUnpaid.length} reserva(s) com saldo pendente — R$ ${totalBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          message: `${confirmedUnpaid.length} reserva(s) com saldo pendente — ${formatBRLPlain(totalBalance)}`,
           link: "/reservations",
           entityId: null,
         });
