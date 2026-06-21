@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
+import path from "node:path";
 import { clerkMiddleware } from "@clerk/express";
 import rateLimit from "express-rate-limit";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
@@ -242,6 +243,16 @@ app.get("/api/public/store/:slug/referral/info", referralInfoLimiter);
 app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
 
 app.use("/api", router);
+
+if (!isDev) {
+  const frontendDist = path.join(process.cwd(), "artifacts/visitecrm/dist");
+  app.use(express.static(frontendDist));
+  app.get("*", (req: Request, res: Response, next: express.NextFunction) => {
+    if (req.path.startsWith("/api/")) return next();
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
+
 app.use(errorHandler);
 
 export default app;

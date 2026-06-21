@@ -11,7 +11,9 @@ modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 
   [deployment]
   router = "application"
-  deploymentTarget = "autoscale"
+deploymentTarget = "autoscale"
+run = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+build = ["bash", "-c", "pnpm --filter @workspace/visitecrm run build && pnpm --filter @workspace/api-server run build"]
 
   [deployment.postBuild]
   args = ["pnpm", "store", "prune"]
