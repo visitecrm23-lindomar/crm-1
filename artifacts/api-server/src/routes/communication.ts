@@ -8,6 +8,7 @@ import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib
 import { z } from "zod";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 import { resendEmailLog } from "../queues/email-helpers";
+import { LIST_SAFETY_CAP } from "../lib/list-limits";
 
 const router = Router();
 
@@ -87,7 +88,8 @@ router.get("/messages", async (req, res, next: NextFunction): Promise<void> => {
     const conditions: ReturnType<typeof eq>[] = [eq(messagesTable.tenantId, me.tenantId)];
     if (clientId) conditions.push(eq(messagesTable.toClientId, clientId));
     const messages = await db.select().from(messagesTable)
-      .where(and(...conditions)).orderBy(desc(messagesTable.sentAt));
+      .where(and(...conditions)).orderBy(desc(messagesTable.sentAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(messages.map(formatMessage));
   } catch (err) {
     next(err);
@@ -134,7 +136,8 @@ router.get("/message-templates", async (req, res, next: NextFunction): Promise<v
     if (!me) return;
     const templates = await db.select().from(messageTemplatesTable)
       .where(eq(messageTemplatesTable.tenantId, me.tenantId))
-      .orderBy(desc(messageTemplatesTable.createdAt));
+      .orderBy(desc(messageTemplatesTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(templates.map(formatTemplate));
   } catch (err) {
     next(err);
@@ -212,7 +215,8 @@ router.get("/automations", async (req, res, next: NextFunction): Promise<void> =
     if (!me) return;
     const automations = await db.select().from(automationsTable)
       .where(eq(automationsTable.tenantId, me.tenantId))
-      .orderBy(desc(automationsTable.createdAt));
+      .orderBy(desc(automationsTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(automations.map(formatAutomation));
   } catch (err) {
     next(err);

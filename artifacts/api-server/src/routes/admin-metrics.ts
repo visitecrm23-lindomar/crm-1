@@ -4,6 +4,7 @@ import { eq, desc, and, count, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES } from "@workspace/permissions";
+import { LIST_SAFETY_CAP } from "../lib/list-limits";
 
 const router = Router();
 
@@ -167,7 +168,7 @@ router.get("/tenants/:id/users", async (req, res, next: NextFunction): Promise<v
     if (!me) return;
     if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
-    const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, req.params.id)).orderBy(desc(usersTable.createdAt));
+    const users = await db.select().from(usersTable).where(eq(usersTable.tenantId, req.params.id)).orderBy(desc(usersTable.createdAt)).limit(LIST_SAFETY_CAP);
     res.json(users);
   } catch (err) {
     next(err);
@@ -223,7 +224,8 @@ router.get("/admin/users", async (req, res, next: NextFunction): Promise<void> =
     })
       .from(usersTable)
       .leftJoin(tenantsTable, eq(usersTable.tenantId, tenantsTable.id))
-      .orderBy(desc(usersTable.createdAt));
+      .orderBy(desc(usersTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
 
     res.json(users);
   } catch (err) {

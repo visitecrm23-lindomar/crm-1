@@ -8,6 +8,7 @@ import { z } from "zod";
 import { deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { LIST_SAFETY_CAP } from "../lib/list-limits";
 
 const router = Router();
 
@@ -176,7 +177,8 @@ router.get("/suppliers", async (req, res, next: NextFunction): Promise<void> => 
     if (!me) return;
     const suppliers = await db.select().from(suppliersTable)
       .where(eq(suppliersTable.tenantId, me.tenantId))
-      .orderBy(desc(suppliersTable.createdAt));
+      .orderBy(desc(suppliersTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(suppliers.map(formatSupplier));
   } catch (err) {
     next(err);
@@ -267,7 +269,8 @@ router.get("/vehicles", async (req, res, next: NextFunction): Promise<void> => {
     if (!me) return;
     const vehicles = await db.select().from(vehiclesTable)
       .where(eq(vehiclesTable.tenantId, me.tenantId))
-      .orderBy(desc(vehiclesTable.createdAt));
+      .orderBy(desc(vehiclesTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(vehicles.map(formatVehicle));
   } catch (err) {
     next(err);
@@ -353,7 +356,8 @@ router.get("/accommodations", async (req, res, next: NextFunction): Promise<void
     if (!me) return;
     const accommodations = await db.select().from(accommodationsTable)
       .where(eq(accommodationsTable.tenantId, me.tenantId))
-      .orderBy(desc(accommodationsTable.createdAt));
+      .orderBy(desc(accommodationsTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(accommodations.map(formatAccommodation));
   } catch (err) {
     next(err);
@@ -448,7 +452,8 @@ router.get("/destinations", async (req, res, next: NextFunction): Promise<void> 
     if (!me) return;
     const destinations = await db.select().from(destinationsTable)
       .where(eq(destinationsTable.tenantId, me.tenantId))
-      .orderBy(desc(destinationsTable.createdAt));
+      .orderBy(desc(destinationsTable.createdAt))
+      .limit(LIST_SAFETY_CAP);
     res.json(destinations.map(formatDestination));
   } catch (err) {
     next(err);

@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { paymentsTable, reservationsTable, clientsTable, tripsTable, expensesTable } from "@workspace/db";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import ExcelJS from "exceljs";
@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS } from "@workspace/permissions";
 import { z } from "zod/v4";
+import { MAX_REPORT_RANGE_DAYS, MAX_EXPORT_ROWS } from "../lib/list-limits";
 
 applyPlugin(jsPDF);
 
@@ -84,6 +85,19 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
     const end = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : new Date();
     const periodLabel = `${fmtDate(start)} a ${fmtDate(end)}`;
 
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      next(new ValidationError("startDate/endDate inválidos", "VALIDATION_ERROR"));
+      return;
+    }
+    if (start > end) {
+      next(new ValidationError("startDate deve ser anterior ou igual a endDate", "VALIDATION_ERROR"));
+      return;
+    }
+    if ((end.getTime() - start.getTime()) / 86_400_000 > MAX_REPORT_RANGE_DAYS) {
+      next(new ValidationError(`Intervalo máximo para exportação é de ${MAX_REPORT_RANGE_DAYS} dias. Reduza o período.`, "VALIDATION_ERROR"));
+      return;
+    }
+
     // ── FINANCIAL ──────────────────────────────────────────────────────────────
     if (reportType === "financial") {
       const [payments, expenses] = await Promise.all([
@@ -102,13 +116,18 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
           eq(paymentsTable.tenantId, tenantId),
           gte(paymentsTable.createdAt, start),
           lte(paymentsTable.createdAt, end),
-        )),
+        )).limit(MAX_EXPORT_ROWS + 1),
         db.select().from(expensesTable).where(and(
           eq(expensesTable.tenantId, tenantId),
           gte(expensesTable.createdAt, start),
           lte(expensesTable.createdAt, end),
-        )),
+        )).limit(MAX_EXPORT_ROWS + 1),
       ]);
+
+      if (payments.length > MAX_EXPORT_ROWS || expenses.length > MAX_EXPORT_ROWS) {
+        next(new ValidationError(`Volume de dados muito grande para exportação direta (limite de ${MAX_EXPORT_ROWS} registros). Reduza o período.`, "VALIDATION_ERROR"));
+        return;
+      }
 
       const receivables = payments.filter(p => p.type === PAYMENT_TYPE.RECEIVABLE);
       const payables = payments.filter(p => p.type === PAYMENT_TYPE.PAYABLE);
@@ -269,19 +288,24 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
         eq(reservationsTable.tenantId, tenantId),
         gte(reservationsTable.createdAt, start),
         lte(reservationsTable.createdAt, end),
-      ));
+      )).limit(MAX_EXPORT_ROWS + 1);
 
-      const tripIds = [...new Set(reservations.map(r => r.tripId))];
-      const clientIds = [...new Set(reservations.map(r => r.clientId))];
+      if (reservations.length > MAX_EXPORT_ROWS) {
+        next(new ValidationError(`Volume de dados muito grande para exportação direta (limite de ${MAX_EXPORT_ROWS} registros). Reduza o período.`, "VALIDATION_ERROR"));
+        return;
+      }
+
+      const tripIds = [...new Set(reservations.map(r => r.tripId))].filter(Boolean);
+      const clientIds = [...new Set(reservations.map(r => r.clientId))].filter((id): id is string => Boolean(id));
 
       const [tripsData, clientsData] = await Promise.all([
         tripIds.length > 0
           ? db.select({ id: tripsTable.id, name: tripsTable.name, departureDate: tripsTable.departureDate, destination: tripsTable.destination })
-            .from(tripsTable).where(eq(tripsTable.tenantId, tenantId))
+            .from(tripsTable).where(and(eq(tripsTable.tenantId, tenantId), inArray(tripsTable.id, tripIds)))
           : [],
         clientIds.length > 0
           ? db.select({ id: clientsTable.id, name: clientsTable.name, email: clientsTable.email })
-            .from(clientsTable).where(eq(clientsTable.tenantId, tenantId))
+            .from(clientsTable).where(and(eq(clientsTable.tenantId, tenantId), inArray(clientsTable.id, clientIds)))
           : [],
       ]);
 
@@ -400,7 +424,12 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
         eq(clientsTable.tenantId, tenantId),
         gte(clientsTable.createdAt, start),
         lte(clientsTable.createdAt, end),
-      ));
+      )).limit(MAX_EXPORT_ROWS + 1);
+
+      if (clients.length > MAX_EXPORT_ROWS) {
+        next(new ValidationError(`Volume de dados muito grande para exportação direta (limite de ${MAX_EXPORT_ROWS} registros). Reduza o período.`, "VALIDATION_ERROR"));
+        return;
+      }
 
       const headers = ["Nome", "Email", "WhatsApp", "CPF", "Nascimento", "Gênero", "Cidade", "Estado", "Classificação", "Status", "Total Gasto", "Saldo Devedor", "Tags", "Destinos Sonhados", "Cadastrado em"];
       const rows = clients.map(c => [

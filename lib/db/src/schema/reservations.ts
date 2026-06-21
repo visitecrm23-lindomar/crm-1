@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, numeric, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, numeric, integer, primaryKey, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -49,7 +49,12 @@ export const reservationsTable = pgTable("reservations", {
   couponReversalAt: timestamp("coupon_reversal_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("reservations_tenant_id_created_at_idx").on(t.tenantId, t.createdAt),
+  index("reservations_trip_id_idx").on(t.tripId),
+  index("reservations_client_id_idx").on(t.clientId),
+  index("reservations_tenant_id_status_idx").on(t.tenantId, t.status),
+]);
 
 export const insertReservationSchema = createInsertSchema(reservationsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertReservation = typeof reservationsTable.$inferInsert;

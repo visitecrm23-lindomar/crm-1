@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, numeric, integer, json } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, numeric, integer, json, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -84,7 +84,11 @@ export const tripsTable = pgTable("trips", {
   createdById: text("created_by_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("trips_tenant_id_departure_date_idx").on(t.tenantId, t.departureDate),
+  index("trips_tenant_id_status_idx").on(t.tenantId, t.status),
+  index("trips_slug_idx").on(t.slug),
+]);
 
 export const insertTripSchema = createInsertSchema(tripsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertTrip = typeof tripsTable.$inferInsert;

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, numeric, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, numeric, integer, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -31,7 +31,12 @@ export const paymentsTable = pgTable("payments", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("payments_tenant_id_created_at_idx").on(t.tenantId, t.createdAt),
+  index("payments_reservation_id_idx").on(t.reservationId),
+  index("payments_client_id_idx").on(t.clientId),
+  index("payments_tenant_id_status_idx").on(t.tenantId, t.status),
+]);
 
 export const insertPaymentSchema = createInsertSchema(paymentsTable).omit({ createdAt: true, updatedAt: true });
 export type InsertPayment = typeof paymentsTable.$inferInsert;
@@ -60,7 +65,10 @@ export const expensesTable = pgTable("expenses", {
   createdById: text("created_by_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("expenses_tenant_id_created_at_idx").on(t.tenantId, t.createdAt),
+  index("expenses_trip_id_idx").on(t.tripId),
+]);
 
 export const insertExpenseSchema = createInsertSchema(expensesTable).omit({ createdAt: true, updatedAt: true });
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
