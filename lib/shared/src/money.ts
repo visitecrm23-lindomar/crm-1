@@ -43,3 +43,25 @@ export function applyDiscounts(
 
   return { appliedCoupon, appliedLoyalty, appliedReferral, discountTotal, finalTotal };
 }
+
+/**
+ * Canonical BRL currency formatter for on-screen and HTML/email contexts.
+ * Uses the locale `style: "currency"` formatting, e.g. `R$ 1.234,50` (the
+ * separator between symbol and amount is a non-breaking space, which is correct
+ * for HTML/UI). Do NOT use this for plain-text outputs like CSV exports or PDFs
+ * where a non-breaking space can break parsing or font rendering — use
+ * `formatBRLPlain` there instead.
+ */
+export function formatBRL(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+/**
+ * Plain-text BRL formatter for CSV exports, PDFs and calendar event text.
+ * Produces `R$ ` (a regular space) followed by a grouped, 2-decimal amount,
+ * e.g. `R$ 1.234,50`. Avoids the non-breaking space emitted by the locale
+ * currency style so downstream parsers (Excel) and PDF fonts stay happy.
+ */
+export function formatBRLPlain(value: number): string {
+  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

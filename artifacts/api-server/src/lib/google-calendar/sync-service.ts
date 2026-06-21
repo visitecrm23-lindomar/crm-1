@@ -15,6 +15,7 @@ import { GoogleCalendarService, refreshTokenIfNeeded, withCalendarRetry } from "
 import { generateId } from "../id";
 import { logger } from "../logger";
 import { RESERVATION_STATUS, PAYMENT_STATUS, TRIP_STATUS } from "@workspace/permissions";
+import { formatBRLPlain } from "@workspace/shared";
 
 async function getCalendarService(userId: string): Promise<GoogleCalendarService | null> {
   const token = await refreshTokenIfNeeded(userId);
@@ -28,7 +29,7 @@ function fmtDate(d: Date | null | undefined): string {
 }
 
 function fmtCurrency(v: number | string | null | undefined): string {
-  return `R$ ${Number(v ?? 0).toFixed(2).replace(".", ",")}`;
+  return formatBRLPlain(Number(v ?? 0));
 }
 
 async function upsertCalendarEvent(

@@ -5,6 +5,7 @@ import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmai
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
 import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
+import { formatBRL } from "@workspace/shared";
 import { logger } from "../lib/logger";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
 import { insertClientNotification } from "../lib/client-notifications";
@@ -1398,10 +1399,6 @@ function escapeHtmlEmail(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 interface PriceAlertConfirmationOpts {

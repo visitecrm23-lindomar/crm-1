@@ -18,10 +18,7 @@ import {
 } from "recharts";
 import { TrendingUp, Building2, AlertCircle, RefreshCw, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-function formatBRL(val: number) {
-  return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { formatBRL } from "@workspace/shared";
 
 export default function AdminMetricsPage() {
   const { data: mrr = [], isLoading: mrrLoading, isError: mrrError } = useGetMetricsMrr();

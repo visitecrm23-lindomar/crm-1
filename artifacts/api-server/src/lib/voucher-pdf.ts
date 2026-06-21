@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { applyPlugin } from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatBRLPlain as fmtCurrencyPt } from "@workspace/shared";
 
 applyPlugin(jsPDF);
 
@@ -47,10 +48,6 @@ function fmtDatePt(dateStr: string | null | undefined): string {
   } catch {
     return dateStr;
   }
-}
-
-function fmtCurrencyPt(value: number): string {
-  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function hexToRgb(hex: string): [number, number, number] {

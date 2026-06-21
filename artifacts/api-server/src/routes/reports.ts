@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS } from "@workspace/permissions";
+import { formatBRLPlain } from "@workspace/shared";
 import { z } from "zod/v4";
 import { MAX_REPORT_RANGE_DAYS, MAX_EXPORT_ROWS } from "../lib/list-limits";
 
@@ -37,7 +38,7 @@ function fmtDate(d?: Date | null): string {
 
 function fmtCur(v?: string | number | null): string {
   if (v == null || v === "") return "R$ 0,00";
-  return `R$ ${Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+  return formatBRLPlain(Number(v));
 }
 
 function buildCsv(rows: (string | number | null | undefined)[][]): string {
