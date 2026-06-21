@@ -17,7 +17,7 @@ import { XCircle } from "lucide-react";
 import { PAYMENT_METHOD_LABELS as PAYMENT_LABELS } from "@/lib/labels";
 import { WizardStep1 } from "./WizardStep1";
 import { WizardStep2 } from "./WizardStep2";
-import { computeReservationTotal, roundMoney } from "@/lib/reservationPricing";
+import { computeReservationTotal, applyDiscounts } from "@/lib/reservationPricing";
 
 function WizardStepIndicator({ step }: { step: number }) {
   const steps = ["Seleção", "Pagamento", "Confirmação"];
@@ -145,13 +145,18 @@ export function NewReservationWizard({ open, onClose, onSuccess, initialTripId, 
     }
   }, [isCpfMode, cpfSearchLoading, cpfMatches.length]);
 
-  const uiCouponApplied = roundMoney(Math.min(couponApplied?.amount ?? 0, totalValue));
-  const uiRemaining1 = roundMoney(totalValue - uiCouponApplied);
-  const uiLoyaltyApplied = roundMoney(Math.min(loyaltyAmountApplied, uiRemaining1));
-  const uiRemaining2 = roundMoney(uiRemaining1 - uiLoyaltyApplied);
-  const uiReferralApplied = roundMoney(Math.min(referralApplied?.amount ?? 0, uiRemaining2));
-  const totalDiscount = roundMoney(uiCouponApplied + uiLoyaltyApplied + uiReferralApplied);
-  const finalTotal = Math.max(0, roundMoney(totalValue - totalDiscount));
+  const {
+    appliedCoupon: uiCouponApplied,
+    appliedLoyalty: uiLoyaltyApplied,
+    appliedReferral: uiReferralApplied,
+    discountTotal: totalDiscount,
+    finalTotal,
+  } = applyDiscounts(
+    totalValue,
+    couponApplied?.amount ?? 0,
+    loyaltyAmountApplied,
+    referralApplied?.amount ?? 0,
+  );
 
   const resetWizard = () => {
     setStep(1); setSelectedTripId(""); setSelectedClientId(""); setBoardingLocationId("");

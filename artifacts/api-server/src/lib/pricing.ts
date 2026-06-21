@@ -1,39 +1,11 @@
 /**
- * Single authoritative monetary rounding function.
- * All monetary computations in the API must go through this function
- * to avoid inconsistencies between parseFloat/toFixed approaches.
+ * Monetary rounding and sequential discount application now live in the shared
+ * workspace package so the API server and the web frontend stay in lockstep.
+ * Re-exported here to keep existing import paths (and test mocks) stable.
  */
-export function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+import { roundMoney, applyDiscounts } from "@workspace/shared";
 
-export function applyDiscounts(
-  baseValue: number,
-  couponAmount: number,
-  loyaltyAmount: number,
-  referralAmount: number,
-): {
-  appliedCoupon: number;
-  appliedLoyalty: number;
-  appliedReferral: number;
-  discountTotal: number;
-  finalTotal: number;
-} {
-  let remaining = baseValue;
-
-  const appliedCoupon = roundMoney(Math.min(couponAmount, remaining));
-  remaining = roundMoney(remaining - appliedCoupon);
-
-  const appliedLoyalty = roundMoney(Math.min(loyaltyAmount, remaining));
-  remaining = roundMoney(remaining - appliedLoyalty);
-
-  const appliedReferral = roundMoney(Math.min(referralAmount, remaining));
-
-  const discountTotal = roundMoney(appliedCoupon + appliedLoyalty + appliedReferral);
-  const finalTotal = Math.max(0, roundMoney(baseValue - discountTotal));
-
-  return { appliedCoupon, appliedLoyalty, appliedReferral, discountTotal, finalTotal };
-}
+export { roundMoney, applyDiscounts };
 
 /**
  * Returns the number of loyalty points actually consumed given the discount

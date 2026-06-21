@@ -51,18 +51,7 @@ export function formatDateTime(d?: string | null): string {
   });
 }
 
-export function validateCpf(cpf: string): boolean {
-  const digits = cpf.replace(/\D/g, "");
-  if (digits.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(digits)) return false;
-  const calc = (len: number) => {
-    let sum = 0;
-    for (let i = 0; i < len; i++) sum += Number(digits[i]) * (len + 1 - i);
-    const rem = (sum * 10) % 11;
-    return rem === 10 || rem === 11 ? 0 : rem;
-  };
-  return calc(9) === Number(digits[9]) && calc(10) === Number(digits[10]);
-}
+export { isValidCpf as validateCpf, formatCpf } from "@workspace/shared";
 
 export function validatePhone(phone: string): boolean {
   const digits = phone.replace(/\D/g, "");
@@ -75,13 +64,4 @@ export function validatePhone(phone: string): boolean {
     return /^[1-9]{2}[2-8][0-9]{7}$/.test(digits);
   }
   return false;
-}
-
-export function formatCpf(cpf: string | null | undefined): string {
-  if (!cpf) return "—";
-  const digits = cpf.replace(/\D/g, "");
-  if (digits.length === 11) {
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-  }
-  return cpf;
 }

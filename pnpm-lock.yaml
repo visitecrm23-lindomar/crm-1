@@ -156,6 +156,9 @@ importers:
       '@workspace/permissions':
         specifier: workspace:*
         version: link:../../lib/permissions
+      '@workspace/shared':
+        specifier: workspace:*
+        version: link:../../lib/shared
       bullmq:
         specifier: ^5.76.2
         version: 5.76.2
@@ -927,6 +930,9 @@ importers:
       '@workspace/permissions':
         specifier: workspace:*
         version: link:../../lib/permissions
+      '@workspace/shared':
+        specifier: workspace:*
+        version: link:../../lib/shared
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -1096,6 +1102,8 @@ importers:
         version: 25.3.5
 
   lib/permissions: {}
+
+  lib/shared: {}
 
   scripts:
     dependencies:

@@ -20,6 +20,7 @@
     "@workspace/email": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*",
     "@workspace/permissions": "workspace:*",
+    "@workspace/shared": "workspace:*",
     "bullmq": "^5.76.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2",

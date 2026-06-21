@@ -1,6 +1,11 @@
-export function roundMoney(val: number): number {
-  return Math.round(val * 100) / 100;
-}
+/**
+ * Monetary rounding and sequential discount application live in the shared
+ * workspace package so the frontend reuses the exact same logic the server
+ * uses (server stays the source of truth). Re-exported for existing imports.
+ */
+import { roundMoney, applyDiscounts } from "@workspace/shared";
+
+export { roundMoney, applyDiscounts };
 
 export function computeReservationTotal(priceAdult: number, seats: string[]): number {
   return priceAdult * seats.length;
