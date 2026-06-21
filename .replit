@@ -114,6 +114,10 @@ args = "artifacts/cliente-app: expo"
 task = "workflow.run"
 args = "api-typecheck"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "visitecrm-typecheck"
+
 [[workflows.workflow]]
 name = "schema-drift"
 author = "agent"
@@ -146,6 +150,17 @@ args = "cd artifacts/api-server && NODE_OPTIONS='--max-old-space-size=4096' pnpm
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "visitecrm-typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_OPTIONS='--max-old-space-size=4096' pnpm --filter @workspace/visitecrm run typecheck"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
   [agent]
 stack = "BEST_EFFORT_FALLBACK"

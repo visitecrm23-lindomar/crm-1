@@ -2514,6 +2514,14 @@ export interface UpdateReferralSettingsBody {
   maxReferralsPerUser?: number;
 }
 
+export interface ReferralAttemptLog {
+  id: string;
+  storeSlug: string;
+  /** @nullable */
+  ipAddress?: string | null;
+  createdAt: string;
+}
+
 export interface ClientReferralInfo {
   /** @nullable */
   referralCode: string | null;
@@ -2525,6 +2533,7 @@ export interface ClientReferralInfo {
   referralSuspendedAttemptAt?: string | null;
   referralSuspendedAttemptCount: number;
   referrals: Referral[];
+  attemptLogs?: ReferralAttemptLog[];
 }
 
 export interface Coupon {

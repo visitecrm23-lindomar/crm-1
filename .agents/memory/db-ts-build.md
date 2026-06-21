@@ -3,9 +3,12 @@ name: Workspace lib TypeScript build (project references)
 description: Consumers resolve workspace libs (lib/db, lib/api-zod, lib/api-client-react) via compiled dist/*.d.ts through project references, so stale dist breaks tsc after schema changes OR after adding a new exported source file.
 ---
 
-Consumers in this monorepo (api-server, visitecrm, etc.) type-check workspace libraries through their compiled `dist/*.d.ts`, NOT their source `.ts`. So the dist must be rebuilt after EITHER:
+Consumers in this monorepo (api-server, visitecrm, etc.) type-check workspace libraries through their compiled `dist/*.d.ts`, NOT their source `.ts`. So the dist must be rebuilt after ANY of:
 - adding a new column to `lib/db/src/schema/*.ts` (→ `tsc --noEmit` reports "Property X does not exist on type Y"), OR
-- adding/exporting a NEW source file in a lib (e.g. `lib/api-client-react/src/insights-advanced.ts`). Until you rebuild, consumers get TS2305 "Module has no exported member …" for the new hooks/types even though `src/index.ts` exports them.
+- adding/exporting a NEW source file in a lib (e.g. `lib/api-client-react/src/insights-advanced.ts`), OR
+- editing existing generated source files like `lib/api-client-react/src/generated/api.schemas.ts` or `api.ts` (→ stale dist makes typecheck slow AND causes missing-property errors on the new/changed types).
+
+When dist is stale, `tsc --noEmit` on visitecrm can exceed 2 minutes because it falls back to re-checking the huge source files (api.ts is 20k lines). After rebuilding the dist (~30s), the frontend typecheck returns to ~26s.
 
 **Why:** Consumer tsconfigs use project `references` (e.g. `references: [{path: "../../lib/api-client-react"}]`) with `composite: true`, so TS reads `dist/` declarations, not source. A package `exports` map pointing at `./src` does not override this for `tsc`.
 
