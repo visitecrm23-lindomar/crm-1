@@ -325,11 +325,11 @@ function AgencyDashboard() {
             {integrationIssues.map((i) => i.label).join(", ")}{" "}
             {integrationIssues.length === 1 ? "está" : "estão"} com falha de conexão.
           </p>
-          <Link
-            href="/configuracoes?tab=integracoes"
-            className="ml-auto shrink-0 text-sm font-medium text-orange-700 underline underline-offset-2 dark:text-orange-400"
-          >
-            Verificar
+          <Link href="/configuracoes?tab=integrations">
+            <Button size="sm" variant="outline" className="border-orange-300 bg-white text-orange-900 hover:bg-orange-100 dark:border-orange-700 dark:bg-transparent dark:text-orange-200 h-7 px-3 text-xs shrink-0">
+              <Settings className="h-3 w-3 mr-1.5" />
+              Verificar
+            </Button>
           </Link>
         </div>
       )}
