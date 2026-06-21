@@ -167,6 +167,8 @@ ADDITIONAL_ORIGINS = "https://visite-cariri-cearense-receptivo.replit.app"
 VITE_APP_URL = "https://visite-cariri-cearense-receptivo.replit.app"
 CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
 VITE_CLERK_PROXY_URL = "https://visite-cariri-cearense-receptivo.replit.app/api/__clerk"
+NODE_ENV = "production"
+ENABLE_WORKERS = "true"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"

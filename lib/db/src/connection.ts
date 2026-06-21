@@ -10,7 +10,12 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// In production, pass ssl options explicitly so pg-connection-string does not
+// emit deprecation warnings about sslmode='require'/'prefer' semantics.
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ...(process.env.NODE_ENV === "production" ? { ssl: { rejectUnauthorized: true } } : {}),
+});
 
 pool.on("error", (err) => {
   console.error("[db] Unexpected idle-client error:", err.message);
