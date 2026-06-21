@@ -187,7 +187,7 @@ ENABLE_WORKERS = "true"
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
 SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
-VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
-CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
 
   [userenv.development]
+VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
+CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
