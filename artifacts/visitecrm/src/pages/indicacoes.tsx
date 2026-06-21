@@ -13,6 +13,7 @@ import {
   useGetReferralExpiryEmailStatus,
   useGetReferralBonusReleaseEmailStatus,
   useResendBonusRelease,
+  useReverseReferralBonus,
   getReferralExportUrl,
   getReferralAnalyticsExportUrl,
   useGetMe,
@@ -204,6 +205,7 @@ export default function Indicacoes() {
   const payBonus = usePayReferralBonus();
   const resendWarning = useResendExpiryWarning();
   const resendBonus = useResendBonusRelease();
+  const reverseBonus = useReverseReferralBonus();
   const testWhatsApp = useTestWhatsAppMessage();
   const { data: me } = useGetMe();
   const queryClient = useQueryClient();
@@ -285,6 +287,9 @@ export default function Indicacoes() {
   const [selectedReferral, setSelectedReferral] = useState<EnrichedReferral | null>(null);
   const [payBonusDialogOpen, setPayBonusDialogOpen] = useState(false);
   const [payBonusTarget, setPayBonusTarget] = useState<EnrichedReferral | null>(null);
+  const [reverseBonusDialogOpen, setReverseBonusDialogOpen] = useState(false);
+  const [reverseBonusTarget, setReverseBonusTarget] = useState<EnrichedReferral | null>(null);
+  const [reverseBonusReason, setReverseBonusReason] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [bonusFilter, setBonusFilter] = useState<"all" | "unpaid">("all");
@@ -437,6 +442,33 @@ export default function Indicacoes() {
   function openPayBonusDialog(r: EnrichedReferral) {
     setPayBonusTarget(r);
     setPayBonusDialogOpen(true);
+  }
+
+  function openReverseBonusDialog(r: EnrichedReferral) {
+    setReverseBonusTarget(r);
+    setReverseBonusReason("");
+    setReverseBonusDialogOpen(true);
+  }
+
+  async function confirmReverseBonus() {
+    if (!reverseBonusTarget) return;
+    if (!reverseBonusReason.trim()) {
+      toast({ title: "Informe o motivo da reversão", variant: "destructive" });
+      return;
+    }
+    try {
+      const updated = await reverseBonus.mutateAsync({ id: reverseBonusTarget.id, body: { reason: reverseBonusReason.trim() } });
+      toast({ title: "Bônus revertido com sucesso", description: "O indicador será notificado por e-mail." });
+      refetch();
+      setReverseBonusDialogOpen(false);
+      setReverseBonusTarget(null);
+      setReverseBonusReason("");
+      if (selectedReferral?.id === updated.id) {
+        setSelectedReferral(updated as EnrichedReferral);
+      }
+    } catch {
+      toast({ title: "Erro ao reverter bônus", variant: "destructive" });
+    }
   }
 
   async function confirmPayBonus() {
@@ -1625,6 +1657,7 @@ export default function Indicacoes() {
                                    (r as EnrichedReferral).reversalReason}
                                 </p>
                               )}
+                              
                             </div>
                           ) : r.status === REFERRAL_STATUS.COMPLETED ? (
                             <div>
@@ -1694,6 +1727,17 @@ export default function Indicacoes() {
                                 }
                               >
                                 <Wallet className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {r.status === REFERRAL_STATUS.COMPLETED && (me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.AGENCY_MANAGER || me?.role === ROLES.SUPER_ADMIN) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => openReverseBonusDialog(r)}
+                                title="Reverter bônus"
+                              >
+                                <XCircle className="w-3 h-3" />
                               </Button>
                             )}
                             {r.isActive && r.status === REFERRAL_STATUS.PENDING && (
@@ -1956,6 +2000,64 @@ export default function Indicacoes() {
         </DialogContent>
       </Dialog>
 
+      {/* Reverse Bonus Confirmation Dialog */}
+      <Dialog open={reverseBonusDialogOpen} onOpenChange={(open) => { setReverseBonusDialogOpen(open); if (!open) { setReverseBonusTarget(null); setReverseBonusReason(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <XCircle className="w-5 h-5" />
+              Reverter Bônus de Indicação
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação reverterá o bônus, decrementará os ganhos do indicador e enviará uma notificação por e-mail. Não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          {reverseBonusTarget && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Indicador</span>
+                  <span className="font-medium">{reverseBonusTarget.referrerName ?? reverseBonusTarget.referrerId.slice(0, 8)}</span>
+                </div>
+                {reverseBonusTarget.referrerEmail && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">E-mail</span>
+                    <span className="text-sm">{reverseBonusTarget.referrerEmail}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Valor do bônus</span>
+                  <span className="font-bold text-red-600 text-base line-through">{fmtCurrency(reverseBonusTarget.bonusAmount)}</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reversal-reason">Motivo da reversão <span className="text-red-500">*</span></Label>
+                <Input
+                  id="reversal-reason"
+                  placeholder="Ex: Contestação do cliente, reembolso parcial..."
+                  value={reverseBonusReason}
+                  onChange={(e) => setReverseBonusReason(e.target.value)}
+                  disabled={reverseBonus.isPending}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseBonusDialogOpen(false)} disabled={reverseBonus.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmReverseBonus}
+              disabled={reverseBonus.isPending || !reverseBonusReason.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              {reverseBonus.isPending ? "Processando..." : "Confirmar reversão"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Detail Modal */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -2025,7 +2127,13 @@ export default function Indicacoes() {
                       <p className="text-xs text-red-500 flex items-center gap-1">
                         <XCircle className="w-3 h-3" />
                         Revertido
-                        {(selectedReferral as EnrichedReferral).reversalReason === "trip_cancelled" ? " — excursão cancelada" : " — reserva cancelada"}
+                        {(selectedReferral as EnrichedReferral).reversalReason === "trip_cancelled"
+                          ? " — excursão cancelada"
+                          : (selectedReferral as EnrichedReferral).reversalReason === "reservation_cancelled"
+                          ? " — reserva cancelada"
+                          : (selectedReferral as EnrichedReferral).reversalReason
+                          ? ` — ${(selectedReferral as EnrichedReferral).reversalReason}`
+                          : ""}
                       </p>
                     </>
                   ) : (
@@ -2412,6 +2520,16 @@ export default function Indicacoes() {
               >
                 <Wallet className="w-4 h-4 mr-2" />
                 Pagar Bônus
+              </Button>
+            )}
+            {selectedReferral && selectedReferral.status === REFERRAL_STATUS.COMPLETED && (me?.role === ROLES.AGENCY_ADMIN || me?.role === ROLES.AGENCY_MANAGER || me?.role === ROLES.SUPER_ADMIN) && (
+              <Button
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                onClick={() => { setDetailModalOpen(false); openReverseBonusDialog(selectedReferral); }}
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Reverter bônus
               </Button>
             )}
             <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Fechar</Button>

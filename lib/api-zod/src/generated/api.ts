@@ -4793,6 +4793,10 @@ export const UpdateReferralBody = zod.object({
   notes: zod.string().optional(),
 });
 
+export const ReverseReferralBonusBody = zod.object({
+  reason: zod.string().min(1),
+});
+
 export const UpdateReferralResponse = zod.object({
   id: zod.string(),
   tenantId: zod.string(),

@@ -2433,6 +2433,10 @@ export interface UpdateReferralBody {
   notes?: string;
 }
 
+export interface ReverseReferralBonusBody {
+  reason: string;
+}
+
 export interface ReferralStats {
   total: number;
   pending: number;

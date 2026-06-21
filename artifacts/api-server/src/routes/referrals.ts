@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
@@ -1897,6 +1897,118 @@ router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunct
     }
 
     res.json({ success: true, phone: parsed.data.phone });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/referrals/:id/reverse", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+
+    const parsed = z.object({
+      reason: z.string().min(1, "Motivo é obrigatório"),
+    }).safeParse(req.body);
+    if (!parsed.success) { next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR")); return; }
+
+    const [existing] = await db.select({
+      id: referralsTable.id,
+      status: referralsTable.status,
+      referrerId: referralsTable.referrerId,
+      referredId: referralsTable.referredId,
+      bonusAmount: referralsTable.bonusAmount,
+    })
+      .from(referralsTable)
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId)))
+      .limit(1);
+
+    if (!existing) { next(new NotFoundError("Indicação não encontrada", "NOT_FOUND")); return; }
+    // Fast pre-flight: avoids opening a transaction for obvious 422 cases.
+    // The authoritative check happens inside the transaction under a row lock.
+    if (existing.status !== REFERRAL_STATUS.COMPLETED) {
+      next(new AppError("Reversão manual só é permitida em indicações com status 'convertida'", 422, "UNPROCESSABLE"));
+      return;
+    }
+
+    const reversedInfo = await db.transaction(async (tx) => {
+      // Lock the referral row first so concurrent duplicate requests serialize.
+      const locked = await tx.execute(
+        sql`SELECT id, status, referrer_id, referred_id, bonus_amount FROM referrals WHERE id = ${existing.id} AND tenant_id = ${me.tenantId} FOR UPDATE`
+      );
+      const lockedRow = (locked.rows as Array<Record<string, unknown>>)[0];
+      if (!lockedRow || lockedRow.status !== REFERRAL_STATUS.COMPLETED) {
+        // Already reversed by a concurrent request — abort without modifying balances.
+        throw new AppError("Reversão manual só é permitida em indicações com status 'convertida'", 422, "UNPROCESSABLE");
+      }
+
+      const bonusToReverse = Number(lockedRow.bonus_amount ?? existing.bonusAmount);
+      const referrerId = String(lockedRow.referrer_id ?? existing.referrerId);
+      const referredId = (lockedRow.referred_id as string | null) ?? existing.referredId ?? null;
+      const bonusAmountStr = String(lockedRow.bonus_amount ?? existing.bonusAmount ?? "0");
+
+      // Lock the referrer's client row before modifying their balance.
+      await tx.execute(
+        sql`SELECT id FROM clients WHERE id = ${referrerId} AND tenant_id = ${me.tenantId} FOR UPDATE`
+      );
+      await tx.update(clientsTable)
+        .set({
+          successfulReferrals: sql`GREATEST(0, COALESCE(successful_referrals, 0) - 1)`,
+          referralEarnings: sql`GREATEST(0, COALESCE(referral_earnings, 0) - ${bonusToReverse.toFixed(2)})`,
+        })
+        .where(and(
+          eq(clientsTable.id, referrerId),
+          eq(clientsTable.tenantId, me.tenantId),
+        ));
+
+      const reversalNow = new Date();
+      await tx.update(referralsTable)
+        .set({
+          status: REFERRAL_STATUS.REVERSED,
+          reversalReason: parsed.data.reason,
+          reversalAt: reversalNow,
+          updatedAt: reversalNow,
+        })
+        .where(and(
+          eq(referralsTable.id, existing.id),
+          eq(referralsTable.status, REFERRAL_STATUS.COMPLETED),
+        ));
+
+      return { referrerId, referredId, bonusAmountStr };
+    });
+
+    const { dispatchReferralReversedEmail } = await import("../queues/email-helpers.js");
+    dispatchReferralReversedEmail({
+      referrerId: reversedInfo.referrerId,
+      referredId: reversedInfo.referredId,
+      bonusAmount: reversedInfo.bonusAmountStr,
+      tenantId: me.tenantId,
+      reason: parsed.data.reason,
+    }).catch(() => {});
+
+    const [updated] = await db.select({
+      ...getTableColumns(referralsTable),
+      referrerClientName: clientsTable.name,
+      referrerClientEmail: clientsTable.email,
+      referrerClientWhatsapp: clientsTable.whatsapp,
+      referrerClientPhone: clientsTable.phone,
+    }).from(referralsTable)
+      .leftJoin(clientsTable, and(
+        eq(referralsTable.referrerId, clientsTable.id),
+        eq(clientsTable.tenantId, me.tenantId),
+      ))
+      .where(and(eq(referralsTable.id, req.params.id), eq(referralsTable.tenantId, me.tenantId))).limit(1);
+
+    if (!updated) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
+    const { referrerClientName, referrerClientEmail, referrerClientWhatsapp, referrerClientPhone, ...rest } = updated;
+    res.json({
+      ...rest,
+      referrerName: referrerClientName ?? rest.referrerName,
+      referrerEmail: referrerClientEmail ?? rest.referrerEmail,
+      referrerPhone: referrerClientPhone ?? rest.referrerPhone,
+      referrerWhatsapp: referrerClientWhatsapp ?? null,
+    });
   } catch (err) {
     next(err);
   }

@@ -14908,6 +14908,85 @@ export const useTestWhatsAppMessage = <
   return useMutation(getTestWhatsAppMessageMutationOptions(options));
 };
 
+export const getReverseReferralBonusUrl = (id: string) => {
+  return `/api/referrals/${id}/reverse`;
+};
+
+export const reverseReferralBonus = async (
+  id: string,
+  body: { reason: string },
+  options?: RequestInit,
+): Promise<Referral> => {
+  return customFetch<Referral>(getReverseReferralBonusUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(body),
+  });
+};
+
+export const getReverseReferralBonusMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reverseReferralBonus>>,
+    TError,
+    { id: string; body: { reason: string } },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reverseReferralBonus>>,
+  TError,
+  { id: string; body: { reason: string } },
+  TContext
+> => {
+  const mutationKey = ["reverseReferralBonus"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reverseReferralBonus>>,
+    { id: string; body: { reason: string } }
+  > = (props) => {
+    const { id, body } = props ?? {};
+    return reverseReferralBonus(id, body, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReverseReferralBonusMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reverseReferralBonus>>
+>;
+export type ReverseReferralBonusMutationError = ErrorType<unknown>;
+
+export const useReverseReferralBonus = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reverseReferralBonus>>,
+    TError,
+    { id: string; body: { reason: string } },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reverseReferralBonus>>,
+  TError,
+  { id: string; body: { reason: string } },
+  TContext
+> => {
+  return useMutation(getReverseReferralBonusMutationOptions(options));
+};
+
 export const getPayReferralBonusUrl = (id: string) => {
   return `/api/referrals/${id}/pay-bonus`;
 };
