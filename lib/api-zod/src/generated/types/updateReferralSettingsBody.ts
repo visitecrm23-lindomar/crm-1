@@ -26,4 +26,10 @@ export interface UpdateReferralSettingsBody {
   expiryWarning7DaysEnabled?: boolean;
   expiryWarning1DayEnabled?: boolean;
   bonusReleaseEmailEnabled?: boolean;
+  pointsPerReferral?: number;
+  gracePeriodDays?: number;
+  bonusValidityDays?: number;
+  discountExpirationDays?: number;
+  minPurchaseAmount?: number;
+  maxReferralsPerUser?: number;
 }

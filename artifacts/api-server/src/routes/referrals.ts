@@ -1431,6 +1431,8 @@ router.get("/referral-settings", async (req, res, next: NextFunction): Promise<v
         expiryWarning1DayEnabled: true,
         bonusReleaseEmailEnabled: true,
         pointsPerReferral: 0,
+        gracePeriodDays: 30,
+        bonusValidityDays: 30,
         discountExpirationDays: 30,
         minPurchaseAmount: "0.00",
         maxReferralsPerUser: 0,
@@ -1481,6 +1483,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
       bonusReleaseEmailEnabled: z.boolean().optional(),
       pointsPerReferral: z.number().int().min(0).optional(),
       gracePeriodDays: z.number().int().min(0).optional(),
+      bonusValidityDays: z.number().int().min(0).optional(),
       discountExpirationDays: z.number().int().min(0).optional(),
       minPurchaseAmount: z.number().min(0).optional(),
       maxReferralsPerUser: z.number().int().min(0).optional(),
@@ -1508,6 +1511,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
     if (parsed.data.pointsPerReferral != null) updates.pointsPerReferral = parsed.data.pointsPerReferral;
     if (parsed.data.gracePeriodDays != null) updates.gracePeriodDays = parsed.data.gracePeriodDays;
+    if (parsed.data.bonusValidityDays != null) updates.bonusValidityDays = parsed.data.bonusValidityDays;
     if (parsed.data.discountExpirationDays != null) updates.discountExpirationDays = parsed.data.discountExpirationDays;
     if (parsed.data.minPurchaseAmount != null) updates.minPurchaseAmount = parsed.data.minPurchaseAmount.toFixed(2);
     if (parsed.data.maxReferralsPerUser != null) updates.maxReferralsPerUser = parsed.data.maxReferralsPerUser;

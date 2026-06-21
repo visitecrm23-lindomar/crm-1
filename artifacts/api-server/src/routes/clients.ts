@@ -495,6 +495,11 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     if (parsed.data.gender !== undefined) updates.gender = parsed.data.gender ?? null;
     if (parsed.data.instagram !== undefined) updates.instagram = parsed.data.instagram ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;
+    const isDeactivatingStatus = parsed.data.status != null && ["inactive", "blocked", "cancelled"].includes(parsed.data.status);
+    const shouldAutoBlockReferralCode = isDeactivatingStatus && existing.referralCodeStatus === "active";
+    if (shouldAutoBlockReferralCode) {
+      updates.referralCodeStatus = "blocked";
+    }
     if (parsed.data.classification != null) updates.classification = parsed.data.classification;
     if (parsed.data.tags != null) updates.tags = parsed.data.tags;
     if (parsed.data.observations !== undefined) updates.observations = parsed.data.observations ?? null;
@@ -546,6 +551,12 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
       .limit(1);
     if (!client) { next(new NotFoundError("Client not found", "NOT_FOUND")); return; }
     res.json(formatClient(client));
+
+    if (shouldAutoBlockReferralCode) {
+      dispatchReferralCodeSuspendedEmail({ clientId: client.id, tenantId: me.tenantId, status: "blocked" }).catch((err: unknown) => {
+        req.log?.warn({ err, clientId: client.id }, "[clients] referral-code-suspended auto-email on deactivation failed");
+      });
+    }
 
     if (parsed.data.birthDate !== undefined) {
       scheduleCalendarSyncBirthday(client.id).catch(() => {});

@@ -344,6 +344,7 @@ export default function Indicacoes() {
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
       pointsPerReferral: settings?.pointsPerReferral ?? 0,
       gracePeriodDays: settings?.gracePeriodDays ?? 30,
+      bonusValidityDays: settings?.bonusValidityDays ?? 30,
       discountExpirationDays: settings?.discountExpirationDays ?? 30,
       minPurchaseAmount: settings?.minPurchaseAmount ?? null,
       maxReferralsPerUser: settings?.maxReferralsPerUser ?? 0,
@@ -375,6 +376,7 @@ export default function Indicacoes() {
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
           pointsPerReferral: localSettings.pointsPerReferral != null ? Number(localSettings.pointsPerReferral) : undefined,
           gracePeriodDays: (localSettings as Record<string, unknown>).gracePeriodDays != null ? Number((localSettings as Record<string, unknown>).gracePeriodDays) : undefined,
+          bonusValidityDays: (localSettings as Record<string, unknown>).bonusValidityDays != null ? Number((localSettings as Record<string, unknown>).bonusValidityDays) : undefined,
           discountExpirationDays: (localSettings as Record<string, unknown>).discountExpirationDays != null ? Number((localSettings as Record<string, unknown>).discountExpirationDays) : undefined,
           minPurchaseAmount: (localSettings as Record<string, unknown>).minPurchaseAmount != null && String((localSettings as Record<string, unknown>).minPurchaseAmount).trim() !== "" ? parseFloat(String((localSettings as Record<string, unknown>).minPurchaseAmount)) : undefined,
           maxReferralsPerUser: (localSettings as Record<string, unknown>).maxReferralsPerUser != null ? Number((localSettings as Record<string, unknown>).maxReferralsPerUser) : undefined,
@@ -2509,6 +2511,17 @@ export default function Indicacoes() {
                 onChange={(e) => setLocalSettings((s) => ({ ...(s as object), gracePeriodDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
               />
               <p className="text-xs text-muted-foreground">Quantos dias após a conversão o bônus fica retido antes de ser liberado ao indicador. O bônus é revertido automaticamente se a reserva ou excursão for cancelada nesse período.</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Validade do bônus após liberação (dias)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={(localSettings as Record<string, unknown>).bonusValidityDays as number ?? 30}
+                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), bonusValidityDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+              />
+              <p className="text-xs text-muted-foreground">Por quantos dias o bônus permanece válido para resgate após ser liberado ao indicador. Use 0 para não expirar.</p>
             </div>
 
             <div className="space-y-1">

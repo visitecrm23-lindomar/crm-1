@@ -33,6 +33,13 @@ export interface ReferralSettings {
   expiryWarning7DaysEnabled: boolean;
   expiryWarning1DayEnabled: boolean;
   bonusReleaseEmailEnabled: boolean;
+  pointsPerReferral: number;
+  gracePeriodDays: number;
+  bonusValidityDays: number;
+  discountExpirationDays: number;
+  /** @nullable */
+  minPurchaseAmount?: string | null;
+  maxReferralsPerUser: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -118,6 +118,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),
   pointsPerReferral: integer("points_per_referral").notNull().default(0),
   gracePeriodDays: integer("grace_period_days").notNull().default(30),
+  bonusValidityDays: integer("bonus_validity_days").notNull().default(30),
   discountExpirationDays: integer("discount_expiration_days").notNull().default(30),
   minPurchaseAmount: numeric("min_purchase_amount", { precision: 10, scale: 2 }),
   maxReferralsPerUser: integer("max_referrals_per_user").notNull().default(0),
