@@ -22,15 +22,70 @@ import type { ClientPortalProfile, MyReferralsResponse, ClientReferral } from "@
 
 const REFERRAL_STATUS_LABELS: Record<string, string> = {
   pending: "Aguardando",
+  completed: "Bônus liberado",
   converted: "Convertido",
   expired: "Expirado",
+  reversed: "Revertido",
 };
 
 const REFERRAL_STATUS_COLORS: Record<string, string> = {
   pending: "#d97706",
+  completed: "#16a34a",
   converted: "#16a34a",
   expired: "#6b7280",
+  reversed: "#6b7280",
 };
+
+/**
+ * Returns the number of whole days until `expiresAt`.
+ * Negative means already expired.
+ * Returns null when expiresAt is absent.
+ */
+function getDaysUntilExpiry(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const now = Date.now();
+  const exp = new Date(expiresAt).getTime();
+  return Math.floor((exp - now) / (1000 * 60 * 60 * 24));
+}
+
+function ExpiryBadge({
+  expiresAt,
+  status,
+}: {
+  expiresAt: string | null;
+  status: string;
+}) {
+  const days = getDaysUntilExpiry(expiresAt);
+  if (days === null) return null;
+  if (status !== "completed" && status !== "converted") return null;
+
+  if (days < 0) {
+    return (
+      <View style={[styles.expiryPill, { backgroundColor: "#f3f4f6" }]}>
+        <Feather name="clock" size={11} color="#6b7280" />
+        <Text style={[styles.expiryText, { color: "#6b7280" }]}>Expirou</Text>
+      </View>
+    );
+  }
+  if (days === 0) {
+    return (
+      <View style={[styles.expiryPill, { backgroundColor: "#fef2f2" }]}>
+        <Feather name="alert-circle" size={11} color="#dc2626" />
+        <Text style={[styles.expiryText, { color: "#dc2626" }]}>Expira hoje</Text>
+      </View>
+    );
+  }
+  const color = days <= 7 ? "#d97706" : "#6b7280";
+  const bg = days <= 7 ? "#fffbeb" : "#f3f4f6";
+  return (
+    <View style={[styles.expiryPill, { backgroundColor: bg }]}>
+      <Feather name="clock" size={11} color={color} />
+      <Text style={[styles.expiryText, { color }]}>
+        {days === 1 ? "Expira em 1 dia" : `Expira em ${days} dias`}
+      </Text>
+    </View>
+  );
+}
 
 function ReferralItem({
   r,
@@ -57,6 +112,7 @@ function ReferralItem({
           {r.referredName ?? "Indicado"}
         </Text>
         <Text style={[styles.referralDate, { color: colors.mutedForeground }]}>{date}</Text>
+        <ExpiryBadge expiresAt={r.expiresAt} status={r.status} />
       </View>
       <View style={[styles.statusPill, { backgroundColor: statusColor + "18" }]}>
         <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
@@ -454,6 +510,20 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
+  },
+  expiryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 3,
+  },
+  expiryText: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
   },
   blockedBanner: {
     flexDirection: "row",

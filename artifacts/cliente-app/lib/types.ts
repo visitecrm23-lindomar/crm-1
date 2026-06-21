@@ -60,6 +60,7 @@ export interface ClientReferral {
   bonusAmount: string;
   bonusPaid: boolean;
   createdAt: string;
+  expiresAt: string | null;
 }
 
 export interface ClientPortalProfile {
