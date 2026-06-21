@@ -1,6 +1,6 @@
 import { db, referralSettingsTable, clientsTable, tenantsTable, referralsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
-import { sendWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
+import { sendTenantWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { getWhatsAppQueue } from "./index";
 import { logger } from "../lib/logger";
 import { REFERRAL_STATUS } from "@workspace/permissions";
@@ -27,7 +27,7 @@ async function enqueueOrSend(phone: string, message: string, tenantId: string): 
         "[workers-disabled] ENABLE_WORKERS=false — sending WhatsApp message directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
       );
     }
-    const result = await sendWhatsAppMessage(phone, message);
+    const result = await sendTenantWhatsAppMessage(tenantId, phone, message);
     if (!result.success && result.error !== "credentials_not_configured") {
       logger.warn({ phone, error: result.error }, "[whatsapp-queue] Direct send failed");
     }

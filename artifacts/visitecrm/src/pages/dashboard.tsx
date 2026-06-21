@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef, type ElementType } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetDashboardSummary, useGetDashboardUpcomingTrips,
   useGetDashboardCharts, useGetDashboardFunnel,
@@ -203,6 +204,23 @@ function AgencyDashboard() {
     return (charts?.originBreakdown ?? []).map(item => ({ name: item.name, value: item.count }));
   }, [charts]);
 
+  // Integration health check — polls once per 5 min; shows banner if essential integration is failing
+  const { data: integrationStatuses } = useQuery({
+    queryKey: ["integration-alerts"],
+    queryFn: async () => {
+      const resp = await fetch("/api/integrations");
+      if (!resp.ok) return [] as Array<{ type: string; label: string; status: string; enabled: boolean }>;
+      return resp.json() as Promise<Array<{ type: string; label: string; status: string; enabled: boolean }>>;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const ESSENTIAL_INTEGRATION_TYPES = ["whatsapp_evolution", "stripe_account", "mercadopago"];
+  const integrationIssues = (integrationStatuses ?? []).filter(
+    (i) => ESSENTIAL_INTEGRATION_TYPES.includes(i.type) && i.enabled && (i.status === "error" || i.status === "disconnected"),
+  );
+
   // Diagnostic engine
   const diagnostics = useMemo(() => {
     if (!summary || !charts) return [];
@@ -295,6 +313,24 @@ function AgencyDashboard() {
             Atenção: <strong>{formatCurrency(paymentSummary!.overdueReceivable)}</strong> em recebimentos vencidos.
           </p>
           <Link href="/financial" className="ml-auto text-sm font-medium text-destructive underline underline-offset-2">Ver detalhes</Link>
+        </div>
+      )}
+
+      {/* Integration health alert */}
+      {integrationIssues.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm dark:border-orange-800 dark:bg-orange-950/40">
+          <Zap className="w-5 h-5 text-orange-500 shrink-0" />
+          <p className="flex-1 text-orange-900 dark:text-orange-200">
+            <span className="font-medium">Integração com problema: </span>
+            {integrationIssues.map((i) => i.label).join(", ")}{" "}
+            {integrationIssues.length === 1 ? "está" : "estão"} com falha de conexão.
+          </p>
+          <Link
+            href="/configuracoes?tab=integracoes"
+            className="ml-auto shrink-0 text-sm font-medium text-orange-700 underline underline-offset-2 dark:text-orange-400"
+          >
+            Verificar
+          </Link>
         </div>
       )}
 

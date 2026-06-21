@@ -197,6 +197,7 @@ function makeReferral(overrides: Record<string, unknown> = {}) {
     tenantId: "tenant-001",
     bonusAmount: "50.00",
     convertedAt: new Date("2026-01-01"),
+    bonusReleaseNotifiedAt: null,
     ...overrides,
   };
 }
@@ -235,10 +236,13 @@ describe("processReferralBonusReleaseNotifications", () => {
 
     await processReferralBonusReleaseNotifications();
 
-    // Stamp must be written before dispatch
-    expect(capturedUpdates).toHaveLength(1);
-    expect(capturedUpdates[0].set.bonusReleaseNotifiedAt).toBeInstanceOf(Date);
-    expect(capturedUpdates[0].set.updatedAt).toBeInstanceOf(Date);
+    // Step 1: auto-release (bonusPaid=true) always runs first
+    expect(capturedUpdates).toHaveLength(2);
+    expect(capturedUpdates[0].set.bonusPaid).toBe(true);
+    expect(capturedUpdates[0].set.bonusPaidAt).toBeInstanceOf(Date);
+    // Step 2: email stamp written before dispatch
+    expect(capturedUpdates[1].set.bonusReleaseNotifiedAt).toBeInstanceOf(Date);
+    expect(capturedUpdates[1].set.updatedAt).toBeInstanceOf(Date);
 
     // Email dispatched after winning the race
     expect(mockDispatchBonusReleased).toHaveBeenCalledOnce();
@@ -294,21 +298,29 @@ describe("processReferralBonusReleaseNotifications", () => {
   //     The atomic IS NULL guard ensures only the first writer's UPDATE returns
   //     a row; the second gets an empty RETURNING and skips dispatch entirely.
   it("(d) concurrent runs: only the run that wins the IS NULL stamp race dispatches the email", async () => {
-    // Both runs see the same settings and the same referral
-    let selectCallCount = 0;
-    (db.select as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      selectCallCount++;
-      // Calls 1 & 2 are the settings queries (one per run); 3 & 4 are the referral queries
-      if (selectCallCount % 2 === 1) {
-        return makeChain([makeTenantSetting()]);
-      }
-      return makeChain([makeReferral()]);
-    });
+    // With Promise.all([A(), B()]), both functions run synchronously until their
+    // first `await`. Since db.select() calls happen before any await resolves, the
+    // actual select call order is deterministic:
+    //   call 1: Run A's first select (settings) — happens during A()'s sync start
+    //   call 2: Run B's first select (settings) — happens during B()'s sync start
+    //   call 3: Run A's second select (referrals) — first microtask resolves for A
+    //   call 4: Run B's second select (referrals) — next microtask resolves for B
+    (db.select as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => makeChain([makeTenantSetting()]))  // Run A call 1
+      .mockImplementationOnce(() => makeChain([makeTenantSetting()]))  // Run B call 2
+      .mockImplementationOnce(() => makeChain([makeReferral()]))       // Run A call 3
+      .mockImplementationOnce(() => makeChain([makeReferral()]));      // Run B call 4
 
-    // First UPDATE wins the race (returning non-empty); second loses (returning empty)
+    // returning() call order mirrors the select order with one more level of awaits:
+    //   call 1: Run A step 1 auto-release  → non-empty
+    //   call 2: Run B step 1 auto-release  → non-empty
+    //   call 3: Run A step 2 email stamp   → non-empty (WINNER → dispatches)
+    //   call 4: Run B step 2 email stamp   → empty     (LOSER  → skips)
     updateMocks.returning
-      .mockResolvedValueOnce([{ id: "ref-001" }])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([{ id: "ref-001" }])  // Run A step 1
+      .mockResolvedValueOnce([{ id: "ref-001" }])  // Run B step 1
+      .mockResolvedValueOnce([{ id: "ref-001" }])  // Run A step 2 (winner)
+      .mockResolvedValueOnce([]);                  // Run B step 2 (loser)
 
     // Run two concurrent instances in parallel
     await Promise.all([
@@ -319,8 +331,8 @@ describe("processReferralBonusReleaseNotifications", () => {
     // Exactly one dispatch — the loser must have skipped
     expect(mockDispatchBonusReleased).toHaveBeenCalledTimes(1);
 
-    // Two stamp attempts were made (both runs tried to stamp)
-    expect(updateMocks.returning).toHaveBeenCalledTimes(2);
+    // Four returning calls total: 2 step-1 auto-releases + 2 step-2 email stamps
+    expect(updateMocks.returning).toHaveBeenCalledTimes(4);
   });
 
   // Early exit — no tenants with referrals enabled
@@ -354,7 +366,10 @@ describe("processReferralBonusReleaseNotifications", () => {
 
     await processReferralBonusReleaseNotifications();
 
-    expect(capturedUpdates).toHaveLength(0);
+    // Step 1 (auto-release) always runs regardless of email toggle
+    expect(capturedUpdates).toHaveLength(1);
+    expect(capturedUpdates[0].set.bonusPaid).toBe(true);
+    // Step 2 (email stamp) is skipped because bonusReleaseEmailEnabled = false
     expect(mockDispatchBonusReleased).not.toHaveBeenCalled();
   });
 
@@ -408,6 +423,7 @@ describe("processReferralBonusReleaseNotifications", () => {
     await processReferralBonusReleaseNotifications();
 
     expect(mockDispatchBonusReleased).toHaveBeenCalledTimes(2);
-    expect(capturedUpdates).toHaveLength(2);
+    // 2 referrals × 2 updates each (step 1 auto-release + step 2 email stamp)
+    expect(capturedUpdates).toHaveLength(4);
   });
 });

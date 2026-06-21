@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { sendWhatsAppMessage } from "../lib/whatsapp";
+import { sendTenantWhatsAppMessage } from "../lib/whatsapp";
 import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
 import { logger } from "../lib/logger";
 import type { WhatsAppNotificationJobData } from "../queues/index";
@@ -19,7 +19,7 @@ export function startWhatsAppWorker(): Worker<WhatsAppNotificationJobData> | nul
     "whatsapp-notifications",
     async (job) => {
       logger.info({ jobId: job.id, phone: job.data.phone }, "[whatsapp-worker] Processing job");
-      const result = await sendWhatsAppMessage(job.data.phone, job.data.message);
+      const result = await sendTenantWhatsAppMessage(job.data.tenantId, job.data.phone, job.data.message);
       if (!result.success && result.error !== "credentials_not_configured") {
         throw new Error(result.error ?? "send_failed");
       }

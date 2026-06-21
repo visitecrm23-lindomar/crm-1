@@ -340,6 +340,39 @@ const REGISTRY: Record<string, RegistryEntry> = {
 
 const ALLOWED_TYPES = Object.keys(REGISTRY);
 
+// ─── GET /integrations (list) ────────────────────────────────────────────────
+// Returns the status of every known integration type for the tenant.
+// Never returns secrets.
+
+router.get("/integrations", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireIntegrationAdmin(req, res, next);
+    if (!me) return;
+
+    const rows = await db
+      .select({
+        type: tenantIntegrationsTable.type,
+        status: tenantIntegrationsTable.status,
+        enabled: tenantIntegrationsTable.enabled,
+      })
+      .from(tenantIntegrationsTable)
+      .where(eq(tenantIntegrationsTable.tenantId, me.tenantId));
+
+    const rowMap = new Map(rows.map((r) => [r.type, r]));
+
+    res.json(
+      ALLOWED_TYPES.map((type) => ({
+        type,
+        label: REGISTRY[type]!.label,
+        status: rowMap.get(type)?.status ?? "disconnected",
+        enabled: rowMap.get(type)?.enabled ?? false,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── GET /integrations/:type ──────────────────────────────────────────────────
 // Returns the current config with all secret fields masked. Never returns
 // plaintext secrets.

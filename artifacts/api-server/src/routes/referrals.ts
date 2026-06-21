@@ -9,7 +9,7 @@ import { ADMIN_ROLES } from '../lib/tenant';
 import { REFERRAL_STATUS } from "@workspace/permissions";
 import { enqueueReferralBonusPaidEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
 import { dispatchWhatsAppReferralBonusPaid } from "../queues/whatsapp-helpers";
-import { sendWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
+import { sendWhatsAppMessage, sendTenantWhatsAppMessage, interpolateWhatsAppMessage } from "../lib/whatsapp";
 import { DEFAULT_TIERS as DEFAULT_TIERS_CONFIG, computeReferralTier } from "../lib/referral-tiers";
 import type { ReferralTier } from "../lib/referral-tiers";
 
@@ -1340,7 +1340,7 @@ router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunct
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const { sendWhatsAppMessage, interpolateWhatsAppMessage } = await import("../lib/whatsapp");
+    const { sendTenantWhatsAppMessage, interpolateWhatsAppMessage } = await import("../lib/whatsapp");
 
     const [settings] = await db.select().from(referralSettingsTable)
       .where(eq(referralSettingsTable.tenantId, me.tenantId)).limit(1);
@@ -1385,7 +1385,7 @@ router.post("/referral-settings/test-whatsapp", async (req, res, next: NextFunct
         : { nome: "João", codigo: "JOAO123", link: "https://exemplo.com.br/ind/JOAO123", bonus: `R$ ${bonusFormatted}` };
 
     const message = interpolateWhatsAppMessage(template, vars);
-    const result = await sendWhatsAppMessage(phone, message);
+    const result = await sendTenantWhatsAppMessage(me.tenantId, phone, message);
 
     if (!result.success) {
       if (result.error === "credentials_not_configured") {
@@ -1880,7 +1880,7 @@ router.post("/referral-settings/whatsapp-test", async (req, res, next: NextFunct
         .replace(/\{\{?bonus\}?\}/g, bonusCurrencyFormatted);
     }
 
-    const result = await sendWhatsAppMessage(parsed.data.phone, message);
+    const result = await sendTenantWhatsAppMessage(me.tenantId, parsed.data.phone, message);
 
     if (!result.success) {
       const error = result.error ?? "unknown_error";

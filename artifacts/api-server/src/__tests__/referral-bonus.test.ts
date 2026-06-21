@@ -112,7 +112,8 @@ vi.mock("../queues/whatsapp-helpers.js", () => ({
 }));
 
 vi.mock("../lib/whatsapp.js", () => ({
-  sendWhatsAppMessage: vi.fn().mockResolvedValue(undefined),
+  sendWhatsAppMessage: vi.fn().mockResolvedValue({ success: true }),
+  sendTenantWhatsAppMessage: vi.fn().mockResolvedValue({ success: true }),
   interpolateWhatsAppMessage: vi.fn((template: string) => template),
 }));
 
@@ -243,6 +244,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([]))                                                      // referralSettings (grace period)
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, bonusPaidAt: new Date() })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
@@ -283,6 +285,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([]))                          // referralSettings (grace period)
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
@@ -298,6 +301,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow({ referrerEmail: null, referrerClientEmail: null })]))
+      .mockImplementationOnce(() => makeChain([]))                          // referralSettings (grace period)
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true, referrerEmail: null, referrerClientEmail: null })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
@@ -313,6 +317,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     mockSendEmail.mockRejectedValueOnce(new Error("SMTP error"));
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([]))                          // referralSettings (grace period)
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
@@ -345,6 +350,7 @@ describe("POST /api/referrals/:id/pay-bonus", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([makeJoinedRow()]))
+      .mockImplementationOnce(() => makeChain([]))                          // referralSettings (grace period)
       .mockImplementationOnce(() => makeChain([makeRefetchRow({ bonusPaid: true })]));
 
     const res = await request(buildApp()).post("/api/referrals/ref-001/pay-bonus").send();
@@ -372,7 +378,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
       .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]))     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]));    // referralSettings (gracePeriodDays)
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -391,7 +398,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
       .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]))     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]));    // referralSettings (gracePeriodDays)
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -407,7 +415,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "1" }]))
       .mockImplementationOnce(() => makeChain([row]))
-      .mockImplementationOnce(() => makeChain([]));     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]))     // tracking backfill query
+      .mockImplementationOnce(() => makeChain([]));    // referralSettings (gracePeriodDays)
 
     const res = await request(buildApp()).get("/api/referrals").send();
 
@@ -423,7 +432,8 @@ describe("GET /api/referrals — clientsTable JOIN enrichment", () => {
     (requireAuth as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ADMIN);
     (db.select as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => makeChain([{ total: "42" }]))
-      .mockImplementationOnce(() => makeChain([]));
+      .mockImplementationOnce(() => makeChain([]))   // rows (empty → no tracking)
+      .mockImplementationOnce(() => makeChain([]));  // referralSettings (gracePeriodDays)
 
     const res = await request(buildApp()).get("/api/referrals?page=2&limit=10").send();
 

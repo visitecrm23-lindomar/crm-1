@@ -1,4 +1,7 @@
 import { logger } from "./logger";
+import { db, tenantIntegrationsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { decryptCredential } from "./crypto";
 
 /**
  * Normalises a Brazilian phone number to E.164 format (no "+").
@@ -57,6 +60,69 @@ export async function sendWhatsAppMessage(
     logger.warn({ phone: e164, err: msg }, "[whatsapp] Network error");
     return { success: false, error: msg };
   }
+}
+
+/**
+ * Sends a WhatsApp message using the tenant's configured Evolution API
+ * integration when available (connected + enabled). Falls back to the global
+ * Z-API credentials otherwise.
+ */
+export async function sendTenantWhatsAppMessage(
+  tenantId: string,
+  phone: string,
+  message: string,
+): Promise<WhatsAppSendResult> {
+  // Look up tenant's Evolution API integration
+  const [integration] = await db
+    .select()
+    .from(tenantIntegrationsTable)
+    .where(
+      and(
+        eq(tenantIntegrationsTable.tenantId, tenantId),
+        eq(tenantIntegrationsTable.type, "whatsapp_evolution"),
+      ),
+    )
+    .limit(1);
+
+  if (integration?.enabled && integration.status === "connected" && integration.secretsEncrypted) {
+    try {
+      const secrets = JSON.parse(
+        decryptCredential(integration.secretsEncrypted),
+      ) as Record<string, string>;
+      const config = (integration.config as Record<string, string>) ?? {};
+      const baseUrl = config.baseUrl?.trim();
+      const instanceName = config.instanceName?.trim();
+      const apiKey = secrets.apiKey?.trim();
+
+      if (baseUrl && instanceName && apiKey) {
+        const e164 = toE164Brazil(phone);
+        const encodedInstance = encodeURIComponent(instanceName);
+        const url = `${baseUrl.replace(/\/$/, "")}/message/sendText/${encodedInstance}`;
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: apiKey },
+          body: JSON.stringify({ number: e164, text: message }),
+          signal: AbortSignal.timeout(15_000),
+        });
+
+        if (resp.ok) {
+          logger.info({ phone: e164, tenantId }, "[whatsapp] Message sent via Evolution API");
+          return { success: true };
+        }
+
+        const status = resp.status;
+        logger.warn({ phone: e164, tenantId, status }, "[whatsapp] Evolution API error");
+        return { success: false, error: `evolution_${status}` };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ phone, tenantId, err: msg }, "[whatsapp] Evolution API send failed, falling back");
+    }
+  }
+
+  // Fall back to global Z-API credentials
+  return sendWhatsAppMessage(phone, message);
 }
 
 /**
