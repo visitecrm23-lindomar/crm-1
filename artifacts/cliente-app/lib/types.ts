@@ -92,6 +92,8 @@ export interface ClientPortalProfile {
   reservations: ClientPortalReservation[];
   referral: {
     code: string | null;
+    referralCodeStatus: string;
+    bonusValidityDays: number;
     totalReferrals: number;
     completedReferrals: number;
     pendingReferrals: number;

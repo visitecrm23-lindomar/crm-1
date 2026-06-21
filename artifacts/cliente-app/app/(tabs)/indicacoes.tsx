@@ -91,6 +91,8 @@ export default function IndicacoesScreen() {
   const referral = profileData?.referral;
   const code = referral?.code ?? null;
   const referrals = referralsData?.data ?? [];
+  const isCodeBlocked = referral ? referral.referralCodeStatus !== "active" : false;
+  const bonusValidityDays = referral?.bonusValidityDays ?? 30;
 
   const shareMsg = referral?.shareMessage
     ?? (code ? `Use meu código ${code} para se cadastrar e ganhar benefícios especiais!` : "");
@@ -201,6 +203,21 @@ export default function IndicacoesScreen() {
         </View>
       </View>
 
+      {/* Blocked code alert */}
+      {isCodeBlocked ? (
+        <View style={[styles.blockedBanner, { backgroundColor: "#fef2f2", borderColor: "#fca5a5" }]}>
+          <Feather name="alert-triangle" size={18} color="#dc2626" />
+          <View style={styles.blockedBannerText}>
+            <Text style={[styles.blockedBannerTitle, { color: "#dc2626" }]}>
+              Código temporariamente bloqueado
+            </Text>
+            <Text style={[styles.blockedBannerBody, { color: "#7f1d1d" }]}>
+              Seu código de indicação está inativo no momento. Entre em contato com a agência para reativá-lo.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Stats */}
       {referral ? (
         <View style={styles.statsRow}>
@@ -244,6 +261,19 @@ export default function IndicacoesScreen() {
               </View>
             ) : null}
           </View>
+          {/* Bonus validity countdown */}
+          {bonusValidityDays > 0 ? (
+            <View style={[styles.validityRow, { borderTopColor: colors.border }]}>
+              <Feather name="clock" size={13} color={colors.mutedForeground} />
+              <Text style={[styles.validityText, { color: colors.mutedForeground }]}>
+                Bônus liberados ficam disponíveis por{" "}
+                <Text style={{ color: colors.foreground, fontFamily: "Inter_600SemiBold" }}>
+                  {bonusValidityDays} {bonusValidityDays === 1 ? "dia" : "dias"}
+                </Text>{" "}
+                após serem confirmados
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -424,5 +454,40 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontFamily: "Inter_600SemiBold",
+  },
+  blockedBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
+  blockedBannerText: {
+    flex: 1,
+    gap: 2,
+  },
+  blockedBannerTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  blockedBannerBody: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 17,
+  },
+  validityRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  validityText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 17,
   },
 });
