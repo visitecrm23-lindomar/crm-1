@@ -2425,161 +2425,181 @@ export default function Indicacoes() {
           <DialogHeader>
             <DialogTitle>Configurações do Programa de Indicações</DialogTitle>
           </DialogHeader>
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Programa ativo</Label>
-                <p className="text-xs text-muted-foreground">Ativar ou desativar o programa</p>
-              </div>
-              <Switch
-                checked={localSettings.isEnabled ?? true}
-                onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, isEnabled: v }))}
-              />
-            </div>
+          <div className="space-y-4">
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Tipo de desconto</Label>
-                <Select
-                  value={localSettings.discountType ?? "percentage"}
-                  onValueChange={(v) => setLocalSettings((s) => ({ ...s, discountType: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentual (%)</SelectItem>
-                    <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>
-                  {localSettings.discountType === "fixed" ? "Desconto (R$)" : "Desconto (%)"}
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localSettings.discountValue ?? "5.00"}
-                  onChange={(e) => setLocalSettings((s) => ({ ...s, discountValue: e.target.value }))}
+            {/* Ativação do Programa */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ativação do Programa</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Programa ativo</Label>
+                  <p className="text-xs text-muted-foreground">Ativar ou desativar o programa de indicações</p>
+                </div>
+                <Switch
+                  checked={localSettings.isEnabled ?? true}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, isEnabled: v }))}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Tipo de bônus</Label>
-                <Select
-                  value={localSettings.bonusType ?? "credit"}
-                  onValueChange={(v) => setLocalSettings((s) => ({ ...s, bonusType: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="credit">Crédito</SelectItem>
-                    <SelectItem value="cash">Dinheiro</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* Benefícios para o Indicado */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Benefícios para o Indicado</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Tipo de desconto</Label>
+                  <Select
+                    value={localSettings.discountType ?? "percentage"}
+                    onValueChange={(v) => setLocalSettings((s) => ({ ...s, discountType: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentual (%)</SelectItem>
+                      <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>
+                    {localSettings.discountType === "fixed" ? "Desconto (R$)" : "Desconto (%)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={localSettings.discountValue ?? "5.00"}
+                    onChange={(e) => setLocalSettings((s) => ({ ...s, discountValue: e.target.value }))}
+                  />
+                </div>
               </div>
               <div className="space-y-1">
-                <Label>Bônus (R$)</Label>
+                <Label>Validade do benefício para o indicado (dias)</Label>
+                <Input
+                  type="number"
+                  value={(localSettings as Record<string, unknown>).discountExpirationDays as number ?? 30}
+                  onChange={(e) => setLocalSettings((s) => ({ ...(s as object), discountExpirationDays: parseInt(e.target.value) || 30 } as typeof s))}
+                />
+                <p className="text-xs text-muted-foreground">Por quantos dias o desconto gerado pelo código permanece válido após ser aplicado.</p>
+              </div>
+            </div>
+
+            {/* Recompensa para o Indicador */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recompensa para o Indicador</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Tipo de bônus</Label>
+                  <Select
+                    value={localSettings.bonusType ?? "credit"}
+                    onValueChange={(v) => setLocalSettings((s) => ({ ...s, bonusType: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="credit">Crédito</SelectItem>
+                      <SelectItem value="cash">Dinheiro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Bônus (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={localSettings.bonusValue ?? "10.00"}
+                    onChange={(e) => setLocalSettings((s) => ({ ...s, bonusValue: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Período de carência do bônus (dias)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={(localSettings as Record<string, unknown>).gracePeriodDays as number ?? 30}
+                  onChange={(e) => setLocalSettings((s) => ({ ...(s as object), gracePeriodDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+                />
+                <p className="text-xs text-muted-foreground">Quantos dias após a conversão o bônus fica retido antes de ser liberado ao indicador. O bônus é revertido automaticamente se a reserva ou excursão for cancelada nesse período.</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Validade do crédito/bônus do indicador (dias)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={(localSettings as Record<string, unknown>).bonusValidityDays as number ?? 30}
+                  onChange={(e) => setLocalSettings((s) => ({ ...(s as object), bonusValidityDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+                />
+                <p className="text-xs text-muted-foreground">Por quantos dias o bônus permanece válido para resgate após ser liberado ao indicador. Use 0 para não expirar.</p>
+              </div>
+            </div>
+
+            {/* Elegibilidade e Limites */}
+            <div className="border rounded-lg p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Elegibilidade e Limites</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Exigir primeira compra</Label>
+                  <p className="text-xs text-muted-foreground">Bônus só é liberado após a primeira compra do indicado</p>
+                </div>
+                <Switch
+                  checked={localSettings.requireFirstPurchase ?? true}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, requireFirstPurchase: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Permitir auto-indicação</Label>
+                  <p className="text-xs text-muted-foreground">Permite que alguém use seu próprio código</p>
+                </div>
+                <Switch
+                  checked={localSettings.allowSelfReferral ?? false}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, allowSelfReferral: v }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Valor mínimo de compra (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
-                  value={localSettings.bonusValue ?? "10.00"}
-                  onChange={(e) => setLocalSettings((s) => ({ ...s, bonusValue: e.target.value }))}
+                  min="0"
+                  value={String((localSettings as Record<string, unknown>).minPurchaseAmount ?? "")}
+                  onChange={(e) => setLocalSettings((s) => ({ ...(s as object), minPurchaseAmount: e.target.value === "" ? null : e.target.value } as typeof s))}
+                  placeholder="Sem mínimo"
                 />
+                <p className="text-xs text-muted-foreground">Valor mínimo do pedido para que o código de indicação seja aceito. Deixe em branco para não exigir.</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Máximo de indicações por indicador</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={String((localSettings as Record<string, unknown>).maxReferralsPerUser ?? 0)}
+                  onChange={(e) => setLocalSettings((s) => ({ ...(s as object), maxReferralsPerUser: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">Número máximo de indicações que cada cliente pode fazer. Use 0 para ilimitado.</p>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label>Validade do código (dias)</Label>
-              <Input
-                type="number"
-                value={localSettings.expirationDays ?? 30}
-                onChange={(e) => setLocalSettings((s) => ({ ...s, expirationDays: parseInt(e.target.value) || 30 }))}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Período de carência do bônus (dias)</Label>
-              <Input
-                type="number"
-                min="0"
-                value={(localSettings as Record<string, unknown>).gracePeriodDays as number ?? 30}
-                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), gracePeriodDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
-              />
-              <p className="text-xs text-muted-foreground">Quantos dias após a conversão o bônus fica retido antes de ser liberado ao indicador. O bônus é revertido automaticamente se a reserva ou excursão for cancelada nesse período.</p>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Validade do bônus após liberação (dias)</Label>
-              <Input
-                type="number"
-                min="0"
-                value={(localSettings as Record<string, unknown>).bonusValidityDays as number ?? 30}
-                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), bonusValidityDays: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
-              />
-              <p className="text-xs text-muted-foreground">Por quantos dias o bônus permanece válido para resgate após ser liberado ao indicador. Use 0 para não expirar.</p>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Validade do desconto (dias)</Label>
-              <Input
-                type="number"
-                value={(localSettings as Record<string, unknown>).discountExpirationDays as number ?? 30}
-                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), discountExpirationDays: parseInt(e.target.value) || 30 } as typeof s))}
-              />
-              <p className="text-xs text-muted-foreground">Por quantos dias o desconto gerado pelo código permanece válido após ser aplicado.</p>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Valor mínimo de compra (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={String((localSettings as Record<string, unknown>).minPurchaseAmount ?? "")}
-                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), minPurchaseAmount: e.target.value === "" ? null : e.target.value } as typeof s))}
-                placeholder="Sem mínimo"
-              />
-              <p className="text-xs text-muted-foreground">Valor mínimo do pedido para que o código de indicação seja aceito. Deixe em branco para não exigir.</p>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Máximo de indicações por indicador</Label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={String((localSettings as Record<string, unknown>).maxReferralsPerUser ?? 0)}
-                onChange={(e) => setLocalSettings((s) => ({ ...(s as object), maxReferralsPerUser: Math.max(0, parseInt(e.target.value) || 0) } as typeof s))}
-                placeholder="0"
-              />
-              <p className="text-xs text-muted-foreground">Número máximo de indicações que cada cliente pode fazer. Use 0 para ilimitado.</p>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Permitir auto-indicação</Label>
-                <p className="text-xs text-muted-foreground">Permite que alguém use seu próprio código</p>
+            {/* Política de Códigos */}
+            <div className="border rounded-lg p-3 space-y-3 bg-amber-50/60">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Política de Códigos</p>
+              <div className="space-y-1">
+                <Label>Validade de indicação pendente (dias)</Label>
+                <Input
+                  type="number"
+                  value={localSettings.expirationDays ?? 30}
+                  onChange={(e) => setLocalSettings((s) => ({ ...s, expirationDays: parseInt(e.target.value) || 30 }))}
+                />
+                <p className="text-xs text-muted-foreground">Por quantos dias uma indicação pendente aguarda conversão antes de expirar.</p>
               </div>
-              <Switch
-                checked={localSettings.allowSelfReferral ?? false}
-                onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, allowSelfReferral: v }))}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Exigir primeira compra</Label>
-                <p className="text-xs text-muted-foreground">Bônus só é liberado após a primeira compra</p>
+              <div className="rounded-md bg-amber-100/70 border border-amber-200 p-3 text-xs text-amber-900 space-y-1">
+                <p className="font-medium">Códigos são permanentes e gerenciados pela agência</p>
+                <p>Cada cliente possui um código único, gerado automaticamente no cadastro. Os códigos não expiram e não podem ser alterados ou regenerados pelo cliente — apenas a agência pode ativar ou bloquear um código. Ao desativar ou bloquear um cliente, seu código de indicação é bloqueado automaticamente.</p>
               </div>
-              <Switch
-                checked={localSettings.requireFirstPurchase ?? true}
-                onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, requireFirstPurchase: v }))}
-              />
             </div>
 
             <div className="space-y-1">

@@ -798,6 +798,7 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!MANAGEMENT_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const client = await requireClientAccess(me, req.params.clientId);
 
     // If client already has a code return it
