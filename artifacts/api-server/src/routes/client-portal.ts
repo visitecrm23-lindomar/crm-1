@@ -159,7 +159,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
               tenantId: me.tenantId,
               tenantSlug: tenant?.slug ?? undefined,
             }).catch((err: unknown) => {
-              console.warn("[client-portal] Failed to dispatch referral welcome email:", err instanceof Error ? err.message : String(err));
+              logger.warn({ err }, "[client-portal] Failed to dispatch referral welcome email");
             });
           }
         } catch {
@@ -1434,7 +1434,7 @@ router.get("/client/notifications/stream", async (req, res, next: NextFunction):
         }
       } catch (pollErr) {
         // Do NOT advance cursor on error — retry with same watermark next tick.
-        console.warn("[sse-poll] poll error for client", client.id, (pollErr as Error).message);
+        logger.warn({ err: pollErr, clientId: client.id }, "[sse-poll] poll error for client");
       }
     }, 15_000);
 

@@ -7,11 +7,42 @@ import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES } from '../lib/tenant';
 import { EXPENSE_STATUS, hasPermission, RESOURCES, ACTIONS } from "@workspace/permissions";
+import { z } from "zod/v4";
 
 const router = Router();
 
-const CATEGORIES = new Set(["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"]);
-const STATUSES = new Set<string>([EXPENSE_STATUS.PENDING, EXPENSE_STATUS.PAID, EXPENSE_STATUS.OVERDUE]);
+const CATEGORY_VALUES = ["Transporte", "Hospedagem", "Alimentação", "Guia", "Marketing", "Seguro", "Taxas", "Outros"] as const;
+const STATUS_VALUES = [EXPENSE_STATUS.PENDING, EXPENSE_STATUS.PAID, EXPENSE_STATUS.OVERDUE] as const;
+
+// Accepts a finite number or a non-empty numeric string. Deliberately rejects
+// `null`/`undefined`/empty/non-numeric — `z.coerce.number()` would coerce `null`
+// (and `""`) to `0`, which previously was an explicit 400 on POST.
+const AmountValue = z
+  .union([z.number(), z.string().trim().min(1)])
+  .transform((v) => Number(v))
+  .refine((n) => Number.isFinite(n), { message: "amount deve ser um número válido" });
+
+const CreateTripCostBody = z.object({
+  category: z.enum(CATEGORY_VALUES),
+  description: z.string().min(1),
+  supplierName: z.string().nullish(),
+  amount: AmountValue,
+  status: z.enum(STATUS_VALUES).optional(),
+  dueDate: z.string().nullish(),
+  paidAt: z.string().nullish(),
+  notes: z.string().nullish(),
+});
+
+const UpdateTripCostBody = z.object({
+  category: z.enum(CATEGORY_VALUES).optional(),
+  description: z.string().min(1).optional(),
+  supplierName: z.string().nullish(),
+  amount: AmountValue.optional(),
+  status: z.enum(STATUS_VALUES).optional(),
+  dueDate: z.string().nullish(),
+  paidAt: z.string().nullish(),
+  notes: z.string().nullish(),
+});
 
 function formatCost(c: typeof tripCostsTable.$inferSelect) {
   return {
@@ -103,27 +134,25 @@ router.post("/trips/:id/costs", async (req, res, next: NextFunction): Promise<vo
       .limit(1);
     if (!trip) { next(new NotFoundError("Viagem não encontrada", "NOT_FOUND")); return; }
 
-    const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = req.body;
-    if (!category || !description || amount == null) {
-      next(new ValidationError(String("Campos obrigatórios: category, description, amount" ), "VALIDATION_ERROR")); return;
+    const parsed = CreateTripCostBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "Dados inválidos", "VALIDATION_ERROR")); return;
     }
-    if (!CATEGORIES.has(String(category))) {
-      next(new ValidationError(String(`Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}`), "VALIDATION_ERROR")); return;
-    }
+    const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = parsed.data;
 
     const id = generateId();
     await db.insert(tripCostsTable).values({
       id,
       tenantId: me.tenantId,
       tripId: req.params.id,
-      category: String(category),
-      description: String(description),
-      supplierName: supplierName ? String(supplierName) : null,
-      amount: String(Number(amount)),
-      status: STATUSES.has(String(status)) ? String(status) : EXPENSE_STATUS.PENDING,
+      category,
+      description,
+      supplierName: supplierName || null,
+      amount: String(amount),
+      status: status ?? EXPENSE_STATUS.PENDING,
       dueDate: dueDate ? new Date(dueDate) : null,
       paidAt: paidAt ? new Date(paidAt) : (status === EXPENSE_STATUS.PAID ? new Date() : null),
-      notes: notes ? String(notes) : null,
+      notes: notes || null,
     });
 
     const [cost] = await db.select().from(tripCostsTable).where(and(eq(tripCostsTable.id, id), eq(tripCostsTable.tenantId, me.tenantId))).limit(1);
@@ -151,22 +180,21 @@ router.put("/trips/:id/costs/:costId", async (req, res, next: NextFunction): Pro
       .limit(1);
     if (!existing) { next(new NotFoundError("Custo não encontrado", "NOT_FOUND")); return; }
 
-    const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = req.body;
-    const updates: Partial<typeof tripCostsTable.$inferInsert> = {};
-    if (category != null) {
-      if (!CATEGORIES.has(String(category))) {
-        next(new ValidationError(String(`Categoria inválida. Valores permitidos: ${[...CATEGORIES].join(", ")}`), "VALIDATION_ERROR")); return;
-      }
-      updates.category = String(category);
+    const parsed = UpdateTripCostBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "Dados inválidos", "VALIDATION_ERROR")); return;
     }
-    if (description != null) updates.description = String(description);
-    if (supplierName !== undefined) updates.supplierName = supplierName ? String(supplierName) : null;
-    if (amount != null) updates.amount = String(Number(amount));
-    if (status != null && STATUSES.has(String(status))) updates.status = String(status);
+    const { category, description, supplierName, amount, status, dueDate, paidAt, notes } = parsed.data;
+    const updates: Partial<typeof tripCostsTable.$inferInsert> = {};
+    if (category !== undefined) updates.category = category;
+    if (description !== undefined) updates.description = description;
+    if (supplierName !== undefined) updates.supplierName = supplierName || null;
+    if (amount !== undefined) updates.amount = String(amount);
+    if (status !== undefined) updates.status = status;
     if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
     if (paidAt !== undefined) updates.paidAt = paidAt ? new Date(paidAt) : null;
     else if (status === EXPENSE_STATUS.PAID && !existing.paidAt) updates.paidAt = new Date();
-    if (notes !== undefined) updates.notes = notes ? String(notes) : null;
+    if (notes !== undefined) updates.notes = notes || null;
 
     await db.update(tripCostsTable).set(updates)
       .where(and(eq(tripCostsTable.id, req.params.costId), eq(tripCostsTable.tenantId, me.tenantId)));

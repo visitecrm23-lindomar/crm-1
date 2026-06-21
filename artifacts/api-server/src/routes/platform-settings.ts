@@ -5,8 +5,13 @@ import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { generateId } from "../lib/id";
 import { ROLES } from "@workspace/permissions";
+import { z } from "zod/v4";
 
 const router = Router();
+
+const UpdatePlatformSettingBody = z.object({
+  value: z.union([z.string(), z.null()]).optional(),
+});
 
 router.get("/admin/platform-settings", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -28,7 +33,12 @@ router.put("/admin/platform-settings/:key", async (req, res, next: NextFunction)
     if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const { key } = req.params;
-    const { value } = req.body;
+    const parsed = UpdatePlatformSettingBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError("value deve ser uma string ou null", "VALIDATION_ERROR"));
+      return;
+    }
+    const { value } = parsed.data;
 
     if (key === "redis_alert_email" && value !== null && value !== undefined && String(value).trim() !== "") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

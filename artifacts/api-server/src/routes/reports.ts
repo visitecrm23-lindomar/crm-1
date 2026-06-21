@@ -11,10 +11,18 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS } from "@workspace/permissions";
+import { z } from "zod/v4";
 
 applyPlugin(jsPDF);
 
 const router = Router();
+
+const ReportExportBody = z.object({
+  reportType: z.enum(["financial", "sales", "clients"]),
+  format: z.enum(["csv", "xlsx", "pdf"]),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
 
 type JsPDFWithAutoTable = InstanceType<typeof jsPDF> & {
   autoTable: (opts: Record<string, unknown>) => void;
@@ -64,17 +72,12 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return;
     }
 
-    const { reportType, format: fmt, startDate, endDate } = req.body as {
-      reportType: "financial" | "sales" | "clients";
-      format: "csv" | "xlsx" | "pdf";
-      startDate?: string;
-      endDate?: string;
-    };
-
-    if (!reportType || !fmt) {
-      next(new ValidationError("reportType e format são obrigatórios", "VALIDATION_ERROR"));
+    const parsed = ReportExportBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "Dados inválidos", "VALIDATION_ERROR"));
       return;
     }
+    const { reportType, format: fmt, startDate, endDate } = parsed.data;
 
     const tenantId = me.tenantId;
     const start = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);

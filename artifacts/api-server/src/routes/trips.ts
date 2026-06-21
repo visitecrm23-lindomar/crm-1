@@ -387,7 +387,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       .limit(1);
     if (!trip) { next(new AppError("Failed to create trip", 500, "TRIP_CREATE_FAILED")); return; }
     res.status(201).json(formatTrip(trip));
-    scheduleCalendarSyncTrip(id).catch(() => {});
+    scheduleCalendarSyncTrip(id).catch((err) => logger.warn({ err }, "[trips] calendar sync (create) failed"));
   } catch (err) {
     next(err);
   }
@@ -647,7 +647,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
       await deleteOrphanedFile(oldCoverImage, parsed.data.coverImage, req.log, me.tenantId);
     }
     res.json(formatTrip(trip));
-    scheduleCalendarSyncTrip(req.params.id).catch(() => {});
+    scheduleCalendarSyncTrip(req.params.id).catch((err) => logger.warn({ err }, "[trips] calendar sync (update) failed"));
   } catch (err) {
     next(err);
   }
@@ -668,7 +668,7 @@ router.delete("/trips/:id", async (req, res, next: NextFunction): Promise<void> 
       await deleteOrphanedFile(existing.coverImage, null, req.log, me.tenantId);
     }
     res.json({ success: true });
-    scheduleCalendarDeleteEventsForTrip(req.params.id).catch(() => {});
+    scheduleCalendarDeleteEventsForTrip(req.params.id).catch((err) => logger.warn({ err }, "[trips] calendar delete events failed"));
   } catch (err) {
     next(err);
   }
@@ -1322,6 +1322,15 @@ router.post("/trips/:id/sync-passengers", async (req, res, next: NextFunction): 
   }
 });
 
+const UpdatePassengerBody = z.object({
+  boardingLocationId: z.string().nullish(),
+  disembarkLocationId: z.string().nullish(),
+  passengerPhone: z.string().nullish(),
+  observations: z.string().nullish(),
+  specialNeeds: z.string().nullish(),
+  documentType: z.string().nullish(),
+});
+
 router.patch("/trips/:tripId/passengers/:passengerId", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -1329,14 +1338,11 @@ router.patch("/trips/:tripId/passengers/:passengerId", async (req, res, next: Ne
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const { tripId, passengerId } = req.params;
-    const { boardingLocationId, disembarkLocationId, passengerPhone, observations, specialNeeds, documentType } = req.body as {
-      boardingLocationId?: string | null;
-      disembarkLocationId?: string | null;
-      passengerPhone?: string | null;
-      observations?: string | null;
-      specialNeeds?: string | null;
-      documentType?: string | null;
-    };
+    const parsedBody = UpdatePassengerBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      next(new ValidationError(parsedBody.error.issues[0]?.message ?? "Dados inválidos", "VALIDATION_ERROR")); return;
+    }
+    const { boardingLocationId, disembarkLocationId, passengerPhone, observations, specialNeeds, documentType } = parsedBody.data;
 
     const [trip] = await db.select({ id: tripsTable.id, boardingPoints: tripsTable.boardingPoints })
       .from(tripsTable)

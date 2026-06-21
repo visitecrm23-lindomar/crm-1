@@ -12,6 +12,17 @@ import { ROLES, PAYMENT_STATUS } from "@workspace/permissions";
 
 const router = Router();
 
+const CreateClientDocumentBody = z.object({
+  name: z.string().min(1),
+  url: z.string().min(1),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+});
+
+const SuspendTenantBody = z.object({
+  reason: z.string().optional(),
+});
+
 function requireSuperAdmin(role: string, res: import("express").Response, next: import("express").NextFunction): boolean {
   if (role !== ROLES.SUPER_ADMIN) {
     next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
@@ -496,7 +507,11 @@ router.post("/admin/tenants/:id/suspend", async (req, res, next: NextFunction): 
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!requireSuperAdmin(me.role, res, next)) return;
-    const reason = req.body?.reason as string | undefined;
+    const parsed = SuspendTenantBody.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      next(new ValidationError("reason deve ser uma string", "VALIDATION_ERROR")); return;
+    }
+    const reason = parsed.data.reason;
     await db.update(tenantsTable).set({
       status: "suspended",
       suspendedAt: new Date(),
@@ -729,10 +744,11 @@ router.post("/admin/clients/:clientId/documents", async (req, res, next: NextFun
       .where(and(eq(clientsTable.id, req.params.clientId), eq(clientsTable.tenantId, me.tenantId)))
       .limit(1);
     if (!clientRow) { next(new NotFoundError("Client not found", "CLIENT_NOT_FOUND")); return; }
-    const { name, url, mimeType, sizeBytes } = req.body as {
-      name?: string; url?: string; mimeType?: string; sizeBytes?: number;
-    };
-    if (!name || !url) { next(new ValidationError("name and url are required", "VALIDATION_ERROR")); return; }
+    const parsed = CreateClientDocumentBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "name and url are required", "VALIDATION_ERROR")); return;
+    }
+    const { name, url, mimeType, sizeBytes } = parsed.data;
     // Derive fileKey from the trusted UploadThing URL — never trust client-supplied key
     const fileKey = extractVerifiedUploadThingKey(url);
     const id = generateId();

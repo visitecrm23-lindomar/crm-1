@@ -20,6 +20,7 @@ import {
 import { eq, and, gte, lte, lt, sql, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+import { z } from "zod/v4";
 import { roundMoney } from "../lib/pricing";
 import {
   ROLES,
@@ -459,9 +460,25 @@ router.get("/insights/summary", async (req, res, next: NextFunction): Promise<vo
     const data = await buildInsightsSummary(me.tenantId, period);
     res.json(data);
   } catch (err) {
-    console.error("[insights/summary]", err);
     next(err);
   }
+});
+
+const ChatMessage = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+const InsightsChatBody = z.object({
+  messages: z.array(ChatMessage).min(1),
+  period: z.string().optional(),
+});
+const InsightsAskBody = z.object({
+  messages: z.array(ChatMessage).min(1),
+});
+const SimulatorBody = z.object({
+  leadsChangePct: z.coerce.number().optional(),
+  priceChangePct: z.coerce.number().optional(),
+  conversionChangePct: z.coerce.number().optional(),
 });
 
 // ─── POST /insights/chat ──────────────────────────────────────────────────────
@@ -474,15 +491,12 @@ router.post("/insights/chat", async (req, res, next: NextFunction): Promise<void
       return;
     }
 
-    const { messages, period = "month" } = req.body as {
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
-      period?: string;
-    };
-
-    if (!Array.isArray(messages) || messages.length === 0) {
-      next(new ValidationError("messages is required", "VALIDATION_ERROR"));
+    const parsed = InsightsChatBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "messages is required", "VALIDATION_ERROR"));
       return;
     }
+    const { messages, period = "month" } = parsed.data;
 
     // Fetch tenant name for context
     const [tenant] = await db
@@ -531,7 +545,7 @@ router.post("/insights/chat", async (req, res, next: NextFunction): Promise<void
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (err) {
-    console.error("[insights/chat]", err);
+    req.log?.error({ err }, "[insights/chat] streaming error");
     if (!res.headersSent) {
       next(err);
     } else {
@@ -718,7 +732,7 @@ router.get("/insights/revenue-forecast", async (req, res, next: NextFunction): P
         narrative = parsed.narrative.trim();
       }
     } catch (err) {
-      console.error("[insights/revenue-forecast] AI step failed, using computed baseline", err);
+      req.log?.warn({ err }, "[insights/revenue-forecast] AI step failed, using computed baseline");
     }
 
     if (!narrative) {
@@ -730,7 +744,6 @@ router.get("/insights/revenue-forecast", async (req, res, next: NextFunction): P
     forecastCache.set(me.tenantId, { at: Date.now(), data });
     res.json(data);
   } catch (err) {
-    console.error("[insights/revenue-forecast]", err);
     next(err);
   }
 });
@@ -809,7 +822,7 @@ router.get("/insights/occupancy-risk", async (req, res, next: NextFunction): Pro
         }
         if (typeof parsed?.summary === "string" && parsed.summary.trim()) summary = parsed.summary.trim();
       } catch (err) {
-        console.error("[insights/occupancy-risk] AI step failed", err);
+        req.log?.warn({ err }, "[insights/occupancy-risk] AI step failed");
       }
     }
 
@@ -823,7 +836,6 @@ router.get("/insights/occupancy-risk", async (req, res, next: NextFunction): Pro
     occupancyCache.set(me.tenantId, { at: Date.now(), data });
     res.json(data);
   } catch (err) {
-    console.error("[insights/occupancy-risk]", err);
     next(err);
   }
 });
@@ -838,7 +850,12 @@ router.post("/insights/simulator", async (req, res, next: NextFunction): Promise
       return;
     }
 
-    const body = req.body as { leadsChangePct?: number; priceChangePct?: number; conversionChangePct?: number };
+    const parsedBody = SimulatorBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      next(new ValidationError(parsedBody.error.issues[0]?.message ?? "Dados inválidos", "VALIDATION_ERROR"));
+      return;
+    }
+    const body = parsedBody.data;
     const clamp = (v: unknown, min: number, max: number) => {
       const n = Number(v);
       if (!Number.isFinite(n)) return 0;
@@ -872,7 +889,7 @@ router.post("/insights/simulator", async (req, res, next: NextFunction): Promise
       if (Number.isFinite(p) && p >= 0) { projectedRevenue = Math.round(p); source = "ai"; }
       if (typeof parsed?.reasoning === "string" && parsed.reasoning.trim()) reasoning = parsed.reasoning.trim();
     } catch (err) {
-      console.error("[insights/simulator] AI step failed", err);
+      req.log?.warn({ err }, "[insights/simulator] AI step failed");
     }
 
     if (!reasoning) {
@@ -888,7 +905,6 @@ router.post("/insights/simulator", async (req, res, next: NextFunction): Promise
     };
     res.json(data);
   } catch (err) {
-    console.error("[insights/simulator]", err);
     next(err);
   }
 });
@@ -924,13 +940,12 @@ router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void>
       return;
     }
 
-    const { messages } = req.body as {
-      messages: Array<{ role: "user" | "assistant"; content: string }>;
-    };
-    if (!Array.isArray(messages) || messages.length === 0) {
-      next(new ValidationError("messages is required", "VALIDATION_ERROR"));
+    const parsed = InsightsAskBody.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(parsed.error.issues[0]?.message ?? "messages is required", "VALIDATION_ERROR"));
       return;
     }
+    const { messages } = parsed.data;
 
     const agencyName = await tenantName(me.tenantId);
     const summaryData = await buildInsightsSummary(me.tenantId, "quarter");
@@ -964,7 +979,7 @@ router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void>
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (err) {
-    console.error("[insights/ask]", err);
+    req.log?.error({ err }, "[insights/ask] streaming error");
     if (!res.headersSent) {
       next(err);
     } else {

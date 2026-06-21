@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-zod";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { scheduleCalendarSyncBirthday } from "../lib/google-calendar/schedule-sync";
+import { logger } from "../lib/logger";
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '../lib/tenant';
 import { ROLES } from "@workspace/permissions";
 import { clerkClient } from "@clerk/express";
@@ -342,7 +343,7 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
     res.status(statusCode).json(formatClient(upserted, { isNew, message }));
 
     if (upserted.birthDate) {
-      scheduleCalendarSyncBirthday(upserted.id).catch(() => {});
+      scheduleCalendarSyncBirthday(upserted.id).catch((err) => logger.warn({ err }, "[clients] calendar birthday sync (create) failed"));
     }
 
     if (isNew) {
@@ -351,9 +352,9 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
       const year = new Date().getFullYear();
       generateAndAssignReferralCode(upserted.id, me.tenantId, baseCode, namePart, year)
         .then((code) => {
-          dispatchReferralWelcomeEmail({ clientId: upserted.id, referralCode: code, tenantId: me.tenantId }).catch(() => {});
+          dispatchReferralWelcomeEmail({ clientId: upserted.id, referralCode: code, tenantId: me.tenantId }).catch((err) => logger.warn({ err }, "[clients] referral welcome email dispatch failed"));
         })
-        .catch(() => {});
+        .catch((err) => logger.warn({ err }, "[clients] referral code generation failed"));
     }
   } catch (err) {
     next(err);
@@ -559,7 +560,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
     }
 
     if (parsed.data.birthDate !== undefined) {
-      scheduleCalendarSyncBirthday(client.id).catch(() => {});
+      scheduleCalendarSyncBirthday(client.id).catch((err) => logger.warn({ err }, "[clients] calendar birthday sync (update) failed"));
     }
   } catch (err) {
     next(err);
@@ -662,17 +663,22 @@ router.get("/clients/:clientId/activities", async (req, res, next: NextFunction)
   }
 });
 
+const CreateActivityBody = z.object({
+  type: z.enum(["note", "call", "whatsapp", "email", "meeting"]),
+  content: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).nullish(),
+});
+
 router.post("/clients/:clientId/activities", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     const client = await requireClientAccess(me, req.params.clientId);
-    const { type, content, metadata } = req.body as { type?: string; content?: string; metadata?: Record<string, unknown> | null };
-    if (!type || !content) { next(new ValidationError("type and content are required", "VALIDATION_ERROR")); return; }
-    const MANUAL_ACTIVITY_TYPES = ["note", "call", "whatsapp", "email", "meeting"];
-    if (!MANUAL_ACTIVITY_TYPES.includes(type)) {
-      next(new ValidationError(`Invalid activity type. Must be one of: ${MANUAL_ACTIVITY_TYPES.join(", ")}`, "VALIDATION_ERROR")); return;
+    const parsedBody = CreateActivityBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      next(new ValidationError(parsedBody.error.issues[0]?.message ?? "type and content are required", "VALIDATION_ERROR")); return;
     }
+    const { type, content, metadata } = parsedBody.data;
     const id = generateId();
     await db.insert(notesTable).values({
       id,
@@ -826,7 +832,7 @@ router.post("/clients/:clientId/referral/generate", async (req, res, next: NextF
       referralCode: code,
       tenantId: me.tenantId,
     }).catch((err: unknown) => {
-      console.warn("[clients] Failed to dispatch referral welcome email:", err instanceof Error ? err.message : String(err));
+      logger.warn({ err }, "[clients] Failed to dispatch referral welcome email");
     });
 
     res.json({ code });
@@ -1132,6 +1138,10 @@ Selecione até 3 viagens priorizando: destinos sonhados, histórico de viagens r
   }
 });
 
+const MergeClientBody = z.object({
+  secondaryId: z.string().min(1),
+});
+
 router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
@@ -1139,10 +1149,11 @@ router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const primaryId = req.params.id;
-    const { secondaryId } = req.body as { secondaryId?: string };
-    if (!secondaryId || typeof secondaryId !== "string") {
-      next(new ValidationError("secondaryId é obrigatório", "VALIDATION_ERROR")); return;
+    const parsedBody = MergeClientBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      next(new ValidationError(parsedBody.error.issues[0]?.message ?? "secondaryId é obrigatório", "VALIDATION_ERROR")); return;
     }
+    const { secondaryId } = parsedBody.data;
     if (secondaryId === primaryId) {
       next(new ValidationError("O cliente primário e secundário não podem ser o mesmo", "VALIDATION_ERROR")); return;
     }

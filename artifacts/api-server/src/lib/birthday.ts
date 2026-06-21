@@ -1,6 +1,7 @@
 import { db, clientsTable, couponsTable, birthdayMessagesTable, tenantsTable, systemConfigsTable } from "@workspace/db";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { generateId } from "./id";
+import { logger } from "./logger";
 import { sendBirthdayEmail } from "@workspace/email";
 import { getBirthdayEmailQueue } from "../queues/index";
 
@@ -221,7 +222,7 @@ export async function processBirthdayForClient(
       }
     } catch (err) {
       whatsappError = err instanceof Error ? err.message : String(err);
-      console.error("[birthday] WhatsApp send error:", whatsappError);
+      logger.error({ err: whatsappError }, "[birthday] WhatsApp send error");
     }
   }
 
@@ -253,7 +254,7 @@ export async function processBirthdayForClient(
           });
           sentEmail = true;
         } catch (queueErr) {
-          console.warn("[birthday] Queue unavailable (Redis down?), falling back to direct send:", queueErr instanceof Error ? queueErr.message : String(queueErr));
+          logger.warn({ err: queueErr }, "[birthday] Queue unavailable (Redis down?), falling back to direct send");
           const result = await sendBirthdayEmail(birthdayEmailProps, birthdayEmailOptions);
           if (result.success) {
             sentEmail = true;
@@ -271,7 +272,7 @@ export async function processBirthdayForClient(
       }
     } catch (err) {
       emailError = err instanceof Error ? err.message : String(err);
-      console.error("[birthday] Email send error:", emailError);
+      logger.error({ err: emailError }, "[birthday] Email send error");
     }
   }
 
@@ -338,13 +339,13 @@ export async function runBirthdayCronForTenant(tenantId: string): Promise<void> 
     try {
       await processBirthdayForClient(tenantId, client.id);
     } catch (err) {
-      console.error(`[birthday] Error processing client ${client.id}:`, err);
+      logger.error({ err, clientId: client.id }, "[birthday] Error processing client");
     }
   }
 }
 
 export async function runBirthdayCron(): Promise<void> {
-  console.log("[birthday] Running daily birthday cron...");
+  logger.info("[birthday] Running daily birthday cron...");
   try {
     const tenants = await db
       .select({ id: tenantsTable.id, status: tenantsTable.status, settings: tenantsTable.settings })
@@ -361,11 +362,11 @@ export async function runBirthdayCron(): Promise<void> {
       try {
         await runBirthdayCronForTenant(tenant.id);
       } catch (err) {
-        console.error(`[birthday] Error for tenant ${tenant.id}:`, err);
+        logger.error({ err, tenantId: tenant.id }, "[birthday] Error for tenant");
       }
     }
-    console.log(`[birthday] Daily cron complete. Processed ${activeTenants.length} tenants.`);
+    logger.info({ tenants: activeTenants.length }, "[birthday] Daily cron complete");
   } catch (err) {
-    console.error("[birthday] Cron failed:", err);
+    logger.error({ err }, "[birthday] Cron failed");
   }
 }
