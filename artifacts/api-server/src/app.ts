@@ -247,7 +247,7 @@ app.use("/api", router);
 if (!isDev) {
   const frontendDist = path.join(process.cwd(), "artifacts/visitecrm/dist/public");
   app.use(express.static(frontendDist));
-  app.get("*", (req: Request, res: Response, next: express.NextFunction) => {
+  app.get("/{*splat}", (req: Request, res: Response, next: express.NextFunction) => {
     if (req.path.startsWith("/api/")) return next();
     res.sendFile(path.join(frontendDist, "index.html"));
   });
