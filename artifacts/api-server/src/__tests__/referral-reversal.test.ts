@@ -327,6 +327,15 @@ const FAKE_REFERRAL = {
   code: "JOAO2024",
 };
 
+// Second distinct referral for batch-reversal tests (different reservation).
+const FAKE_REFERRAL_2 = {
+  id: "ref-002",
+  referrerId: "client-referrer-2",
+  referredId: "client-referred-2",
+  bonusAmount: "30.00",
+  code: "MARIA2024",
+};
+
 const EXISTING_RESERVATION = {
   id: "res-001",
   tenantId: "tenant-001",
@@ -449,20 +458,22 @@ describe("PATCH /api/trips/:id — cancellation reverses referrals (trip_cancell
     mockSelect.mockReturnValue({ from: mockFrom });
   });
 
-  it("reverses all COMPLETED referrals linked to cancelled trip's reservations", async () => {
+  it("batch-reverses ALL COMPLETED referrals across multiple trip reservations", async () => {
+    // Criterion: trip cancellation must reverse every COMPLETED referral whose
+    // reservationId appears in the trip's reservation set — not just the first one.
     const capturedSetData: Record<string, unknown>[] = [];
 
     // mockWhere queue (in call order):
-    // 1. tenant planId select → { limit: mockLimit }
-    // 2. plan features select → { limit: mockLimit }
-    // 3. reservations (no .limit()) → thenable [{id:"res-001"}]
-    // 4. referrals (no .limit())    → thenable [FAKE_REFERRAL]
-    // 5. final trip select          → { limit: mockLimit } (default)
+    // 1. tenant planId select   → { limit: mockLimit }
+    // 2. plan features select   → { limit: mockLimit }
+    // 3. reservations (no .limit()) → thenable [{id:"res-001"},{id:"res-002"}]
+    // 4. referrals (no .limit())    → thenable [FAKE_REFERRAL, FAKE_REFERRAL_2]
+    // 5. final trip select      → { limit: mockLimit } (default)
     mockWhere
       .mockReturnValueOnce({ limit: mockLimit })
       .mockReturnValueOnce({ limit: mockLimit })
-      .mockReturnValueOnce(makeThenable([{ id: "res-001" }]))
-      .mockReturnValueOnce(makeThenable([FAKE_REFERRAL]))
+      .mockReturnValueOnce(makeThenable([{ id: "res-001" }, { id: "res-002" }]))
+      .mockReturnValueOnce(makeThenable([FAKE_REFERRAL, FAKE_REFERRAL_2]))
       .mockReturnValue({ limit: mockLimit });
 
     // mockLimit queue:
@@ -486,24 +497,41 @@ describe("PATCH /api/trips/:id — cancellation reverses referrals (trip_cancell
 
     expect(res.status).toBe(200);
 
-    const referralUpdate = capturedSetData.find(
+    // Both referrals must be reversed with the correct reason.
+    const reversalUpdates = capturedSetData.filter(
       (d) => d.reversalReason !== undefined,
     );
-    expect(referralUpdate?.reversalReason).toBe("trip_cancelled");
+    expect(reversalUpdates).toHaveLength(2);
+    expect(reversalUpdates[0].reversalReason).toBe("trip_cancelled");
+    expect(reversalUpdates[1].reversalReason).toBe("trip_cancelled");
 
-    const clientUpdate = capturedSetData.find(
+    // Both clients must have their counters decremented.
+    const clientUpdates = capturedSetData.filter(
       (d) => d.successfulReferrals !== undefined,
     );
-    expect(clientUpdate).toBeDefined();
+    expect(clientUpdates).toHaveLength(2);
+    expect(clientUpdates[0].referralEarnings).toBeDefined();
+    expect(clientUpdates[1].referralEarnings).toBeDefined();
   });
 
-  it("does not issue referral updates when no reservations have a referral code", async () => {
+  it("does not reverse referrals that are not linked to any of the trip's reservations", async () => {
+    // Criterion: referrals whose reservationId does NOT appear in the trip's
+    // reservation set must not be reversed. This is enforced by the `inArray`
+    // WHERE clause in the DB query. In the mock we simulate the scenario by
+    // having the trip carry reservations but the referrals query returning []
+    // (i.e., no referral matched those reservation IDs).
     const capturedSetData: Record<string, unknown>[] = [];
 
-    // Reservations query returns empty → no referrals query → no reversal
+    // mockWhere queue:
+    // 1. tenant planId select    → { limit: mockLimit }
+    // 2. plan features select    → { limit: mockLimit }
+    // 3. reservations (no .limit()) → thenable [{id:"res-001"}]  (trip HAS a reservation)
+    // 4. referrals (no .limit())    → thenable [] (orphan referral not in this trip)
+    // 5. final trip select       → { limit: mockLimit } (default)
     mockWhere
       .mockReturnValueOnce({ limit: mockLimit })
       .mockReturnValueOnce({ limit: mockLimit })
+      .mockReturnValueOnce(makeThenable([{ id: "res-001" }]))
       .mockReturnValueOnce(makeThenable([]))
       .mockReturnValue({ limit: mockLimit });
 
@@ -524,10 +552,16 @@ describe("PATCH /api/trips/:id — cancellation reverses referrals (trip_cancell
 
     expect(res.status).toBe(200);
 
+    // No referral or client update must have been issued.
     const referralUpdate = capturedSetData.find(
       (d) => d.reversalReason !== undefined,
     );
     expect(referralUpdate).toBeUndefined();
+
+    const clientUpdate = capturedSetData.find(
+      (d) => d.successfulReferrals !== undefined,
+    );
+    expect(clientUpdate).toBeUndefined();
   });
 });
 
@@ -583,6 +617,7 @@ describe("PATCH /api/reservations/:id — cancellation reverses linked referral 
       (d) => d.successfulReferrals !== undefined,
     );
     expect(clientUpdate).toBeDefined();
+    expect(clientUpdate?.referralEarnings).toBeDefined();
   });
 
   it("is a no-op when the referral is already REVERSED (idempotency)", async () => {
