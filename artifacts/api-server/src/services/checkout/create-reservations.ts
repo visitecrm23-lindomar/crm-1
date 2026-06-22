@@ -20,6 +20,7 @@ import {
   getTenantReservationPrefix,
 } from "../../lib/reservation-number";
 import { loadReservationContext } from "./reservation-context";
+import { upsertCheckoutClient } from "./checkout-user";
 import type { Tx } from "./tx";
 
 export interface CreateReservationsResult {
@@ -58,7 +59,7 @@ export async function createReservationsForOrder(
 
   const exec = tx;
 
-  const [order] = await exec
+  const [orderRaw] = await exec
     .select({
       id: storeOrdersTable.id,
       orderNumber: storeOrdersTable.orderNumber,
@@ -66,11 +67,16 @@ export async function createReservationsForOrder(
       storeId: storeOrdersTable.storeId,
       clientId: storeOrdersTable.clientId,
       customerName: storeOrdersTable.customerName,
+      customerEmail: storeOrdersTable.customerEmail,
+      customerPhone: storeOrdersTable.customerPhone,
+      customerCpf: storeOrdersTable.customerCpf,
       customerNotes: storeOrdersTable.customerNotes,
     })
     .from(storeOrdersTable)
     .where(eq(storeOrdersTable.id, orderId))
     .limit(1);
+  // Allow clientId to be mutated below (CRM client upsert on payment confirmation).
+  const order = orderRaw ? { ...orderRaw } : undefined;
 
   if (!order) return { reservationIds: [], reservationClientId: null };
 
@@ -152,6 +158,28 @@ export async function createReservationsForOrder(
       500,
       "RESERVATION_NO_AGENCY_USER",
     );
+  }
+
+  // Create or link the CRM client now that payment is confirmed.
+  // This is intentionally deferred from order-creation time so that anonymous,
+  // non-paying checkout submissions cannot create or mutate clientsTable rows.
+  // birthDate is not available on the order (not persisted at checkout); staff
+  // can update it later through authenticated CRM flows.
+  if (!order.clientId) {
+    const clientResult = await upsertCheckoutClient(exec, {
+      tenantId: order.tenantId,
+      email: order.customerEmail,
+      name: order.customerName,
+      phone: order.customerPhone ?? undefined,
+      cpf: order.customerCpf ?? undefined,
+      birthDate: null,
+      createdById: ctx.reservationCreatedById,
+    });
+    order.clientId = clientResult.clientId;
+    // Persist the link back to the order row so future calls see the clientId.
+    await exec.update(storeOrdersTable)
+      .set({ clientId: clientResult.clientId })
+      .where(eq(storeOrdersTable.id, order.id));
   }
 
   const tenantResPrefix = await getTenantReservationPrefix(order.tenantId);

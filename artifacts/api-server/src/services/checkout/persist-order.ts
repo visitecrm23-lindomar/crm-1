@@ -8,12 +8,10 @@ import {
   partnersTable,
   partnerProductsTable,
   partnerCommissionsTable,
-  usersTable,
 } from "@workspace/db";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import type { DbExecutor } from "../../lib/reservation-payments";
 import { generateId } from "../../lib/id";
-import { upsertCheckoutClient } from "./checkout-user";
 import { lockProductsForCheckout } from "./order-locks";
 import type { Tx } from "./tx";
 
@@ -194,36 +192,19 @@ async function writeOrderAndItems(tx: Tx, args: PersistOrderArgs, reservationCli
 
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
-  let reservationClientId: string | null = null;
-
   await db.transaction(async (tx) => {
     await lockProductsForCheckout(tx, {
       fetchedProducts: args.fetchedProducts,
       quantityByProductId: args.quantityByProductId,
     });
 
-    // Resolve an admin user to act as createdById for the client record.
-    // This is a lightweight lookup; the full reservation-context (stages, trip names)
-    // is resolved separately in createReservationsForOrder at payment time.
-    const [adminUser] = await tx
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(and(eq(usersTable.tenantId, args.store.tenantId), eq(usersTable.isActive, true)))
-      .limit(1);
-    if (adminUser) {
-      const checkoutClientResult = await upsertCheckoutClient(tx, {
-        tenantId: args.store.tenantId,
-        email: args.data.customerEmail,
-        name: args.data.customerName,
-        phone: args.data.customerPhone,
-        cpf: args.data.customerCpf,
-        birthDate: args.parsedBirthDate,
-        createdById: adminUser.id,
-      });
-      reservationClientId = checkoutClientResult.clientId;
-    }
+    // CRM client upsert is intentionally NOT performed here. An anonymous
+    // caller does not need to be authenticated to submit a checkout form, so
+    // creating or updating a clientsTable row at this point would let unpaid
+    // submissions pollute tenant CRM data. The client is created/linked inside
+    // createReservationsForOrder, which runs only after payment is confirmed.
 
-    await writeOrderAndItems(tx, args, reservationClientId);
+    await writeOrderAndItems(tx, args, null);
     await writePartnerCommissions(tx, args.store.tenantId, args.orderId, args.orderItemsData, args.fetchedProducts);
 
     // Reservations are NOT created here. They are created after payment confirmation
@@ -250,7 +231,7 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
   // They are deferred to runPostPaymentSideEffects so they only fire after the
   // order's payment is confirmed.
 
-  return { reservationClientId };
+  return { reservationClientId: null };
 }
 
 /**
