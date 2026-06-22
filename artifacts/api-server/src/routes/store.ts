@@ -14,7 +14,7 @@ import {
   partnerProductsTable,
   priceAlertSubscriptionsTable,
 } from "@workspace/db";
-import { eq, and, desc, asc, count, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, count, ilike, or, sql, ne } from "drizzle-orm";
 import { z } from "zod/v4";
 import { UTApi } from "uploadthing/server";
 import { randomBytes, createHash } from "crypto";
@@ -778,23 +778,27 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
     const isTransitioningToPaid = parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID;
     const isTransitioningToCompleted = parsed.data.status === STORE_ORDER_STATUS.COMPLETED;
 
-    // Read current paymentStatus BEFORE the update so we can gate inventory effects
-    // on the UNPAID → PAID transition only (prevents double-decrement if admin marks
-    // the same order as paid more than once).
-    const [orderBefore] = isTransitioningToPaid
-      ? await db
-          .select({ paymentStatus: storeOrdersTable.paymentStatus })
-          .from(storeOrdersTable)
-          .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id)))
-          .limit(1)
-      : [undefined];
-    const wasAlreadyPaid = orderBefore?.paymentStatus === STORE_PAYMENT_STATUS.PAID;
-
     if (parsed.data.status === STORE_ORDER_STATUS.COMPLETED) updates.completedAt = new Date();
     if (parsed.data.status === STORE_ORDER_STATUS.CANCELLED) updates.cancelledAt = new Date();
     if (parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID) updates.paidAt = new Date();
-    await db.update(storeOrdersTable).set(updates)
-      .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id)));
+
+    // When transitioning to PAID, add a conditional WHERE to make the inventory
+    // effects idempotent under concurrency. The WHERE `paymentStatus != PAID`
+    // means only one concurrent request will match and get rows returned; the
+    // other sees 0 rows and skips effects — no read-then-check race condition.
+    const baseWhere = and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id));
+    const updateWhere = isTransitioningToPaid
+      ? and(baseWhere, ne(storeOrdersTable.paymentStatus, STORE_PAYMENT_STATUS.PAID))
+      : baseWhere;
+
+    const updatedRows = await db.update(storeOrdersTable).set(updates)
+      .where(updateWhere)
+      .returning({ id: storeOrdersTable.id });
+
+    // didTransitionToPaid is true only when the row actually changed to PAID in
+    // this request — never true for a second concurrent or repeated call.
+    const didTransitionToPaid = isTransitioningToPaid && updatedRows.length > 0;
+
     const [order] = await db.select().from(storeOrdersTable)
       .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id))).limit(1);
     if (!order) { next(new NotFoundError("Order not found", "NOT_FOUND")); return; }
@@ -810,13 +814,16 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
         .catch((err) => {
           req.log.warn({ err, orderId: order.id }, "[store/orders] Failed reservation/post-payment side effects on manual payment confirmation");
         });
+    }
 
-      // Apply deferred inventory effects (stock, coupon, totalOrders) only on the
-      // first UNPAID → PAID transition to prevent double-decrement on repeated calls.
-      if (!wasAlreadyPaid) {
-        applyOrderInventoryEffects(order.id, db).catch((err) => {
-          req.log.warn({ err, orderId: order.id }, "[store/orders] Failed to apply order inventory effects on manual payment");
-        });
+    if (didTransitionToPaid) {
+      // Apply deferred inventory effects (stock, coupon, totalOrders) exactly
+      // once per UNPAID → PAID transition. Awaited so failures surface as a
+      // loggable warn instead of being silently swallowed.
+      try {
+        await applyOrderInventoryEffects(order.id, db);
+      } catch (err) {
+        req.log.warn({ err, orderId: order.id }, "[store/orders] Failed to apply order inventory effects on manual payment");
       }
     }
 
