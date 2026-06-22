@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ADMIN_ROLES } from '../lib/tenant';
+import { ADMIN_ROLES, ALL_STAFF_ROLES } from '../lib/tenant';
 
 const router = Router();
 
@@ -23,6 +23,7 @@ router.get("/documents", async (req, res, next: NextFunction): Promise<void> => 
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!ALL_STAFF_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const documents = await db.select().from(documentsTable)
       .where(eq(documentsTable.tenantId, me.tenantId))
       .orderBy(desc(documentsTable.createdAt));
@@ -36,6 +37,7 @@ router.post("/documents", async (req, res, next: NextFunction): Promise<void> =>
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    if (!ALL_STAFF_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
     const parsed = CreateDocumentBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
     const id = generateId();
