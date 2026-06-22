@@ -192,8 +192,8 @@ export function ReferralAnalyticsCharts({ data, period, analyticsExportUrl }: Pr
                       labelLine={false}
                       label={CustomPieLabel}
                       activeIndex={activePieIdx ?? undefined}
-                      activeShape={(props: Record<string, unknown>) => <Sector {...props as Parameters<typeof Sector>[0]} outerRadius={Number(props.outerRadius) + 6} />}
-                      onMouseEnter={(_, idx) => setActivePieIdx(idx)}
+                      activeShape={(props: Record<string, unknown>) => <Sector {...(props as Record<string, any>)} outerRadius={Number(props.outerRadius) + 6} />}
+                      onMouseEnter={(_: unknown, idx: number) => setActivePieIdx(idx)}
                       onMouseLeave={() => setActivePieIdx(null)}
                     >
                       {channels.map((_ch: ReferralAnalyticsChannel, idx: number) => (

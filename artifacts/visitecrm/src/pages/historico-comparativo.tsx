@@ -125,7 +125,7 @@ export default function HistoricoComparativo() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
                   <Legend />
                   <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#cmpRevenue)" strokeWidth={2} />
@@ -138,7 +138,7 @@ export default function HistoricoComparativo() {
                 <BarChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="25%">
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
                   <Legend />
                   <Bar dataKey="revenue" name="Receita" fill="#3B82F6" radius={[3, 3, 0, 0]} />
@@ -151,7 +151,7 @@ export default function HistoricoComparativo() {
                 <LineChart data={months} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number, name: string) => [formatCurrency(v), name]} />
                   <Legend />
                   <Line type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />

@@ -488,7 +488,7 @@ function AgencyDashboard() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v: number) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v: number) => formatCurrency(v)} />
                     <Legend />
                     <Area type="monotone" dataKey="revenue" name="Receita" stroke="#3B82F6" fill="url(#revenue)" strokeWidth={2} />
@@ -579,7 +579,7 @@ function AgencyDashboard() {
                           <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v, n) => [v, STATUS_LABELS[n as string] ?? n]} />
+                      <Tooltip formatter={(v: unknown, n: string) => [v, STATUS_LABELS[n] ?? n]} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex-1 space-y-2">
@@ -680,7 +680,7 @@ function AgencyDashboard() {
                   <LineChart data={charts?.avgTicketByMonth ?? []} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={(v) => `R$${(v / 1000).toFixed(1)}k`} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v: number) => `R$${(v / 1000).toFixed(1)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v: number) => formatCurrency(v)} />
                     <Line type="monotone" dataKey="value" name="Ticket Médio" stroke="#F59E0B" strokeWidth={2} dot={{ fill: "#F59E0B", r: 3 }} />
                   </LineChart>
@@ -1160,7 +1160,7 @@ function AgencyDashboard() {
                     <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                     <YAxis dataKey="origin" type="category" tick={{ fontSize: 10 }} width={72} />
                     <Tooltip
-                      content={({ payload, label }) => {
+                      content={({ payload, label }: { payload: Array<Record<string, any>>; label: string }) => {
                         if (!payload?.length) return null;
                         const row = funnel.byOrigin.find(r => r.origin === label);
                         return (

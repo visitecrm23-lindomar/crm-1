@@ -104,7 +104,7 @@ export default function AdminMetricsPage() {
               <LineChart data={mrr} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="label" className="text-xs" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => `R$${v}`} tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v: number) => `R$${v}`} tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(value: number) => [formatBRL(value), "MRR"]} />
                 <Line type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} dot={false} />
               </LineChart>
@@ -126,7 +126,7 @@ export default function AdminMetricsPage() {
                 <BarChart data={churn} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} />
                   <Tooltip formatter={(value: number) => [`${value}%`, "Churn"]} />
                   <Bar dataKey="value" fill="#ef4444" radius={[3, 3, 0, 0]} />
                 </BarChart>
