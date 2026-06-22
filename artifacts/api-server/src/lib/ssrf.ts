@@ -175,7 +175,7 @@ export const ssrfSafeFetch = (async (input: unknown, init?: unknown) => {
   return undiciFetch(input as never, {
     ...(init as object),
     redirect: "error",
-    dispatcher: ssrfDispatcher,
+    dispatcher: ssrfDispatcher as never,
   });
 }) as unknown as typeof fetch;
 
