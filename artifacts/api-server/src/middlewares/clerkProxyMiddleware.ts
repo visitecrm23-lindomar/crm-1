@@ -22,6 +22,14 @@
  *   app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));
  */
 
+// Note: http-proxy-middleware@3 depends on http-proxy@1.18.1, which is effectively
+// unmaintained and contains two hardcoded deprecated Node.js APIs:
+//   • DEP0169 — `url.parse()` in http-proxy/lib/http-proxy/index.js
+//   • DEP0060 — `util._extend()` in http-proxy/lib/http-proxy/common.js and index.js
+// These warnings appear at server startup whenever the proxy middleware is loaded.
+// There is no newer http-proxy release that removes them, and replacing
+// http-proxy-middleware entirely is out of scope for this sprint.
+// Track: https://github.com/http-party/node-http-proxy/issues/1591
 import { createProxyMiddleware } from "http-proxy-middleware";
 import type { RequestHandler } from "express";
 

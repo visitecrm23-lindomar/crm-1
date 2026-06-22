@@ -52,9 +52,9 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "expo-clipboard": "^56.0.4",
-    "expo-file-system": "^56.0.8",
-    "expo-secure-store": "^56.0.4",
-    "expo-sharing": "^56.0.18"
+    "expo-clipboard": "~8.0.8",
+    "expo-file-system": "~19.0.23",
+    "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8"
   }
 }

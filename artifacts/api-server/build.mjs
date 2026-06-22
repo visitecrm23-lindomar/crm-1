@@ -27,9 +27,26 @@ async function buildAll() {
     // Examples of unbundleable packages:
     // - uses native modules and loads them dynamically (e.g. sharp)
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
+    //
+    // Bundle size note (~16-17 MB bundled, esbuild ⚠️):
+    // The remaining size is dominated by intentionally-kept dependencies:
+    //   - @react-email/* + react-dom (~2.5 MB): React server-side email rendering; cannot be
+    //     externalized without breaking email template compilation at runtime.
+    //   - jspdf + jspdf-autotable (~700 KB bundled): externalized below so they load from
+    //     node_modules at runtime, removing html2canvas/canvg transitive browser deps (~700 KB).
+    //   - prettier (~800 KB, 2 versions): used at runtime by @react-email/tailwind for CSS
+    //     processing during email rendering; cannot be externalized.
+    //   - luxon (~260 KB): date/time library used extensively across the codebase.
+    //   - zod (~100 KB): runtime validation.
+    // Replit deployments include node_modules, so externalizing node-compatible libs is safe.
     external: [
       "*.node",
       "sharp",
+      // PDF generation — externalized to avoid bundling html2canvas/canvg (browser deps of jspdf)
+      "jspdf",
+      "jspdf-autotable",
+      "html2canvas",
+      "canvg",
       "better-sqlite3",
       "sqlite3",
       "canvas",

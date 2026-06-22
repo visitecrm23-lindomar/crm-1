@@ -72,14 +72,16 @@ if (Number.isNaN(port) || port <= 0) {
   process.env["CREDENTIAL_ENCRYPTION_KEY"] = cleaned;
 }
 
-// Webhook secret validation — always a warning, never fatal.
-// The webhook endpoints validate the secret at request time and reject unsigned
-// payloads with a 400; crashing the server here would make deployment impossible
-// for agencies that don't yet have Stripe / MercadoPago configured.
+// Webhook secret validation — only warn when the corresponding integration key
+// is present (i.e. the integration is intentionally configured). If neither
+// STRIPE_SECRET_KEY nor MP_SECRET_KEY is set the payment gateway is inactive
+// and the missing webhook secret is expected — no noise needed.
 {
   const missing: string[] = [];
-  if (!process.env["STRIPE_WEBHOOK_SECRET"]) missing.push("STRIPE_WEBHOOK_SECRET");
-  if (!process.env["MP_WEBHOOK_SECRET"]) missing.push("MP_WEBHOOK_SECRET");
+  if (!process.env["STRIPE_WEBHOOK_SECRET"] && process.env["STRIPE_SECRET_KEY"])
+    missing.push("STRIPE_WEBHOOK_SECRET");
+  if (!process.env["MP_WEBHOOK_SECRET"] && process.env["MP_SECRET_KEY"])
+    missing.push("MP_WEBHOOK_SECRET");
   if (missing.length > 0) {
     logger.warn(
       { missing },
