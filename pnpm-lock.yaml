@@ -727,6 +727,9 @@ importers:
 
   artifacts/visitecrm:
     dependencies:
+      '@clerk/localizations':
+        specifier: ^4.9.2
+        version: 4.9.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@clerk/react':
         specifier: ^6.5.0
         version: 6.5.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -1715,6 +1718,10 @@ packages:
   '@clerk/localizations@3.37.7':
     resolution: {integrity: sha512-mEIPSg0EYveROmza8MlqPH6P+YCzgsQIAnCtbem74ekXG7Y0X/hne+E9T5xPsuf9FHaavNMbECn5SiYXTgUfmA==}
     engines: {node: '>=18.17.0'}
+
+  '@clerk/localizations@4.9.2':
+    resolution: {integrity: sha512-xXY70czhXYPq4yLZjnIdqMiZX6qB8DMjdQMwzidlaIX2R54Eo/u1WUGArKWqb2EnoH2z+HN1KLR7tNi3G6fugw==}
+    engines: {node: '>=20.9.0'}
 
   '@clerk/react@6.5.0':
     resolution: {integrity: sha512-TXYxlJ9EvPvJo6NKTy//RlqoZ4nhvmIjlU9cp9KG3buHD7UCby0It9dtaPHbAu5h4s426C7F6GID47LolaLEbg==}
@@ -9940,6 +9947,13 @@ snapshots:
   '@clerk/localizations@3.37.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@clerk/types': 4.101.25(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+    transitivePeerDependencies:
+      - react
+      - react-dom
+
+  '@clerk/localizations@4.9.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+    dependencies:
+      '@clerk/shared': 4.9.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
     transitivePeerDependencies:
       - react
       - react-dom

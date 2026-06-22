@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense, Component, type ComponentType, type ReactNode } from "react";
 import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
+import { ptBR } from "@clerk/localizations";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
@@ -551,6 +552,7 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
+      localization={ptBR}
       proxyUrl={clerkProxyUrl}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
