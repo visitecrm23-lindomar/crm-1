@@ -32,19 +32,11 @@ export async function upsertCheckoutClient(tx: Tx, args: UpsertCheckoutClientArg
     .limit(1);
 
   if (existing) {
-    const updateFields: Record<string, unknown> = {};
-    if (!existing.birthDate && birthDate) updateFields.birthDate = birthDate;
-    if (!existing.cpf && cpf) {
-      const [cpfOwner] = await tx
-        .select({ id: clientsTable.id })
-        .from(clientsTable)
-        .where(and(eq(clientsTable.tenantId, tenantId), eq(clientsTable.cpf, cpf)))
-        .limit(1);
-      if (!cpfOwner) updateFields.cpf = cpf;
-    }
-    if (Object.keys(updateFields).length > 0) {
-      await tx.update(clientsTable).set(updateFields).where(eq(clientsTable.id, existing.id));
-    }
+    // Do NOT enrich existing records with CPF or birthDate from an anonymous
+    // storefront checkout. The caller has not verified ownership of the email
+    // address, CPF, or birthDate — overwriting a real customer's sensitive
+    // fields with attacker-supplied values is an integrity violation.
+    // Fields can only be updated through authenticated, staff-gated CRM flows.
     return { clientId: existing.id, isNew: false };
   }
 

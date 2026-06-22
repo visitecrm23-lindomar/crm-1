@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { runPostPaymentSideEffects } from "../services/checkout/post-booking";
+import { applyOrderInventoryEffects } from "../services/checkout/persist-order";
 import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { decryptOrPassthrough } from "../lib/crypto";
 import { PAYMENT_STATUS, RESERVATION_STATUS, STORE_ORDER_STATUS, STORE_PAYMENT_STATUS } from "@workspace/permissions";
@@ -552,6 +553,11 @@ export async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Prom
   // Create reservations now (payment confirmed): seats are only reserved after payment,
   // not at checkout time. createReservationsForOrder is idempotent — safe on retries.
   await createReservationsForOrder(order.id, tx as unknown as Parameters<typeof createReservationsForOrder>[1]);
+
+  // Apply inventory effects deferred from order-creation: stock decrement, coupon
+  // usageCount increment, and totalOrders increment. Runs inside this transaction so
+  // it is gated by the paymentExistsForGatewayTx idempotency check above.
+  await applyOrderInventoryEffects(order.id, tx);
 
   // Find the reservations linked to this order via storeOrderId == orderNumber
   const reservations = await tx

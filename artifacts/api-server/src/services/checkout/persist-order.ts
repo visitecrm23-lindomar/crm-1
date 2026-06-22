@@ -11,6 +11,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { and, eq, sql, inArray } from "drizzle-orm";
+import type { DbExecutor } from "../../lib/reservation-payments";
 import { generateId } from "../../lib/id";
 import { upsertCheckoutClient } from "./checkout-user";
 import { lockProductsForCheckout } from "./order-locks";
@@ -191,26 +192,6 @@ async function writeOrderAndItems(tx: Tx, args: PersistOrderArgs, reservationCli
   }
 }
 
-async function decrementStockAndSales(tx: Tx, args: PersistOrderArgs): Promise<void> {
-  const { data, fetchedProducts, quantityByProductId } = args;
-  const updatedProductIds = new Set<string>();
-  for (const item of data.items) {
-    const product = fetchedProducts.get(item.productId)!;
-    if (updatedProductIds.has(product.id)) continue;
-    updatedProductIds.add(product.id);
-    const totalQty = quantityByProductId.get(product.id) ?? 0;
-    if (product.trackInventory) {
-      await tx.update(storeProductsTable).set({
-        stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${totalQty})`,
-        salesCount: sql`sales_count + ${totalQty}`,
-      }).where(eq(storeProductsTable.id, product.id));
-    } else {
-      await tx.update(storeProductsTable).set({
-        salesCount: sql`sales_count + ${totalQty}`,
-      }).where(eq(storeProductsTable.id, product.id));
-    }
-  }
-}
 
 export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<PersistOrderResult> {
   let reservationClientId: string | null = null;
@@ -244,17 +225,16 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
 
     await writeOrderAndItems(tx, args, reservationClientId);
     await writePartnerCommissions(tx, args.store.tenantId, args.orderId, args.orderItemsData, args.fetchedProducts);
-    await decrementStockAndSales(tx, args);
 
     // Reservations are NOT created here. They are created after payment confirmation
     // (Stripe webhook or manual payment entry) to prevent anonymous users from holding
     // trip inventory without paying. See createReservationsForOrder in create-reservations.ts.
 
-    if (args.couponId) {
-      await tx.update(storeCouponsTable)
-        .set({ usageCount: sql`usage_count + 1` })
-        .where(eq(storeCouponsTable.id, args.couponId));
-    }
+    // Stock decrement, coupon usageCount increment, and totalOrders increment are
+    // intentionally NOT performed here. They are deferred to applyOrderInventoryEffects,
+    // which is called from payment-confirmation paths (gateway webhook + manual payment)
+    // so that anonymous unpaid checkout submissions cannot drain inventory, exhaust
+    // coupon limits, or inflate store metrics without completing payment.
 
     // Referral conversion (crediting the referrer) and referral-credit
     // consumption are NOT performed here. The intent is persisted on the order
@@ -263,10 +243,6 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
     // runPostPaymentSideEffects). This prevents anonymous/unpaid checkout
     // submissions from crediting a referrer or burning a customer's credit, and
     // lets the conversion be linked to a real reservation so it is reversible.
-
-    await tx.update(storesTable)
-      .set({ totalOrders: sql`total_orders + 1` })
-      .where(eq(storesTable.id, args.store.id));
   });
 
   // Referral-converted / tier-upgrade / WhatsApp notifications and referral-code
@@ -275,4 +251,69 @@ export async function persistCheckoutOrder(args: PersistOrderArgs): Promise<Pers
   // order's payment is confirmed.
 
   return { reservationClientId };
+}
+
+/**
+ * Apply inventory side-effects that must only happen AFTER payment is confirmed:
+ *   - Decrement stockQuantity / increment salesCount for each ordered product
+ *   - Increment the order's coupon usageCount (if a coupon was used)
+ *   - Increment the store's totalOrders counter
+ *
+ * This is called from applyGatewayPayment (inside the already-idempotent
+ * payment transaction) and from the manual-payment confirmation handler in
+ * store.ts (gated by a pre-check of the order's current paymentStatus so it
+ * only fires on the UNPAID → PAID transition).
+ *
+ * Moving these writes from order-creation time to payment-confirmation time
+ * prevents anonymous, non-paying checkout submissions from draining inventory,
+ * exhausting coupon limits, or inflating store metrics.
+ */
+export async function applyOrderInventoryEffects(orderId: string, tx: DbExecutor): Promise<void> {
+  const [order] = await tx
+    .select({ storeId: storeOrdersTable.storeId, couponId: storeOrdersTable.couponId })
+    .from(storeOrdersTable)
+    .where(eq(storeOrdersTable.id, orderId))
+    .limit(1);
+  if (!order) return;
+
+  const items = await tx
+    .select({ productId: storeOrderItemsTable.productId, quantity: storeOrderItemsTable.quantity })
+    .from(storeOrderItemsTable)
+    .where(eq(storeOrderItemsTable.orderId, orderId));
+  if (items.length === 0) return;
+
+  const quantityByProductId = new Map<string, number>();
+  for (const item of items) {
+    quantityByProductId.set(item.productId, (quantityByProductId.get(item.productId) ?? 0) + item.quantity);
+  }
+
+  const productIds = [...quantityByProductId.keys()];
+  const products = await tx
+    .select({ id: storeProductsTable.id, trackInventory: storeProductsTable.trackInventory })
+    .from(storeProductsTable)
+    .where(inArray(storeProductsTable.id, productIds));
+
+  for (const product of products) {
+    const totalQty = quantityByProductId.get(product.id) ?? 0;
+    if (product.trackInventory) {
+      await tx.update(storeProductsTable).set({
+        stockQuantity: sql`GREATEST(0, COALESCE(stock_quantity, 0) - ${totalQty})`,
+        salesCount: sql`sales_count + ${totalQty}`,
+      }).where(eq(storeProductsTable.id, product.id));
+    } else {
+      await tx.update(storeProductsTable).set({
+        salesCount: sql`sales_count + ${totalQty}`,
+      }).where(eq(storeProductsTable.id, product.id));
+    }
+  }
+
+  if (order.couponId) {
+    await tx.update(storeCouponsTable)
+      .set({ usageCount: sql`usage_count + 1` })
+      .where(eq(storeCouponsTable.id, order.couponId));
+  }
+
+  await tx.update(storesTable)
+    .set({ totalOrders: sql`total_orders + 1` })
+    .where(eq(storesTable.id, order.storeId));
 }

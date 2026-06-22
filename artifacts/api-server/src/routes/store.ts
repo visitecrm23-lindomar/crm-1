@@ -22,6 +22,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { runPostPaymentSideEffects } from "../services/checkout/post-booking";
+import { applyOrderInventoryEffects } from "../services/checkout/persist-order";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
 import { ADMIN_ROLES } from '../lib/tenant';
@@ -776,6 +777,19 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
     if (parsed.data.internalNotes) updates.internalNotes = parsed.data.internalNotes;
     const isTransitioningToPaid = parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID;
     const isTransitioningToCompleted = parsed.data.status === STORE_ORDER_STATUS.COMPLETED;
+
+    // Read current paymentStatus BEFORE the update so we can gate inventory effects
+    // on the UNPAID → PAID transition only (prevents double-decrement if admin marks
+    // the same order as paid more than once).
+    const [orderBefore] = isTransitioningToPaid
+      ? await db
+          .select({ paymentStatus: storeOrdersTable.paymentStatus })
+          .from(storeOrdersTable)
+          .where(and(eq(storeOrdersTable.id, req.params.id), eq(storeOrdersTable.storeId, store.id)))
+          .limit(1)
+      : [undefined];
+    const wasAlreadyPaid = orderBefore?.paymentStatus === STORE_PAYMENT_STATUS.PAID;
+
     if (parsed.data.status === STORE_ORDER_STATUS.COMPLETED) updates.completedAt = new Date();
     if (parsed.data.status === STORE_ORDER_STATUS.CANCELLED) updates.cancelledAt = new Date();
     if (parsed.data.paymentStatus === STORE_PAYMENT_STATUS.PAID) updates.paidAt = new Date();
@@ -796,6 +810,14 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
         .catch((err) => {
           req.log.warn({ err, orderId: order.id }, "[store/orders] Failed reservation/post-payment side effects on manual payment confirmation");
         });
+
+      // Apply deferred inventory effects (stock, coupon, totalOrders) only on the
+      // first UNPAID → PAID transition to prevent double-decrement on repeated calls.
+      if (!wasAlreadyPaid) {
+        applyOrderInventoryEffects(order.id, db).catch((err) => {
+          req.log.warn({ err, orderId: order.id }, "[store/orders] Failed to apply order inventory effects on manual payment");
+        });
+      }
     }
 
     // Auto-create CRM deal as "won" when order transitions to paid or completed (fire-and-forget).
