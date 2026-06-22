@@ -2,7 +2,7 @@ import { Router, type Request, type NextFunction } from "express";
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
 import { storeOrdersTable, reservationsTable, paymentsTable, storesTable, tripsTable } from "@workspace/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
 import { syncReservationPaymentStatus, paymentExistsForGatewayTx, type DbExecutor } from "../lib/reservation-payments";
@@ -543,21 +543,34 @@ export async function applyGatewayPayment(tx: DbExecutor, args: ApplyArgs): Prom
     return null;
   }
 
-  if (order.paymentStatus !== STORE_PAYMENT_STATUS.PAID) {
-    await tx
-      .update(storeOrdersTable)
-      .set({ paymentStatus: STORE_PAYMENT_STATUS.PAID, paidAt, status: STORE_ORDER_STATUS.CONFIRMED, confirmedAt: paidAt })
-      .where(eq(storeOrdersTable.id, order.id));
-  }
+  // Atomic conditional update: only matches when paymentStatus is NOT already PAID.
+  // This is the idempotency gate for inventory effects — concurrent or duplicate
+  // webhook deliveries get 0 rows returned and skip inventory effects.
+  // Also covers the manual-paid-then-webhook path: if admin already marked the order
+  // paid (which applies inventory effects once), the gateway webhook sees 0 rows
+  // here and skips effects, preventing a double-apply.
+  const updatedOrderRows = await tx
+    .update(storeOrdersTable)
+    .set({ paymentStatus: STORE_PAYMENT_STATUS.PAID, paidAt, status: STORE_ORDER_STATUS.CONFIRMED, confirmedAt: paidAt })
+    .where(and(
+      eq(storeOrdersTable.id, order.id),
+      ne(storeOrdersTable.paymentStatus, STORE_PAYMENT_STATUS.PAID),
+    ))
+    .returning({ id: storeOrdersTable.id });
+
+  const didTransitionToPaid = updatedOrderRows.length > 0;
 
   // Create reservations now (payment confirmed): seats are only reserved after payment,
   // not at checkout time. createReservationsForOrder is idempotent — safe on retries.
   await createReservationsForOrder(order.id, tx as unknown as Parameters<typeof createReservationsForOrder>[1]);
 
   // Apply inventory effects deferred from order-creation: stock decrement, coupon
-  // usageCount increment, and totalOrders increment. Runs inside this transaction so
-  // it is gated by the paymentExistsForGatewayTx idempotency check above.
-  await applyOrderInventoryEffects(order.id, tx);
+  // usageCount increment, and totalOrders increment. Only applied on the first
+  // UNPAID → PAID transition — skipped for duplicate/retried webhook events and for
+  // orders already marked paid by the manual-payment admin path.
+  if (didTransitionToPaid) {
+    await applyOrderInventoryEffects(order.id, tx);
+  }
 
   // Find the reservations linked to this order via storeOrderId == orderNumber
   const reservations = await tx
