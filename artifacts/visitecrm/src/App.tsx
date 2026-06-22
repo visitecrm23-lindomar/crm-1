@@ -109,22 +109,12 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 }
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-// Route Clerk's Frontend API through the same-origin backend proxy at /api/__clerk so
-// its cookies are first-party and reach the API. Without this, the frontend
-// talks directly to Clerk's FAPI, its cookies are third-party (blocked in the
-// iframe), every /api request is unauthenticated, and RoleRedirect loops to
-// /sign-in.
-//
-// The proxy is only active in DEV. The Replit preview pane is an HTTPS iframe that
-// blocks third-party cookies, so Clerk needs to be proxied through /api/__clerk there.
-// In production the proxy must NOT be set: /api/__clerk is not registered in the Clerk
-// dashboard for .replit.app (or custom domains), causing a 400 → blank page.
-// VITE_CLERK_PROXY_URL takes precedence when explicitly provided.
-const clerkProxyUrl: string | undefined =
-  import.meta.env.VITE_CLERK_PROXY_URL ||
-  (import.meta.env.DEV && typeof window !== "undefined" && window.location.protocol === "https:"
-    ? `${window.location.origin}/api/__clerk`
-    : undefined);
+// Clerk proxy: only used when explicitly overridden via VITE_CLERK_PROXY_URL.
+// Auto-deriving a proxy URL for the Replit dev preview does NOT work — Clerk
+// requires every proxyUrl to be registered in the Clerk Dashboard, and the
+// Replit preview domain changes per session so it can never be registered.
+// Clerk v6 handles cross-site iframe auth via localStorage fallback without a proxy.
+const clerkProxyUrl: string | undefined = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {

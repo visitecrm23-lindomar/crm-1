@@ -1,39 +1,45 @@
 ---
-name: Clerk dev proxy (frontend must match backend)
-description: Why the Vite frontend must route Clerk FAPI through the same-origin /api/__clerk proxy in the Replit dev iframe, and the https-only guard.
+name: Clerk dev proxy — removed, do not re-add
+description: History of the Clerk proxy approach and why it was removed. Clerk now works without a proxy in both dev and prod.
 ---
 
-# Clerk dev auth in the Replit preview iframe
+# Clerk proxy — removed
 
-The Replit workspace preview is a **cross-site HTTPS iframe**. Clerk's direct FAPI
-cookies are third-party there and get blocked, so the API sees no session and
-returns 401 on every `/api/*` request. That 401 makes `RoleRedirect` (App.tsx)
-bounce a signed-in user to `/sign-in`, which Clerk bounces back to `/` → an
-infinite redirect loop ("The <SignIn/> component cannot render when a user is
-already signed in" repeating in the console).
+## Why the proxy was removed
 
-**Rule:** the backend and frontend Clerk-proxy config must be symmetric in dev.
-The backend (`app.ts`) derives `CLERK_PROXY_URL=https://${REPLIT_DEV_DOMAIN}/api/__clerk`
-and mounts `clerkProxyMiddleware` at `/api/__clerk`. The frontend
-(`App.tsx` `clerkProxyUrl` → `<ClerkProvider proxyUrl>`) MUST also point at that
-same-origin proxy in dev so Clerk's cookies become first-party. If only the
-backend enables the proxy, auth still breaks.
+Clerk **requires every `proxyUrl` to be registered in the Clerk Dashboard** under
+your instance's domains. The Replit preview URL changes per session
+(`fcd588d6-...spock.replit.dev`), so it can never be registered — Clerk always
+returned `400 / "unable to attribute this request to an instance"` and the app
+showed a blank page.
 
-**Why the `window.location.protocol === "https:"` guard:** Clerk always loads its
-`clerk-js` script over **HTTPS**. If `proxyUrl` is derived from a plain
-`http://localhost:5000` origin, Clerk upgrades the script URL to
-`https://localhost:5000/...` which fails with `failed_to_load_clerk_js`
-(ERR_SSL_PROTOCOL_ERROR). So derive the proxy only when the current origin is
-already https (the real user's preview = `https://<REPLIT_DEV_DOMAIN>`); on
-http://localhost (the agent's `app_preview` screenshots) fall back to Clerk's
-direct FAPI.
+**Do not re-add auto-derived proxy URLs.** The pattern
+`window.location.origin + "/api/__clerk"` (or deriving from `REPLIT_DEV_DOMAIN`)
+is broken by design for ephemeral preview URLs.
 
-**Production:** `import.meta.env.DEV` is false there, so no proxy is derived. A
-proxy is only used in prod if `VITE_CLERK_PROXY_URL` is explicitly set. Do NOT set
-it to a domain you don't actually serve the `/api/__clerk` proxy from (a stale
-`visitecrm.com` value once caused a blank page in prod). For a `.replit.app`
-deploy (top-level context, not an iframe), direct FAPI works without a proxy.
+## Current setup (no proxy)
 
-**Prod env vars that matter for auth/CORS:** `FRONTEND_URL` (and optionally
-`ADDITIONAL_ORIGINS`) must include the deployed origin, or same-origin POSTs are
-rejected by the CORS middleware and Clerk `authorizedParties` won't match.
+- **Frontend** (`App.tsx`): `clerkProxyUrl` is `undefined` unless
+  `VITE_CLERK_PROXY_URL` is explicitly set. Auto-derivation is gone.
+- **Backend** (`app.ts`): `CLERK_PROXY_URL` is never auto-set. The
+  `clerkProxyMiddleware` is still mounted at `/api/__clerk` but silently passes
+  through when `CLERK_PROXY_URL` is unset (no warning logged).
+- **Clerk v6** handles cross-site iframe auth via localStorage-based session
+  tokens — no proxy needed for the Replit preview pane.
+
+## If a proxy is ever genuinely needed
+
+Only enable it when you have a **stable, registered domain** (e.g. a custom
+production domain). Steps:
+1. Register the proxy URL in Clerk Dashboard → Domains.
+2. Set `VITE_CLERK_PROXY_URL=https://yourdomain.com/api/__clerk` in the env.
+3. Set `CLERK_PROXY_URL=https://yourdomain.com/api/__clerk` on the backend.
+
+The proxy middleware in `clerkProxyMiddleware.ts` is already in place and
+activates automatically when `CLERK_PROXY_URL` is set.
+
+## Prod env vars that matter for auth/CORS
+
+`FRONTEND_URL` (and optionally `ADDITIONAL_ORIGINS`) must include the deployed
+origin, or CORS middleware rejects cross-origin POSTs and Clerk
+`authorizedParties` won't match.

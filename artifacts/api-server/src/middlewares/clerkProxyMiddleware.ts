@@ -45,7 +45,8 @@ export function clerkProxyMiddleware(isAllowedOrigin?: (origin: string) => boole
 
   const configuredProxyUrl = process.env.CLERK_PROXY_URL;
   if (!configuredProxyUrl) {
-    console.warn("[clerkProxy] CLERK_PROXY_URL is not set. Clerk proxy disabled — auth will not work.");
+    // No proxy configured — Clerk talks directly to its FAPI. This is correct
+    // for production and for dev when no registered proxy domain is available.
     return (_req, _res, next) => next();
   }
 
