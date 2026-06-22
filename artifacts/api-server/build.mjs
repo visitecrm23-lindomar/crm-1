@@ -42,6 +42,10 @@ async function buildAll() {
     external: [
       "*.node",
       "sharp",
+      // http-proxy-middleware@3 has transitive deps (entities, cheerio) that use
+      // explicit .js ESM imports in ways esbuild cannot resolve — externalize
+      // the whole package and load it from node_modules at runtime via symlink.
+      "http-proxy-middleware",
       // PDF generation — externalized to avoid bundling html2canvas/canvg (browser deps of jspdf)
       "jspdf",
       "jspdf-autotable",

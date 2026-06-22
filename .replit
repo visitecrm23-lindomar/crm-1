@@ -177,13 +177,11 @@ timeoutMs = 300000
   [userenv]
 
   [userenv.production]
-FRONTEND_URL = "https://visitecrm.pro"
+FRONTEND_URL = "https://visitecariri.com.br"
 ADDITIONAL_ORIGINS = "https://visitecariri.com.br,https://visite-cariri-cearense-receptivo.replit.app"
-VITE_APP_URL = "https://visitecrm.pro"
-CLERK_PROXY_URL = "https://visitecrm.pro/api/__clerk"
+VITE_APP_URL = "https://visitecariri.com.br"
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
-VITE_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
 CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
 
   [userenv.shared]
@@ -191,5 +189,4 @@ CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
 SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
 
   [userenv.development]
-VITE_CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
 CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"

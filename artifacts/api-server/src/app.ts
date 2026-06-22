@@ -87,15 +87,10 @@ if (!process.env["CLERK_SECRET_KEY"]) {
   logger.warn("⚠️  CLERK_SECRET_KEY is not set. Clerk authentication will not work. Re-run Clerk setup to provision keys.");
 }
 
-// CLERK_PROXY_URL auto-derivation removed: Clerk requires every proxy URL to be
-// registered in the Clerk Dashboard. The Replit preview URL changes per session,
-// so auto-deriving it always produces an unregistered URL → Clerk init failure.
-// Set CLERK_PROXY_URL explicitly only when you have a stable registered domain.
-if (process.env["CLERK_PROXY_URL"]) {
-  logger.info(`[clerkProxy] CLERK_PROXY_URL is set → ${process.env["CLERK_PROXY_URL"]}`);
-}
-
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));
+// Canonical proxy: only active in production (NODE_ENV=production).
+// In production the proxy derives its proxyUrl dynamically from the request host —
+// no CLERK_PROXY_URL env var is needed.
+app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 // ── Stripe webhook — MUST be registered BEFORE express.json() ──
 // The rawBody is also captured via the verify hook below, which covers
@@ -145,12 +140,8 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
   next(err);
 });
 
-const clerkProxyUrl = process.env["CLERK_PROXY_URL"];
-const clerkProxyOrigin = clerkProxyUrl ? new URL(clerkProxyUrl).origin : undefined;
-
 const authorizedParties = [
   process.env["FRONTEND_URL"],
-  clerkProxyOrigin,
   process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
   ...replitDomains,
   ...additionalOrigins,

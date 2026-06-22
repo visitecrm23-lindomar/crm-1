@@ -5,21 +5,18 @@
  * authentication on custom domains and .replit.app deployments without
  * requiring CNAME DNS configuration.
  *
- * See: https://clerk.com/docs/guides/dashboard/dns-domains/proxy-fapi
- *
- * Required environment variables:
- *   CLERK_SECRET_KEY  — Clerk secret key (activates the proxy)
- *   CLERK_PROXY_URL   — The canonical proxy URL configured in the Clerk dashboard
- *                       e.g. https://visite-crm.replit.app/api/__clerk
+ * AUTH CONFIGURATION: To manage users, enable/disable login providers
+ * (Google, GitHub, etc.), change app branding, or configure OAuth credentials,
+ * use the Auth pane in the workspace toolbar. There is no external Clerk
+ * dashboard — all auth configuration is done through the Auth pane.
  *
  * IMPORTANT:
+ * - Only active in production (Clerk proxying doesn't work for dev instances)
  * - Must be mounted BEFORE express.json() middleware
- * - CLERK_PROXY_URL must match the proxy URL configured in the Clerk dashboard
- * - The proxy rewrites CORS response headers so any allowed origin can call it
  *
  * Usage in app.ts:
  *   import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
- *   app.use(CLERK_PROXY_PATH, clerkProxyMiddleware(isAllowedOrigin));
+ *   app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
  */
 
 // Note: http-proxy-middleware@3 depends on http-proxy@1.18.1, which is effectively
@@ -27,34 +24,48 @@
 //   • DEP0169 — `url.parse()` in http-proxy/lib/http-proxy/index.js
 //   • DEP0060 — `util._extend()` in http-proxy/lib/http-proxy/common.js and index.js
 // These warnings appear at server startup whenever the proxy middleware is loaded.
-// There is no newer http-proxy release that removes them, and replacing
-// http-proxy-middleware entirely is out of scope for this sprint.
-// Track: https://github.com/http-party/node-http-proxy/issues/1591
+// There is no newer http-proxy release that removes them.
 import { createProxyMiddleware } from "http-proxy-middleware";
 import type { RequestHandler } from "express";
+import type { IncomingHttpHeaders } from "http";
 
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
 
-export function clerkProxyMiddleware(isAllowedOrigin?: (origin: string) => boolean): RequestHandler {
+/**
+ * Returns the first effective public hostname for the given request,
+ * preferring x-forwarded-host over the Host header so callers behind a
+ * proxy see the original client-facing host.
+ *
+ * x-forwarded-host can take three shapes:
+ *   - undefined (no proxy involved)
+ *   - a single string (one proxy hop)
+ *   - a comma-delimited string when an upstream appended rather than
+ *     replaced the header (Node folds duplicate headers this way), or a
+ *     string[] in some Express typings
+ * In the multi-value case, the leftmost value is the original client-
+ * facing host. Take that one in all forms. Exported so that app.ts
+ * (clerkMiddleware callback) and this proxy middleware agree on which
+ * hostname is canonical — otherwise multi-domain/custom-domain flows
+ * break.
+ */
+export function getClerkProxyHost(req: {
+  headers: IncomingHttpHeaders;
+}): string | undefined {
+  const forwarded = req.headers["x-forwarded-host"];
+  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const firstHop = raw?.split(",")[0]?.trim();
+  return firstHop || req.headers.host?.trim() || undefined;
+}
+
+export function clerkProxyMiddleware(): RequestHandler {
+  // Only run proxy in production — Clerk proxying doesn't work for dev instances
+  if (process.env.NODE_ENV !== "production") {
+    return (_req, _res, next) => next();
+  }
+
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) {
-    console.warn("[clerkProxy] CLERK_SECRET_KEY is not set. Clerk proxy disabled — auth will not work.");
-    return (_req, _res, next) => next();
-  }
-
-  const configuredProxyUrl = process.env.CLERK_PROXY_URL;
-  if (!configuredProxyUrl) {
-    // No proxy configured — Clerk talks directly to its FAPI. This is correct
-    // for production and for dev when no registered proxy domain is available.
-    return (_req, _res, next) => next();
-  }
-
-  let proxyOrigin: string;
-  try {
-    proxyOrigin = new URL(configuredProxyUrl).origin;
-  } catch {
-    console.error(`[clerkProxy] Invalid CLERK_PROXY_URL: "${configuredProxyUrl}". Proxy disabled.`);
     return (_req, _res, next) => next();
   }
 
@@ -65,9 +76,12 @@ export function clerkProxyMiddleware(isAllowedOrigin?: (origin: string) => boole
       path.replace(new RegExp(`^${CLERK_PROXY_PATH}`), ""),
     on: {
       proxyReq: (proxyReq, req) => {
-        proxyReq.setHeader("Clerk-Proxy-Url", configuredProxyUrl);
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = getClerkProxyHost(req) || "";
+        const proxyUrl = `${protocol}://${host}${CLERK_PROXY_PATH}`;
+
+        proxyReq.setHeader("Clerk-Proxy-Url", proxyUrl);
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
-        proxyReq.setHeader("Origin", proxyOrigin);
 
         const xff = req.headers["x-forwarded-for"];
         const clientIp =
@@ -76,14 +90,6 @@ export function clerkProxyMiddleware(isAllowedOrigin?: (origin: string) => boole
           "";
         if (clientIp) {
           proxyReq.setHeader("X-Forwarded-For", clientIp);
-        }
-      },
-      proxyRes: (proxyRes, req) => {
-        const browserOrigin = (req as { headers: Record<string, string> }).headers["origin"];
-        if (browserOrigin && (!isAllowedOrigin || isAllowedOrigin(browserOrigin))) {
-          proxyRes.headers["access-control-allow-origin"] = browserOrigin;
-          proxyRes.headers["access-control-allow-credentials"] = "true";
-          proxyRes.headers["vary"] = "origin";
         }
       },
     },
