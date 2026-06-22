@@ -27,7 +27,7 @@ import { Link, Redirect } from "wouter";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line,
-} from "recharts";
+} from "@/lib/recharts-compat";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -1160,7 +1160,7 @@ function AgencyDashboard() {
                     <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
                     <YAxis dataKey="origin" type="category" tick={{ fontSize: 10 }} width={72} />
                     <Tooltip
-                      content={({ payload, label }: { payload: Array<Record<string, any>>; label: string }) => {
+                      content={({ payload, label }: { payload?: Array<unknown>; label?: string }) => {
                         if (!payload?.length) return null;
                         const row = funnel.byOrigin.find(r => r.origin === label);
                         return (

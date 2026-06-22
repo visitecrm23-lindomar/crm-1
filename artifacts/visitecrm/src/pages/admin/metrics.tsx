@@ -7,18 +7,30 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   LineChart,
-  Line,
+  Line as _Line,
   BarChart,
-  Bar,
-  XAxis,
-  YAxis,
+  Bar as _Bar,
+  XAxis as _XAxis,
+  YAxis as _YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as _Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import type { LineProps, BarProps, XAxisProps, YAxisProps, TooltipProps } from "recharts";
+import React from "react";
 import { TrendingUp, Building2, AlertCircle, RefreshCw, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBRL } from "@workspace/shared";
+
+// Recharts class components pre-date React 19's stricter JSX constraints.
+// These re-casts preserve full prop types while satisfying React.ComponentType<P>.
+type ValueType = number | string | (number | string)[];
+type NameType = number | string;
+const XAxis   = _XAxis   as unknown as React.ComponentType<XAxisProps>;
+const YAxis   = _YAxis   as unknown as React.ComponentType<YAxisProps>;
+const Tooltip = _Tooltip as unknown as React.ComponentType<TooltipProps<ValueType, NameType>>;
+const Line    = _Line    as unknown as React.ComponentType<LineProps>;
+const Bar     = _Bar     as unknown as React.ComponentType<BarProps>;
 
 export default function AdminMetricsPage() {
   const { data: mrr = [], isLoading: mrrLoading, isError: mrrError } = useGetMetricsMrr();

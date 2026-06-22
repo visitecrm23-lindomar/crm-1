@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, LineChart, Line,
-} from "recharts";
+} from "@/lib/recharts-compat";
 import { useGetDashboardComparative } from "@workspace/api-client-react";
 import {
   TrendingUp, TrendingDown, Minus, ArrowLeft, BarChart2, DollarSign, CalendarCheck,

@@ -1,14 +1,31 @@
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, Sector,
+  BarChart, Bar as _Bar, XAxis as _XAxis, YAxis as _YAxis,
+  CartesianGrid, Tooltip as _Tooltip, Legend as _Legend, ResponsiveContainer,
+  PieChart, Pie as _Pie, Cell, Sector as _Sector,
 } from "recharts";
+import type {
+  BarProps, XAxisProps, YAxisProps, LegendProps, PieProps, SectorProps, TooltipProps,
+} from "recharts";
+import React, { useState } from "react";
 import type { ReferralAnalyticsData, ReferralAnalyticsPeriod, ReferralAnalyticsChannel } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Minus, ArrowRight, Download, BarChart3 } from "lucide-react";
 import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
-import { useState } from "react";
+
+// Recharts ships class components whose context types pre-date React 19's stricter
+// JSX element constraints (TS2786/TS2607). The re-casts below preserve each
+// component's full prop type while satisfying the React.ComponentType<P> shape.
+type ValueType = number | string | (number | string)[];
+type NameType = number | string;
+const XAxis    = _XAxis   as unknown as React.ComponentType<XAxisProps>;
+const YAxis    = _YAxis   as unknown as React.ComponentType<YAxisProps>;
+const Tooltip  = _Tooltip as unknown as React.ComponentType<TooltipProps<ValueType, NameType>>;
+const Legend   = _Legend  as unknown as React.ComponentType<LegendProps>;
+const Bar      = _Bar     as unknown as React.ComponentType<BarProps>;
+const Pie      = _Pie     as unknown as React.ComponentType<PieProps>;
+const Sector   = _Sector  as unknown as React.ComponentType<SectorProps>;
 
 function MonthLabel(month: string) {
   const [y, m] = month.split("-");

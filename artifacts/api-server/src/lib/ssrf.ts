@@ -175,6 +175,11 @@ export const ssrfSafeFetch = (async (input: unknown, init?: unknown) => {
   return undiciFetch(input as never, {
     ...(init as object),
     redirect: "error",
+    // Agent satisfies undici's Dispatcher at runtime; the ambient module
+    // declaration in vendor.d.ts cannot extend the globally-loaded Dispatcher
+    // class (bundler resolution loads undici globals before our module surface),
+    // so a minimal cast is required here – consistent with `ssrfLookup as never`
+    // and `input as never` already present in this file.
     dispatcher: ssrfDispatcher as never,
   });
 }) as unknown as typeof fetch;

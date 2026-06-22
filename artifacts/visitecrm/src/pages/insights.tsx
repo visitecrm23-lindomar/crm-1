@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from "recharts";
+} from "@/lib/recharts-compat";
 import { Slider } from "@/components/ui/slider";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@clerk/react";

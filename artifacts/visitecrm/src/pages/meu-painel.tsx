@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
+} from "@/lib/recharts-compat";
 import {
   DollarSign, TrendingUp, Award, Target, Gauge, Medal,
   CalendarCheck, Briefcase, Users, Plus,
