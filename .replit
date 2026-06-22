@@ -183,6 +183,8 @@ VITE_APP_URL = "https://visitecrm.pro"
 CLERK_PROXY_URL = "https://visitecrm.pro/api/__clerk"
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
+VITE_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
+CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
