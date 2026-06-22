@@ -375,7 +375,20 @@ router.get("/public/store/:slug/products/:productSlug", async (req, res, next: N
     await db.update(storeProductsTable)
       .set({ viewsCount: row.viewsCount + 1 })
       .where(eq(storeProductsTable.id, row.id));
-    const reviews = await db.select().from(storeReviewsTable)
+    const reviews = await db.select({
+      id: storeReviewsTable.id,
+      reviewerName: storeReviewsTable.reviewerName,
+      rating: storeReviewsTable.rating,
+      title: storeReviewsTable.title,
+      comment: storeReviewsTable.comment,
+      images: storeReviewsTable.images,
+      verifiedPurchase: storeReviewsTable.verifiedPurchase,
+      isFeatured: storeReviewsTable.isFeatured,
+      reply: storeReviewsTable.reply,
+      repliedAt: storeReviewsTable.repliedAt,
+      createdAt: storeReviewsTable.createdAt,
+      updatedAt: storeReviewsTable.updatedAt,
+    }).from(storeReviewsTable)
       .where(and(
         eq(storeReviewsTable.productId, row.id),
         eq(storeReviewsTable.status, "approved"),
@@ -1646,7 +1659,20 @@ router.get("/public/store/:slug/reviews", async (req, res, next: NextFunction): 
       eq(storeReviewsTable.status, "approved"),
     ];
     if (featured === "true") conditions.push(eq(storeReviewsTable.isFeatured, true));
-    const reviews = await db.select().from(storeReviewsTable)
+    const reviews = await db.select({
+      id: storeReviewsTable.id,
+      reviewerName: storeReviewsTable.reviewerName,
+      rating: storeReviewsTable.rating,
+      title: storeReviewsTable.title,
+      comment: storeReviewsTable.comment,
+      images: storeReviewsTable.images,
+      verifiedPurchase: storeReviewsTable.verifiedPurchase,
+      isFeatured: storeReviewsTable.isFeatured,
+      reply: storeReviewsTable.reply,
+      repliedAt: storeReviewsTable.repliedAt,
+      createdAt: storeReviewsTable.createdAt,
+      updatedAt: storeReviewsTable.updatedAt,
+    }).from(storeReviewsTable)
       .where(and(...conditions))
       .orderBy(desc(storeReviewsTable.createdAt))
       .limit(limit);
