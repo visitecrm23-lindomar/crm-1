@@ -115,16 +115,14 @@ const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 // iframe), every /api request is unauthenticated, and RoleRedirect loops to
 // /sign-in.
 //
-// We derive the proxy URL from window.location.origin so it always points to the
-// CURRENT domain — whether that is visitecrm.pro, visitecariri.com.br or the
-// .replit.app fallback. This eliminates the need for a hardcoded VITE_CLERK_PROXY_URL
-// and ensures multi-domain setups work without any extra env-var configuration.
-// A VITE_CLERK_PROXY_URL override is still respected when explicitly set.
-// On plain http://localhost (no HTTPS) we skip the proxy and let Clerk use its
-// direct FAPI, which is reachable over HTTPS from an HTTP page.
+// The proxy is only active in DEV. The Replit preview pane is an HTTPS iframe that
+// blocks third-party cookies, so Clerk needs to be proxied through /api/__clerk there.
+// In production the proxy must NOT be set: /api/__clerk is not registered in the Clerk
+// dashboard for .replit.app (or custom domains), causing a 400 → blank page.
+// VITE_CLERK_PROXY_URL takes precedence when explicitly provided.
 const clerkProxyUrl: string | undefined =
   import.meta.env.VITE_CLERK_PROXY_URL ||
-  (typeof window !== "undefined" && window.location.protocol === "https:"
+  (import.meta.env.DEV && typeof window !== "undefined" && window.location.protocol === "https:"
     ? `${window.location.origin}/api/__clerk`
     : undefined);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
