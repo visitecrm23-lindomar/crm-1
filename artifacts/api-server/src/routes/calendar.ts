@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import { usersTable, calendarEventsTable, tripsTable, paymentsTable, clientsTable } from "@workspace/db";
 import { eq, and, count, max } from "drizzle-orm";
 import { requireAuth, ALL_STAFF_ROLES } from "../lib/tenant";
-import { generateAuthUrl, verifyState, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
+import { generateAuthUrl, consumeNonce, exchangeCodeForTokens, revokeToken } from "../lib/google-calendar/calendar-service";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
@@ -47,8 +47,25 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     return;
   }
 
-  const userId = verifyState(state);
-  if (!userId) {
+  // Require the user to be authenticated. This session-binds the callback:
+  // even if an attacker tricks a victim into visiting the attacker's OAuth URL,
+  // the callback will reject because the victim's Clerk session does not match
+  // the attacker's userId embedded in the state.
+  const me = await requireAuth(req, res);
+  if (!me) return;
+
+  // consumeNonce verifies the HMAC, confirms the nonce was registered by *this*
+  // server during a /calendar/connect call, and deletes it to prevent replay.
+  const stateUserId = consumeNonce(state);
+  if (!stateUserId) {
+    res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
+    return;
+  }
+
+  // Session binding: the logged-in user must be the same user who initiated
+  // the OAuth flow. Reject if they differ.
+  if (me.id !== stateUserId) {
+    req.log.warn({ sessionUserId: me.id, stateUserId }, "calendar/callback: session user does not match state userId — possible CSRF or replay");
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
     return;
   }
@@ -57,7 +74,7 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     const tokens = await exchangeCodeForTokens(code);
 
     const [user] = await db.select({ id: usersTable.id, tenantId: usersTable.tenantId })
-      .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      .from(usersTable).where(eq(usersTable.id, me.id)).limit(1);
 
     if (!user) {
       res.redirect(`${FRONTEND_URL}/configuracoes?gcal=error&tab=integrations`);
@@ -73,11 +90,11 @@ router.get("/calendar/callback", async (req, res): Promise<void> => {
     if (tokens.refresh_token) {
       updateFields.googleRefreshToken = tokens.refresh_token;
     }
-    await db.update(usersTable).set(updateFields).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set(updateFields).where(eq(usersTable.id, me.id));
 
     res.redirect(`${FRONTEND_URL}/configuracoes?gcal=success&tab=integrations`);
-    CalendarSyncService.syncAllForUser(userId).catch((err) => {
-      req.log.warn({ err, userId, context: "calendar/callback" }, "Initial syncAllForUser failed — continuing");
+    CalendarSyncService.syncAllForUser(me.id).catch((err) => {
+      req.log.warn({ err, userId: me.id, context: "calendar/callback" }, "Initial syncAllForUser failed — continuing");
     });
   } catch (err) {
     req.log.error({ err }, "calendar/callback failed");

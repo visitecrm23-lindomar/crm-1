@@ -103,6 +103,64 @@ function signState(userId: string, nonce: string): string {
   return Buffer.from(JSON.stringify({ userId, nonce, sig })).toString("base64url");
 }
 
+// ─── Server-side nonce registry ───────────────────────────────────────────────
+// Each OAuth flow generates a one-time nonce stored here for up to 15 minutes.
+// consumeNonce validates HMAC, checks the nonce is present and unexpired, then
+// deletes it — preventing state replay even if the signed token is intercepted.
+
+const NONCE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+interface NonceEntry {
+  userId: string;
+  expiresAt: number;
+}
+
+const pendingNonces = new Map<string, NonceEntry>();
+
+function registerNonce(nonce: string, userId: string): void {
+  // Evict expired entries on each registration to avoid unbounded growth.
+  const now = Date.now();
+  for (const [key, entry] of pendingNonces) {
+    if (entry.expiresAt <= now) pendingNonces.delete(key);
+  }
+  pendingNonces.set(nonce, { userId, expiresAt: now + NONCE_TTL_MS });
+}
+
+/**
+ * Verifies the HMAC signature, checks the nonce is present and unexpired,
+ * and then deletes it so the state cannot be reused. Returns the userId on
+ * success, or null if invalid / expired / already consumed.
+ */
+export function consumeNonce(state: string): string | null {
+  try {
+    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
+      userId: string;
+      nonce: string;
+      sig: string;
+    };
+    const expected = createHmac("sha256", getStateSecret())
+      .update(`${decoded.userId}:${decoded.nonce}`)
+      .digest("base64url");
+    const expectedBuf = Buffer.from(expected, "base64url");
+    const actualBuf = Buffer.from(decoded.sig, "base64url");
+    if (expectedBuf.length !== actualBuf.length) return null;
+    if (!timingSafeEqual(expectedBuf, actualBuf)) return null;
+
+    const entry = pendingNonces.get(decoded.nonce);
+    if (!entry) return null; // not registered or already consumed
+    if (entry.expiresAt <= Date.now()) {
+      pendingNonces.delete(decoded.nonce);
+      return null; // expired
+    }
+    if (entry.userId !== decoded.userId) return null; // userId mismatch
+
+    pendingNonces.delete(decoded.nonce); // consume — one-time use
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
+
 export function verifyState(state: string): string | null {
   try {
     const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
@@ -125,6 +183,7 @@ export function verifyState(state: string): string | null {
 
 export function generateAuthUrl(userId: string): string {
   const nonce = randomBytes(16).toString("base64url");
+  registerNonce(nonce, userId);
   const state = signState(userId, nonce);
   const auth = createOAuth2Client();
   return auth.generateAuthUrl({

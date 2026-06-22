@@ -2,6 +2,7 @@ import { logger } from "./logger";
 import { db, tenantIntegrationsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { decryptCredential } from "./crypto";
+import { ssrfSafeFetchBounded } from "./ssrf";
 
 /**
  * Normalises a Brazilian phone number to E.164 format (no "+").
@@ -99,21 +100,25 @@ export async function sendTenantWhatsAppMessage(
         const encodedInstance = encodeURIComponent(instanceName);
         const url = `${baseUrl.replace(/\/$/, "")}/message/sendText/${encodedInstance}`;
 
-        const resp = await fetch(url, {
+        // Use ssrfSafeFetchBounded to enforce HTTPS, block private/reserved IP
+        // ranges at connect time (defeating DNS rebinding), and refuse redirects.
+        // This mirrors the protections applied by the save/test endpoints and
+        // prevents a malicious tenant from using DNS rebinding to turn normal
+        // WhatsApp sends into blind SSRF probes against internal services.
+        const result = await ssrfSafeFetchBounded(url, {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: apiKey },
           body: JSON.stringify({ number: e164, text: message }),
-          signal: AbortSignal.timeout(15_000),
+          timeoutMs: 15_000,
         });
 
-        if (resp.ok) {
+        if (result.ok) {
           logger.info({ phone: e164, tenantId }, "[whatsapp] Message sent via Evolution API");
           return { success: true };
         }
 
-        const status = resp.status;
-        logger.warn({ phone: e164, tenantId, status }, "[whatsapp] Evolution API error");
-        return { success: false, error: `evolution_${status}` };
+        logger.warn({ phone: e164, tenantId, status: result.status }, "[whatsapp] Evolution API error");
+        return { success: false, error: `evolution_${result.status}` };
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

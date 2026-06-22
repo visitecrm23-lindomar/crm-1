@@ -160,7 +160,6 @@ const authorizedParties = [
 const clerkAuth = clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {});
 
 const CLERK_BYPASS_PATHS = new Set([
-  "/api/calendar/callback",
   "/api",
   "/api/health",
   "/api/healthz",
