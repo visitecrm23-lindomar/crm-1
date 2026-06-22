@@ -144,7 +144,8 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         const tenantId = stripeInvoice.metadata?.tenantId;
         const planId = stripeInvoice.metadata?.planId;
         const stripeCustomerId = typeof stripeInvoice.customer === "string" ? stripeInvoice.customer : undefined;
-        const stripeSubscriptionId = typeof (stripeInvoice as any).subscription === "string" ? (stripeInvoice as any).subscription as string : undefined;
+        const stripeInvoiceRaw = stripeInvoice as unknown as Record<string, unknown>;
+        const stripeSubscriptionId = typeof stripeInvoiceRaw["subscription"] === "string" ? stripeInvoiceRaw["subscription"] : undefined;
 
         // Mark local invoice paid by stripeInvoiceId
         if (stripeInvoice.id) {
@@ -173,9 +174,9 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         }
 
         // Also handle PaymentIntent metadata path
-        if ((stripeInvoice as any).payment_intent && typeof (stripeInvoice as any).payment_intent === "string") {
+        if (stripeInvoiceRaw["payment_intent"] && typeof stripeInvoiceRaw["payment_intent"] === "string") {
           const [inv] = await db.select().from(invoicesTable)
-            .where(eq(invoicesTable.stripePaymentIntentId, (stripeInvoice as any).payment_intent as string))
+            .where(eq(invoicesTable.stripePaymentIntentId, stripeInvoiceRaw["payment_intent"]))
             .limit(1);
           if (inv && inv.status !== INVOICE_STATUS.PAID) {
             await db.update(invoicesTable).set({
@@ -237,7 +238,8 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
         const tenantId = sub.metadata?.tenantId;
         if (!tenantId) break;
 
-        const periodEnd = (sub as any).current_period_end ? new Date((sub as any).current_period_end * 1000) : undefined;
+        const subRaw = sub as unknown as Record<string, unknown>;
+        const periodEnd = subRaw["current_period_end"] ? new Date((subRaw["current_period_end"] as number) * 1000) : undefined;
         const stripeCustomerId = typeof sub.customer === "string" ? sub.customer : undefined;
 
         const subs = await db.select().from(subscriptionsTable)

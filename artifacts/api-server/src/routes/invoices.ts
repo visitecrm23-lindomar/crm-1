@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
-import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES, TENANT_STATUS, SUBSCRIPTION_STATUS } from "@workspace/permissions";
+import { ROLES, INVOICE_STATUS, INVOICE_STATUS_VALUES, TENANT_STATUS, SUBSCRIPTION_STATUS, type InvoiceStatus } from "@workspace/permissions";
 import { hasSeatMapFeature } from "../lib/plan-features";
 
 async function activateInvoicePlan(invoiceId: string, tenantId: string): Promise<void> {
@@ -107,8 +107,7 @@ router.get("/admin/invoices", async (req, res, next: NextFunction): Promise<void
         next(new ValidationError(String(`Invalid status. Must be one of: ${INVOICE_STATUS_VALUES.join(", ")}`), "VALIDATION_ERROR"));
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      conditions.push(eq(invoicesTable.status, req.query.status as any));
+      conditions.push(eq(invoicesTable.status, req.query.status as string as InvoiceStatus));
     }
     if (conditions.length > 0) {
       query = query.where(and(...conditions));

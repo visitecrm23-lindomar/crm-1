@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, lazy, Suspense, Component, type ComponentType, type ReactNode } from "react";
 import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -79,6 +79,33 @@ import Vitrine from "@/pages/vitrine";
 // Partner portal (public — JWT auth inside)
 import ParceirosPortal from "@/pages/parceiros/index";
 import { ROLES, ADMIN_ROLES } from "@workspace/permissions";
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center">
+          <h1 className="text-xl font-semibold text-destructive">Algo deu errado</h1>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Ocorreu um erro inesperado. Recarregue a página para tentar novamente.
+          </p>
+          <button
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            onClick={() => window.location.reload()}
+          >
+            Recarregar página
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 // Route Clerk's Frontend API through the same-origin backend proxy at /api/__clerk so
@@ -454,10 +481,10 @@ function Router() {
       {/* Analytics */}
       <Route path="/analytics" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Analytics} />} />
       <Route path="/analytics/revenue" component={() => <RoleGate allowedRoles={FINANCE_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Revenue} />} />
-      <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={null}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
+      <Route path="/analytics/historico-comparativo" component={() => <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-muted-foreground">Carregando...</div>}><RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={HistoricoComparativo} /></Suspense>} />
       <Route path="/analytics/vendedores" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Vendedores} />} />
       <Route path="/insights" component={() => <RoleGate allowedRoles={AGENCY_ROLES} layout={Layout} fallbackPath="/meu-painel" component={Insights} />} />
-      <Route path="/gemeo" component={() => <RoleGate allowedRoles={ADMIN_ROLES as unknown as string[]} layout={Layout} fallbackPath="/dashboard" component={GemeoDigital} />} />
+      <Route path="/gemeo" component={() => <RoleGate allowedRoles={ADMIN_ROLES} layout={Layout} fallbackPath="/dashboard" component={GemeoDigital} />} />
 
       {/* Task 6 pages */}
       <Route path="/vouchers" component={() => <RoleGate allowedRoles="*" layout={Layout} component={Vouchers} />} />
@@ -542,12 +569,14 @@ function ClerkProviderWithRoutes() {
 
 function App() {
   return (
-    <WouterRouter base={basePath}>
-      <TooltipProvider>
-        <ClerkProviderWithRoutes />
-        <Toaster />
-      </TooltipProvider>
-    </WouterRouter>
+    <AppErrorBoundary>
+      <WouterRouter base={basePath}>
+        <TooltipProvider>
+          <ClerkProviderWithRoutes />
+          <Toaster />
+        </TooltipProvider>
+      </WouterRouter>
+    </AppErrorBoundary>
   );
 }
 
