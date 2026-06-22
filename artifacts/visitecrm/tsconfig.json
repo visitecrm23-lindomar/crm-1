@@ -22,6 +22,9 @@
     },
     {
       "path": "../../lib/integrations-openai-ai-react"
+    },
+    {
+      "path": "../../lib/shared"
     }
   ]
 }
