@@ -866,7 +866,7 @@ router.post("/insights/simulator", async (req, res, next: NextFunction): Promise
     const conversionChangePct = clamp(body.conversionChangePct, -100, 200);
 
     const summary = await buildInsightsSummary(me.tenantId, "month");
-    const baselineRevenue = Math.round(summary.executive.totalRevenue);
+    const baselineRevenue = roundMoney(summary.executive.totalRevenue);
     const leads = summary.commercial.totalLeads;
     const conversion = summary.commercial.conversionRate;
     const avgTicket = summary.commercial.avgTicket;

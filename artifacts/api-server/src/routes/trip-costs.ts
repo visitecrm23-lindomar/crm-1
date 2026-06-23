@@ -1,12 +1,12 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { tripCostsTable, tripsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { tripCostsTable, tripsTable, reservationsTable } from "@workspace/db";
+import { eq, and, count, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ADMIN_ROLES } from '../lib/tenant';
-import { EXPENSE_STATUS, hasPermission, RESOURCES, ACTIONS } from "@workspace/permissions";
+import { EXPENSE_STATUS, RESERVATION_STATUS, hasPermission, RESOURCES, ACTIONS } from "@workspace/permissions";
 import { z } from "zod/v4";
 
 const router = Router();
@@ -80,17 +80,29 @@ router.get("/trips/:id/costs", async (req, res, next: NextFunction): Promise<voi
 
     const [tripRow] = await db.select({
       priceAdult: tripsTable.priceAdult,
-      confirmedSeats: tripsTable.confirmedSeats,
       fixedCosts: tripsTable.fixedCosts,
       variableCosts: tripsTable.variableCosts,
     }).from(tripsTable).where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId))).limit(1);
+
+    // Compute confirmedSeats dynamically from live reservations rather than relying
+    // on the DB counter column, which may be 0 for trips created before the counter
+    // was introduced. Counts only CONFIRMED reservations (REFUNDED ones have already
+    // released their seats back; PENDING reservations are not yet confirmed revenue).
+    const [confirmedSeatsRow] = await db
+      .select({ total: count() })
+      .from(reservationsTable)
+      .where(and(
+        eq(reservationsTable.tripId, req.params.id),
+        eq(reservationsTable.tenantId, me.tenantId),
+        inArray(reservationsTable.status, [RESERVATION_STATUS.CONFIRMED]),
+      ));
 
     const totalRealCosts = costs.reduce((s, c) => s + Number(c.amount), 0);
     const totalPaidCosts = costs.filter(c => c.status === EXPENSE_STATUS.PAID).reduce((s, c) => s + Number(c.amount), 0);
     const totalPendingCosts = costs.filter(c => c.status !== EXPENSE_STATUS.PAID).reduce((s, c) => s + Number(c.amount), 0);
 
     const priceAdult = Number(tripRow?.priceAdult ?? 0);
-    const confirmedSeats = tripRow?.confirmedSeats ?? 0;
+    const confirmedSeats = confirmedSeatsRow?.total ?? 0;
     const expectedRevenue2 = priceAdult * confirmedSeats;
     const profit = expectedRevenue2 - totalRealCosts;
     const margin = expectedRevenue2 > 0 ? (profit / expectedRevenue2) * 100 : 0;

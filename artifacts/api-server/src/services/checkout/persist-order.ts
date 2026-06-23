@@ -12,6 +12,7 @@ import {
 import { and, eq, sql, inArray } from "drizzle-orm";
 import type { DbExecutor } from "../../lib/reservation-payments";
 import { generateId } from "../../lib/id";
+import { roundMoney } from "../../lib/pricing";
 import { lockProductsForCheckout } from "./order-locks";
 import type { Tx } from "./tx";
 
@@ -121,7 +122,7 @@ async function writePartnerCommissions(
     const partner = partnerMap.get(partnerId);
     if (!partner) continue;
     const agencyPct = Number(partner.commissionPct);
-    const agencyAmount = Math.round(grossAmount * agencyPct) / 100;
+    const agencyAmount = roundMoney(grossAmount * agencyPct / 100);
     const partnerAmount = grossAmount - agencyAmount;
     await tx.insert(partnerCommissionsTable).values({
       id: generateId(),

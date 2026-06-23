@@ -22,6 +22,7 @@ import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { createReservationsForOrder } from "../services/checkout/create-reservations";
 import { runPostPaymentSideEffects } from "../services/checkout/post-booking";
+import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { applyOrderInventoryEffects } from "../services/checkout/persist-order";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile, deleteOrphanedImages } from "../lib/uploadthing";
@@ -810,7 +811,17 @@ router.put("/store/orders/:id/status", async (req, res, next: NextFunction): Pro
       // reservations commit, so ensurePortalAccount sees the freshly-created
       // reservations. Both are gated behind confirmed payment.
       createReservationsForOrder(order.id)
-        .then(() => runPostPaymentSideEffects(order.id))
+        .then(async (createResult) => {
+          // Notify agency for each trip reservation created via manual payment confirmation.
+          // (Stripe/MP webhook paths already call enqueueNewBookingNotificationEmail
+          // directly in webhooks.ts — this covers the Pix/boleto manual-entry gap.)
+          for (const reservationId of createResult.reservationIds) {
+            enqueueNewBookingNotificationEmail(reservationId, order.tenantId).catch((err) => {
+              req.log.warn({ err, reservationId }, "[store/orders] Failed to enqueue booking notification on manual payment confirmation");
+            });
+          }
+          await runPostPaymentSideEffects(order.id);
+        })
         .catch((err) => {
           req.log.warn({ err, orderId: order.id }, "[store/orders] Failed reservation/post-payment side effects on manual payment confirmation");
         });
