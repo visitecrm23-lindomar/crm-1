@@ -148,7 +148,7 @@ function RoleRedirect() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [synced, setSynced] = useState(false);
-  const [authError, setAuthError] = useState(false);
+  const [authError, setAuthError] = useState<{ status?: number; fromSync?: boolean } | null>(null);
   const syncStartedRef = useRef(false);
 
   const { timedOut, retryKey, reset } = useApiTimeout();
@@ -170,7 +170,12 @@ function RoleRedirect() {
           qc.invalidateQueries({ queryKey: ["/api/users/me"] });
           refetch().then(() => setSynced(true));
         },
-        onError: () => setSynced(true),
+        onError: (err: unknown) => {
+          const status = (err as { response?: { status?: number } })?.response?.status
+            ?? (err as { status?: number })?.status;
+          setAuthError({ status, fromSync: true });
+          setSynced(true);
+        },
       }
     );
   }, [user?.id, retryKey]);
@@ -183,7 +188,7 @@ function RoleRedirect() {
       // active session and bounces the user straight back to /, which re-mounts
       // RoleRedirect, which calls syncMe again, and so on.
       // Show an auth-error state instead so the user can sign out cleanly.
-      setAuthError(true);
+      setAuthError({ fromSync: false });
       return;
     }
 
@@ -205,7 +210,7 @@ function RoleRedirect() {
   function handleRetry() {
     syncStartedRef.current = false;
     setSynced(false);
-    setAuthError(false);
+    setAuthError(null);
     reset();
   }
 
@@ -213,12 +218,28 @@ function RoleRedirect() {
     return <ApiTimeoutFallback onRetry={handleRetry} />;
   }
 
-  if (authError) {
+  if (authError !== null) {
+    const statusCode = authError.status;
+    const isUnauthorized = statusCode === 401;
+    const isServerError = statusCode !== undefined && statusCode >= 500;
+    const hint = isUnauthorized
+      ? "Sua sessão expirou ou o token não foi aceito pelo servidor."
+      : isServerError
+        ? `O servidor retornou um erro ${statusCode}. Aguarde alguns instantes e tente novamente.`
+        : authError.fromSync
+          ? "Não foi possível sincronizar sua conta. Isso pode ser um problema temporário."
+          : "Conta autenticada, mas não encontrada no sistema. Tente sair e entrar novamente.";
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-sm text-muted-foreground max-w-xs">
-          Não foi possível verificar sua conta. Isso pode ser um problema temporário ou de configuração.
-        </p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="font-semibold text-foreground">Erro ao verificar conta</p>
+          {statusCode && (
+            <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-muted-foreground">
+              HTTP {statusCode}
+            </span>
+          )}
+          <p className="text-sm text-muted-foreground max-w-xs mt-1">{hint}</p>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => void signOut({ redirectUrl: `${basePath}/sign-in` })}>
             Sair

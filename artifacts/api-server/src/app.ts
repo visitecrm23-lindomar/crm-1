@@ -84,7 +84,7 @@ if (ALLOWED_ORIGINS.size === 0 && !isDev) {
 }
 
 if (!process.env["CLERK_SECRET_KEY"]) {
-  logger.warn("⚠️  CLERK_SECRET_KEY is not set. Clerk authentication will not work. Re-run Clerk setup to provision keys.");
+  logger.error("🚨 CLERK_SECRET_KEY is not set. Clerk authentication WILL NOT WORK in production. Re-run Clerk setup to provision keys.");
 }
 
 // Canonical proxy: only active in production (NODE_ENV=production).

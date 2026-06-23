@@ -2,7 +2,8 @@ import { Worker } from "bullmq";
 import { db, emailLogsTable, campaignSendsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReminderHtmlEmail } from "@workspace/email";
-import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
+import { getRedisConnection } from "../lib/redis";
+import { attachCircuitBreaker } from "../lib/worker-circuit-breaker";
 import { logger } from "../lib/logger";
 import type { ReservationEmailJobData, CancellationEmailJobData, BirthdayEmailJobData, NewBookingNotificationEmailJobData, ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData, ReferralWelcomeEmailJobData, CampaignEmailJobData } from "../queues/index";
 import type { SendEmailResult } from "@workspace/email";
@@ -213,18 +214,7 @@ export function startEmailWorker(): Worker<EmailJobData> | null {
     }
   });
 
-  _worker.on("error", (err) => {
-    if (isTransientRedisError(err)) {
-      recordTransientRedisError();
-      logger.warn({ err }, "[email-worker] Transient worker error (will recover automatically)");
-    } else {
-      logger.error({ err }, "[email-worker] Worker error");
-    }
-  });
-
-  _worker.on("ready", () => {
-    resetTransientRedisErrors();
-  });
+  attachCircuitBreaker(_worker, "email-worker");
 
   logger.info("[email-worker] Started");
   return _worker;

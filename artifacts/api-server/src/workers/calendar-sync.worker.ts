@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
-import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
+import { getRedisConnection } from "../lib/redis";
+import { attachCircuitBreaker } from "../lib/worker-circuit-breaker";
 import { logger } from "../lib/logger";
 import { CalendarSyncService } from "../lib/google-calendar/sync-service";
 import type { CalendarSyncJobData } from "../queues/index";
@@ -62,18 +63,7 @@ export function startCalendarSyncWorker(): Worker<CalendarSyncJobData> | null {
     );
   });
 
-  _worker.on("error", (err) => {
-    if (isTransientRedisError(err)) {
-      recordTransientRedisError();
-      logger.warn({ err }, "[calendar-sync-worker] Transient worker error (will recover automatically)");
-    } else {
-      logger.error({ err }, "[calendar-sync-worker] Worker error");
-    }
-  });
-
-  _worker.on("ready", () => {
-    resetTransientRedisErrors();
-  });
+  attachCircuitBreaker(_worker, "calendar-sync-worker");
 
   logger.info("[calendar-sync-worker] Started");
   return _worker;

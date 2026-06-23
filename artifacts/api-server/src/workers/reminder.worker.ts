@@ -3,7 +3,8 @@ import { db, reservationsTable, tripsTable, clientsTable, tenantsTable, payments
 import { eq, and, gt, sql, gte, lt, lte, isNull, isNotNull, notLike, like, inArray, not, exists } from "drizzle-orm";
 import { sendReminderHtmlEmail, sendReservationConfirmationEmail, sendReferralExpiringSoonEmail, sendNpsSurveyEmail } from "@workspace/email";
 import { dispatchReferralExpiredEmail, dispatchReferralExpiringSoonEmail, dispatchReferralBonusReleasedEmail } from "../queues/email-helpers";
-import { getRedisConnection, isTransientRedisError, recordTransientRedisError, resetTransientRedisErrors } from "../lib/redis";
+import { getRedisConnection } from "../lib/redis";
+import { attachCircuitBreaker } from "../lib/worker-circuit-breaker";
 import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import { sendPushNotification } from "../lib/push-notifications";
@@ -1539,18 +1540,7 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
     logger.error({ jobId: job?.id, err }, "[reminder-worker] Job failed");
   });
 
-  _worker.on("error", (err) => {
-    if (isTransientRedisError(err)) {
-      recordTransientRedisError();
-      logger.warn({ err }, "[reminder-worker] Transient worker error (will recover automatically)");
-    } else {
-      logger.error({ err }, "[reminder-worker] Worker error");
-    }
-  });
-
-  _worker.on("ready", () => {
-    resetTransientRedisErrors();
-  });
+  attachCircuitBreaker(_worker, "reminder-worker");
 
   logger.info("[reminder-worker] Started");
   return _worker;

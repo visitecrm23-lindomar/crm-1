@@ -87,4 +87,60 @@ async function healthHandler(_req: Request, res: Response): Promise<void> {
 router.get("/health", healthHandler);
 router.get("/healthz", healthHandler);
 
+/**
+ * GET /api/health/auth
+ *
+ * No-auth diagnostic endpoint that exposes the Clerk / auth configuration
+ * visible to the server process.  Returns:
+ *  - hasClerkSecretKey   — whether CLERK_SECRET_KEY is set (never its value)
+ *  - clerkProxyPath      — the proxy path the server mounts
+ *  - frontendUrl         — FRONTEND_URL env var (redacted to origin only)
+ *  - replitDomains       — comma-separated list of domains from REPLIT_DOMAINS
+ *  - authorizedParties   — list of origins that Clerk will accept tokens from
+ *  - nodeEnv             — NODE_ENV
+ *
+ * Useful for diagnosing "Não foi possível verificar sua conta" errors in prod.
+ */
+router.get("/health/auth", (_req: Request, res: Response): void => {
+  const secretKey = process.env["CLERK_SECRET_KEY"];
+  const frontendUrl = process.env["FRONTEND_URL"] ?? "";
+  const replitDomains = (process.env["REPLIT_DOMAINS"] ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const replitDevDomain = process.env["REPLIT_DEV_DOMAIN"];
+  const additionalOrigins = (process.env["ADDITIONAL_ORIGINS"] ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  const authorizedParties = [
+    frontendUrl || null,
+    replitDevDomain ? `https://${replitDevDomain}` : null,
+    ...replitDomains.map((d) =>
+      d.startsWith("https://") || d.startsWith("http://") ? d : `https://${d}`
+    ),
+    ...additionalOrigins,
+  ].filter(Boolean) as string[];
+
+  let frontendOrigin: string | null = null;
+  try {
+    if (frontendUrl) frontendOrigin = new URL(frontendUrl).origin;
+  } catch {
+    frontendOrigin = frontendUrl || null;
+  }
+
+  res.json({
+    hasClerkSecretKey: !!secretKey,
+    clerkSecretKeyPrefix: secretKey ? secretKey.slice(0, 7) + "…" : null,
+    clerkProxyPath: "/api/__clerk",
+    frontendUrl: frontendOrigin,
+    replitDomains,
+    replitDevDomain: replitDevDomain ?? null,
+    authorizedParties,
+    authorizedPartiesCount: authorizedParties.length,
+    nodeEnv: process.env["NODE_ENV"] ?? "development",
+  });
+});
+
 export default router;
