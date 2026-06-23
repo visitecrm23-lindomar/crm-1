@@ -8,11 +8,39 @@ import { logger } from "../lib/logger";
 import { runExpiredReservationsCron } from "../lib/expired-reservations";
 import { sendPushNotification } from "../lib/push-notifications";
 import type { ReminderJobData } from "../queues/index";
-import { formatBRL } from "@workspace/shared";
+import { formatBRL, localToday } from "@workspace/shared";
 import { RESERVATION_STATUS, PAYMENT_STATUS, ROLES } from "@workspace/permissions";
 import { buildEmailPropsFromReservation } from "../queues/email-helpers";
 import { generateId } from "../lib/id";
 import { MAX_AUTO_RETRY_ATTEMPTS } from "../lib/email-retry-constants";
+
+const BRAZIL_TZ = "America/Sao_Paulo";
+
+/**
+ * Returns {start, end} UTC Date boundaries for a Brazil calendar day that is
+ * `daysFromNow` calendar days ahead of today (BRT).
+ * Brazil never observes DST (UTC-3 year-round), so midnight BRT = 03:00 UTC.
+ */
+function brazilDayWindow(daysFromNow: number): { start: Date; end: Date } {
+  const todayBR = localToday(); // "YYYY-MM-DD" in America/Sao_Paulo
+  const baseMs = new Date(todayBR + "T12:00:00Z").getTime(); // noon UTC, safe mid-day
+  const targetDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BRAZIL_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(baseMs + daysFromNow * 86_400_000));
+  // Brazil midnight = 00:00 BRT = 03:00 UTC
+  const start = new Date(targetDate + "T03:00:00Z");
+  const end   = new Date(start.getTime() + 86_400_000);
+  return { start, end };
+}
+
+/** Format a DB timestamp as "dd/MM/yyyy" in Brazil timezone (server is UTC). */
+function formatDateBRServer(dt: unknown): string {
+  if (!dt) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRAZIL_TZ, day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(dt instanceof Date ? dt : new Date(dt as string));
+}
 
 function escapeHtml(str: string | null | undefined): string {
   return (str ?? "")
@@ -28,13 +56,7 @@ function escapeHtml(str: string | null | undefined): string {
 // ────────────────────────────────────────────────────────────
 
 async function processBoardingReminders(): Promise<void> {
-  const now = new Date();
-  const tomorrowStart = new Date(now);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  tomorrowStart.setHours(0, 0, 0, 0);
-
-  const tomorrowEnd = new Date(tomorrowStart);
-  tomorrowEnd.setHours(23, 59, 59, 999);
+  const { start: tomorrowStart, end: tomorrowEnd } = brazilDayWindow(1);
 
   const rows = await db
     .select({
@@ -75,11 +97,7 @@ async function processBoardingReminders(): Promise<void> {
     if (!row.clientEmail) continue;
 
     const depDate = row.departureDate
-      ? (row.departureDate as unknown as Date).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })
+      ? formatDateBRServer(row.departureDate)
       : "Amanhã";
 
     const points = (row.boardingPoints ?? []) as { name: string; time?: string; address?: string }[];
@@ -166,13 +184,7 @@ async function processBoardingReminders(): Promise<void> {
 // D-3 Payment reminder — based on pending payment installment due dates in paymentsTable
 
 async function processPaymentReminders(): Promise<void> {
-  const now = new Date();
-  const d3Start = new Date(now);
-  d3Start.setDate(d3Start.getDate() + 3);
-  d3Start.setHours(0, 0, 0, 0);
-
-  const d3End = new Date(d3Start);
-  d3End.setHours(23, 59, 59, 999);
+  const { start: d3Start, end: d3End } = brazilDayWindow(3);
 
   // Find pending/overdue payment installments due in exactly 3 days
   const rows = await db
@@ -223,20 +235,8 @@ async function processPaymentReminders(): Promise<void> {
     const total = formatBRL(Number(row.totalValue ?? 0));
     const paid = formatBRL(Number(row.paidValue ?? 0));
     const paymentAmount = formatBRL(Number(row.paymentAmount ?? 0));
-    const dueStr = row.dueDate
-      ? (row.dueDate as unknown as Date).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })
-      : "Em 3 dias";
-    const depDate = row.departureDate
-      ? (row.departureDate as unknown as Date).toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        })
-      : "";
+    const dueStr = row.dueDate ? formatDateBRServer(row.dueDate) : "Em 3 dias";
+    const depDate = row.departureDate ? formatDateBRServer(row.departureDate) : "";
 
     const whatsappNum = (row.agencyPhone ?? "").replace(/\D/g, "");
     const contactLink = whatsappNum
@@ -846,12 +846,7 @@ export async function retryFailedExpiryWarningEmails(): Promise<void> {
       .limit(1);
 
     const agencyName = tenant?.name ?? "Agência";
-    const formattedDate = (referral.expiresAt as unknown as Date).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      timeZone: "America/Sao_Paulo",
-    });
+    const formattedDate = formatDateBRServer(referral.expiresAt);
     const defaultShareMessage = settings?.shareMessage
       ?? `Olá! Use meu código ${referral.code} na ${agencyName} e ganhe desconto especial na sua próxima viagem! 🌴✈️`;
     const shareUrl = `https://wa.me/?text=${encodeURIComponent(defaultShareMessage)}`;
@@ -1193,12 +1188,7 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
 
   let released = 0, notified = 0, skippedEmailDisabled = 0, skippedAlreadyNotified = 0, errors = 0;
 
-  const releaseDate = new Date().toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: tz,
-  });
+  const releaseDate = formatDateBRServer(new Date());
 
   for (const referral of eligibleReferrals) {
     try {
@@ -1274,13 +1264,7 @@ export async function processReferralBonusReleaseNotifications(): Promise<void> 
 // ────────────────────────────────────────────────────────────
 
 export async function processInstallmentDueReminders(): Promise<void> {
-  const now = new Date();
-  const d3Start = new Date(now);
-  d3Start.setDate(d3Start.getDate() + 3);
-  d3Start.setHours(0, 0, 0, 0);
-
-  const d3End = new Date(d3Start);
-  d3End.setHours(23, 59, 59, 999);
+  const { start: d3Start, end: d3End } = brazilDayWindow(3);
 
   const rows = await db
     .select({
@@ -1323,12 +1307,8 @@ export async function processInstallmentDueReminders(): Promise<void> {
     if (!row.clientEmail) continue;
 
     const amount = formatBRL(Number(row.amount ?? 0));
-    const dueStr = row.dueDate
-      ? (row.dueDate as unknown as Date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-      : "Em 3 dias";
-    const depDate = row.departureDate
-      ? (row.departureDate as unknown as Date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-      : "";
+    const dueStr = row.dueDate ? formatDateBRServer(row.dueDate) : "Em 3 dias";
+    const depDate = row.departureDate ? formatDateBRServer(row.departureDate) : "";
     const whatsappNum = (row.agencyPhone ?? "").replace(/\D/g, "");
     const contactLink = whatsappNum ? `<a href="https://wa.me/${whatsappNum}">WhatsApp</a>` : "a agência";
     const instLabel = row.installments > 1 ? `Parcela ${row.installmentNumber} de ${row.installments}` : "Pagamento";

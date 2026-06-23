@@ -192,7 +192,7 @@ router.get("/club/ranking", async (req, res, next: NextFunction): Promise<void> 
         name: isAdmin ? r.name : maskName(r.name),
         count: r.count,
       })),
-      month: new Date().toISOString().slice(0, 7),
+      month: new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7),
     });
   } catch (err) {
     next(err);
@@ -418,7 +418,7 @@ router.get("/club/ranking/full", async (req, res, next: NextFunction): Promise<v
       .limit(50);
 
     if (req.query["export"] === "csv") {
-      const month = new Date().toISOString().slice(0, 7);
+      const month = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7);
       const lines: string[] = [
         `RANKING DE INDICADORES - ${month}`,
         "Posição,Nome,Email,Indicações,Embaixador",
@@ -441,7 +441,7 @@ router.get("/club/ranking/full", async (req, res, next: NextFunction): Promise<v
     res.json({
       referrers: referrersRaw.map((r, i) => ({ rank: i + 1, ...r })),
       travelers: travelersRaw.map((r, i) => ({ rank: i + 1, ...r })),
-      month: new Date().toISOString().slice(0, 7),
+      month: new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 7),
     });
   } catch (err) {
     next(err);

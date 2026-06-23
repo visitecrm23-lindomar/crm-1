@@ -1,8 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { formatBRL } from "@workspace/shared";
+
+const BRAZIL_TZ = "America/Sao_Paulo";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -20,8 +20,16 @@ export function formatCurrencyBRL(value: string | number | null | undefined): st
 }
 
 export function formatDate(d: string): string {
+  if (!d) return d;
   try {
-    return format(new Date(d.slice(0, 10) + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR });
+    const dt = d.length <= 10 ? new Date(d + "T12:00:00") : new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: BRAZIL_TZ,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(dt);
   } catch {
     return d;
   }
@@ -30,12 +38,14 @@ export function formatDate(d: string): string {
 export function formatDateShort(d?: string | null): string | null {
   if (!d) return null;
   try {
-    const clean = d.length <= 10 ? d + "T12:00:00" : d;
-    return new Date(clean).toLocaleDateString("pt-BR", {
+    const dt = d.length <= 10 ? new Date(d + "T12:00:00") : new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: BRAZIL_TZ,
       day: "2-digit",
       month: "short",
       year: "numeric",
-    });
+    }).format(dt);
   } catch {
     return d;
   }
@@ -43,13 +53,18 @@ export function formatDateShort(d?: string | null): string | null {
 
 export function formatDateTime(d?: string | null): string {
   if (!d) return "—";
-  return new Date(d).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: BRAZIL_TZ,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(d));
+  } catch {
+    return "—";
+  }
 }
 
 export { isValidCpf as validateCpf, formatCpf } from "@workspace/shared";

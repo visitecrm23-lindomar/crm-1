@@ -1,6 +1,21 @@
-import { format, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import type { BoardingPassenger, FreePassenger } from "@workspace/api-client-react";
+
+const BRAZIL_TZ = "America/Sao_Paulo";
+
+function formatDateBR(d: string): string {
+  if (!d) return "";
+  const dt = d.length <= 10 ? new Date(d + "T12:00:00") : new Date(d);
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRAZIL_TZ, day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(dt);
+}
+
+function formatTimeBR(d: string): string {
+  const dt = new Date(d);
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRAZIL_TZ, hour: "2-digit", minute: "2-digit",
+  }).format(dt);
+}
 
 export interface ManifestPanel {
   tripName?: string | null;
@@ -51,10 +66,10 @@ export function printPassengersManifest(
   const p = panel;
   const tripName = escapeHtml(p?.tripName ?? "");
   const destination = trip ? escapeHtml(`${trip.destinationCity}/${trip.destinationState}`) : "";
-  const depDate = p?.departureDate
-    ? escapeHtml(format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }))
+  const depDate = p?.departureDate ? escapeHtml(formatDateBR(p.departureDate)) : "";
+  const depTimeRaw = p?.departureDate && p.departureDate.length > 10
+    ? formatTimeBR(p.departureDate)
     : "";
-  const depTimeRaw = p?.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
   const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
   const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
   const organizador = escapeHtml(p?.tenantName ?? "");
@@ -92,7 +107,7 @@ export function printPassengersManifest(
   const paidRows = allPassengers.map((pass, i) => {
     const nome = escapeHtml(pass.name);
     const cpfStr = escapeHtml(formatCpf(pass.cpf));
-    const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate.length <= 10 ? pass.birthDate + "T12:00:00" : pass.birthDate).toLocaleDateString("pt-BR")) : "—";
+    const nasc = pass.birthDate ? escapeHtml(formatDateBR(pass.birthDate)) : "—";
     const cat = escapeHtml(AGE_CATEGORY_LABELS[pass.ageCategory] ?? pass.ageCategory);
     const poltrona = escapeHtml(pass.seatNumber ?? "—");
     const embarque = escapeHtml(getBoardingPointName(pass.boardingLocationId) || "—");
