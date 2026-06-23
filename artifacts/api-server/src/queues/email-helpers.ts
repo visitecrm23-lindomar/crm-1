@@ -196,7 +196,7 @@ async function buildCancellationEmailPropsFromReservation(
   const totalVal = Number(row.totalValue ?? 0);
   const dDate = row.departureDate ? new Date(row.departureDate) : null;
   const departureDate = dDate
-    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })
     : "";
 
   const agencyPhone = row.agencyPhone ?? row.agencyPhoneVoice ?? "";
@@ -369,7 +369,7 @@ async function buildNewBookingNotificationFromReservation(
 
   const dDate = row.departureDate ? new Date(row.departureDate) : null;
   const departureDate = dDate
-    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })
     : "A confirmar";
 
   const ccUsers = await db
@@ -470,7 +470,7 @@ export async function buildEmailPropsFromReservation(
 
   const dDate = row.departureDate ? new Date(row.departureDate) : null;
   const departureDate = dDate
-    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })
     : "";
 
   let duration = "";

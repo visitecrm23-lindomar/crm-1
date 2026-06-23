@@ -7,8 +7,6 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import { applyPlugin } from "jspdf-autotable";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { MANAGEMENT_ROLES } from '../lib/tenant';
 import { RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, EXPENSE_STATUS } from "@workspace/permissions";
 import { formatBRLPlain } from "@workspace/shared";
@@ -62,7 +60,7 @@ function pdfHeader(doc: JsPDFWithAutoTable, title: string, period: string) {
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.text(`Período: ${period}`, 14, 25);
-  doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 30);
+  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, 14, 30);
   return 38;
 }
 
@@ -154,7 +152,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
         ]);
         const csv = "\uFEFF" + buildCsv([headers, ...rows]);
         res.setHeader("Content-Type", "text/csv;charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="financeiro_receitas_${format(new Date(), "yyyyMMdd")}.csv"`);
+        res.setHeader("Content-Disposition", `attachment; filename="financeiro_receitas_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.csv"`);
         res.send(csv);
         return;
       }
@@ -211,7 +209,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
 
         const buf = Buffer.from(doc.output("arraybuffer"));
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="financeiro_${format(new Date(), "yyyyMMdd")}.pdf"`);
+        res.setHeader("Content-Disposition", `attachment; filename="financeiro_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.pdf"`);
         res.send(buf);
         return;
       }
@@ -271,7 +269,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
 
         const buf = await wb.xlsx.writeBuffer();
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="financeiro_${format(new Date(), "yyyyMMdd")}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="financeiro_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.xlsx"`);
         res.send(Buffer.from(buf));
         return;
       }
@@ -344,7 +342,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
       if (fmt === "csv") {
         const csv = "\uFEFF" + buildCsv([headers, ...rows]);
         res.setHeader("Content-Type", "text/csv;charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="vendas_${format(new Date(), "yyyyMMdd")}.csv"`);
+        res.setHeader("Content-Disposition", `attachment; filename="vendas_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.csv"`);
         res.send(csv);
         return;
       }
@@ -376,7 +374,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
 
         const buf = await wb.xlsx.writeBuffer();
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="vendas_${format(new Date(), "yyyyMMdd")}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="vendas_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.xlsx"`);
         res.send(Buffer.from(buf));
         return;
       }
@@ -421,7 +419,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
 
         const buf = Buffer.from(doc.output("arraybuffer"));
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="vendas_${format(new Date(), "yyyyMMdd")}.pdf"`);
+        res.setHeader("Content-Disposition", `attachment; filename="vendas_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.pdf"`);
         res.send(buf);
         return;
       }
@@ -455,7 +453,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
       if (fmt === "csv") {
         const csv = "\uFEFF" + buildCsv([headers, ...rows]);
         res.setHeader("Content-Type", "text/csv;charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="clientes_${format(new Date(), "yyyyMMdd")}.csv"`);
+        res.setHeader("Content-Disposition", `attachment; filename="clientes_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.csv"`);
         res.send(csv);
         return;
       }
@@ -473,7 +471,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
         }
         const buf = await wb.xlsx.writeBuffer();
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="clientes_${format(new Date(), "yyyyMMdd")}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="clientes_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.xlsx"`);
         res.send(Buffer.from(buf));
         return;
       }
@@ -497,7 +495,7 @@ router.post("/reports/export", async (req, res, next: NextFunction): Promise<voi
 
         const buf = Buffer.from(doc.output("arraybuffer"));
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="clientes_${format(new Date(), "yyyyMMdd")}.pdf"`);
+        res.setHeader("Content-Disposition", `attachment; filename="clientes_${new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10).replaceAll("-", "")}.pdf"`);
         res.send(buf);
         return;
       }

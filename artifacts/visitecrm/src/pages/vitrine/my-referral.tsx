@@ -96,10 +96,10 @@ function maskEmail(email: string | null): string {
 function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
   const displayName = r.referredName ? maskName(r.referredName) : (r.referredEmail ? maskEmail(r.referredEmail) : "Pessoa indicada");
   const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
-    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR")}`
+    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
     : r.status === "expired" && r.expiresAt
-    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR")}`
-    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR")}`;
+    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`;
 
   const bonusValue = parseFloat(r.bonusAmount);
 
@@ -145,7 +145,7 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
               : r.bonusPaid
               ? `✓ Bônus de ${formatBRL(bonusValue)} pago`
               : r.bonusBlocked && r.bonusReleasesAt
-              ? `🔒 Bônus de ${formatBRL(bonusValue)} disponível em ${new Date(r.bonusReleasesAt).toLocaleDateString("pt-BR")}`
+              ? `🔒 Bônus de ${formatBRL(bonusValue)} disponível em ${new Date(r.bonusReleasesAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
               : `⏳ Bônus de ${formatBRL(bonusValue)} aguardando pagamento`}
           </p>
         )}

@@ -33,7 +33,7 @@ import {
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
   Paperclip, X as XIcon, FileText, Image,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { PAYMENT_STATUS_LABELS as STATUS_LABELS, PAYMENT_STATUS_COLORS as STATUS_COLORS, PAYMENT_METHOD_LABELS as METHOD_LABELS, EXPENSE_CATEGORY_LABELS } from "@/lib/labels";
 
 const fmt = (v: number | string) => formatCurrency(typeof v === "string" ? parseFloat(v) || 0 : v);
@@ -605,7 +605,7 @@ export default function Financial() {
                       <TableCell className="text-sm">{inst.clientName ?? "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">{inst.tripName ?? "—"}</TableCell>
                       <TableCell className="text-sm text-center">#{inst.installmentNumber}</TableCell>
-                      <TableCell className="text-sm font-medium text-orange-700">{new Date(inst.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell className="text-sm font-medium text-orange-700">{formatDate(String(inst.dueDate))}</TableCell>
                       <TableCell className="font-semibold text-sm">{fmt(inst.amount)}</TableCell>
                       <TableCell className="text-right">
                         <Link href={`/reservations?id=${inst.reservationId}`}>
@@ -647,7 +647,7 @@ export default function Financial() {
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
                     <TableCell className="text-sm text-muted-foreground">{p.clientId ? (clientMap[p.clientId] ?? "—") : "—"}</TableCell>
                     <TableCell><span className="text-xs text-muted-foreground">{p.category}</span></TableCell>
-                    <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="text-sm">{formatDate(String(p.dueDate))}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
                     <TableCell>
@@ -693,7 +693,7 @@ export default function Financial() {
                   <TableRow key={p.id}>
                     <TableCell><p className="font-medium text-sm">{p.description || "—"}</p></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{p.category}</TableCell>
-                    <TableCell className="text-sm">{new Date(p.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="text-sm">{formatDate(String(p.dueDate))}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(p.amount)}</TableCell>
                     <TableCell>
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status] ?? "bg-gray-100 text-gray-800"}`}>
@@ -745,7 +745,7 @@ export default function Financial() {
                     <TableCell className="font-medium text-sm">{e.description}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{EXPENSE_CATEGORIES[e.category] ?? e.category}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{(e as { supplierName?: string }).supplierName ?? (e.supplierId ? e.supplierId.slice(0, 8) + "…" : "—")}</TableCell>
-                    <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell className="text-sm">{formatDate(String(e.dueDate))}</TableCell>
                     <TableCell className="font-medium text-sm">{fmt(e.amount)}</TableCell>
                     <TableCell>
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[e.status] ?? "bg-gray-100 text-gray-800"}`}>

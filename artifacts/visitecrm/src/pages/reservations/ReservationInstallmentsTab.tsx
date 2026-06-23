@@ -209,8 +209,8 @@ export function ReservationInstallmentsTab({ reservationId }: { reservationId: s
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Venc.: {new Date(inst.dueDate).toLocaleDateString("pt-BR")}
-                      {inst.paidAt && ` · Pago em ${new Date(inst.paidAt).toLocaleDateString("pt-BR")}`}
+                      Venc.: {new Date(inst.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                      {inst.paidAt && ` · Pago em ${new Date(inst.paidAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`}
                     </p>
                     {inst.notes && <p className="text-xs text-muted-foreground mt-0.5 truncate">{inst.notes}</p>}
                   </div>

@@ -244,10 +244,10 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
                       <div>
                         <p className="font-medium">{METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Venc: {new Date(p.dueDate).toLocaleDateString("pt-BR")}
+                          Venc: {new Date(p.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                           {p.description && ` · ${p.description}`}
                         </p>
-                        {p.paidAt && <p className="text-xs text-green-600 mt-0.5">Pago em {new Date(p.paidAt).toLocaleDateString("pt-BR")}</p>}
+                        {p.paidAt && <p className="text-xs text-green-600 mt-0.5">Pago em {new Date(p.paidAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>}
                       </div>
                       <div className="text-right">
                         <p className={`font-semibold text-base ${p.status === PAYMENT_STATUS.PAID ? "text-green-600" : ""}`}>

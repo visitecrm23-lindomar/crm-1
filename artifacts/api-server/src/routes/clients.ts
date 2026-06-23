@@ -1047,7 +1047,7 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
           ? pastTripsData
               .sort((a, b) => b.departureDate.getTime() - a.departureDate.getTime())
               .slice(0, 5)
-              .map(t => `- ${t.name} (${t.destination}, ${t.departureDate.toLocaleDateString("pt-BR")}, R$ ${Number(t.priceAdult).toFixed(0)})`)
+              .map(t => `- ${t.name} (${t.destination}, ${t.departureDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}, R$ ${Number(t.priceAdult).toFixed(0)})`)
               .join("\n")
           : "";
 
@@ -1063,7 +1063,7 @@ router.get("/clients/:clientId/recommendations", async (req, res, next: NextFunc
         ].filter(Boolean).join("\n");
 
         const tripsList = candidateTrips.map((t, i) =>
-          `${i + 1}. ID: ${t.id} | ${t.name} | ${t.destination} | ${t.departureDate.toLocaleDateString("pt-BR")} | Vagas: ${t.availableSeats} | R$ ${Number(t.priceAdult).toFixed(2)}`
+          `${i + 1}. ID: ${t.id} | ${t.name} | ${t.destination} | ${t.departureDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} | Vagas: ${t.availableSeats} | R$ ${Number(t.priceAdult).toFixed(2)}`
         ).join("\n");
 
         const prompt = `Você é consultor de turismo. Analise o perfil do cliente e selecione as 3 melhores viagens para recomendar.
@@ -1189,7 +1189,7 @@ router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<
         id: generateId(),
         clientId: primaryId,
         type: "merge",
-        content: `Registros mesclados: cadastro duplicado de "${secondary.name}" (ID: ${secondaryId}) foi incorporado a este perfil por ${me.id} em ${new Date().toLocaleDateString("pt-BR")}.`,
+        content: `Registros mesclados: cadastro duplicado de "${secondary.name}" (ID: ${secondaryId}) foi incorporado a este perfil por ${me.id} em ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`,
         createdById: me.id,
         isPrivate: true,
       });
@@ -1198,7 +1198,7 @@ router.post("/clients/:id/merge", async (req, res, next: NextFunction): Promise<
         .set({
           status: "merged",
           cpf: null,
-          observations: `[MESCLADO em ${new Date().toLocaleDateString("pt-BR")}] Incorporado ao cliente ${primary.name} (ID: ${primaryId}). ${secondary.observations ?? ""}`.trim(),
+          observations: `[MESCLADO em ${new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}] Incorporado ao cliente ${primary.name} (ID: ${primaryId}). ${secondary.observations ?? ""}`.trim(),
           updatedAt: new Date(),
         })
         .where(and(eq(clientsTable.id, secondaryId), eq(clientsTable.tenantId, me.tenantId)));

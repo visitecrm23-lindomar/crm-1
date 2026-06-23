@@ -683,6 +683,7 @@ export default function VitrineHome({
                         {new Date(review.createdAt).toLocaleDateString("pt-BR", {
                           month: "long",
                           year: "numeric",
+                          timeZone: "America/Sao_Paulo",
                         })}
                       </p>
                     </div>

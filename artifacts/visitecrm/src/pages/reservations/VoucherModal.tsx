@@ -24,7 +24,7 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
         </div>
         <div className="text-right">
           <p className="text-xs text-gray-500 uppercase tracking-wider">Voucher de Viagem</p>
-          <p className="text-xs text-gray-400">{new Date(r?.createdAt ?? "").toLocaleDateString("pt-BR")}</p>
+          <p className="text-xs text-gray-400">{new Date(r?.createdAt ?? "").toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
         </div>
       </div>
 

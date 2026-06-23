@@ -278,7 +278,7 @@ router.get("/admin/metrics/growth", async (req, res, next: NextFunction): Promis
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const start = new Date(d.getFullYear(), d.getMonth(), 1);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
-      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" });
 
       const [newRow] = await db
         .select({ cnt: count() })
@@ -317,7 +317,7 @@ router.get("/admin/metrics/mrr", async (req, res, next: NextFunction): Promise<v
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
-      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" });
 
       const tenants = await db.select({ planId: tenantsTable.planId, status: tenantsTable.status })
         .from(tenantsTable)
@@ -346,7 +346,7 @@ router.get("/admin/metrics/churn", async (req, res, next: NextFunction): Promise
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const start = new Date(d.getFullYear(), d.getMonth(), 1);
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
-      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      const label = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" });
 
       const [suspRow] = await db
         .select({ cnt: count() })

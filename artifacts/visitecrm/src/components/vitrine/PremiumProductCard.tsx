@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { StoreProduct } from "@/lib/storeApi";
 import { calculateTripDuration } from "@/lib/tripDuration";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { useCart } from "@/contexts/CartContext";
 import { useFavorites } from "@/contexts/FavoritesContext";
 import { useComparison } from "@/contexts/ComparisonContext";
@@ -404,10 +404,7 @@ export function PremiumProductCard({
           {displayDate && (
             <span className="flex items-center gap-1">
               <Calendar className="h-3.5 w-3.5" />
-              {new Date(displayDate.slice(0, 10) + "T12:00:00").toLocaleDateString(
-                "pt-BR",
-                { day: "2-digit", month: "2-digit", year: "numeric" },
-              )}
+              {formatDate(displayDate)}
               {product.departureTime && (
                 <span className="font-medium">
                   às {product.departureTime}

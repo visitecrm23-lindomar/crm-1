@@ -441,7 +441,7 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
       if (!sellerClients.length && !clientId) {
         // Sales rep has no clients — return empty CSV
         const BOM = "\uFEFF";
-        const exportDate = new Date().toISOString().slice(0, 10);
+        const exportDate = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
         const exportHeaders = [
           "Nº Reserva", "Cliente", "E-mail", "WhatsApp", "CPF",
           "Viagem", "Data de Saída", "Assentos",
@@ -457,7 +457,7 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
       if (clientId) {
         if (!sellerClientIds.includes(clientId)) {
           const BOM = "\uFEFF";
-          const exportDate = new Date().toISOString().slice(0, 10);
+          const exportDate = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
           const exportHeaders = [
             "Nº Reserva", "Cliente", "E-mail", "WhatsApp", "CPF",
             "Viagem", "Data de Saída", "Assentos",
@@ -557,7 +557,7 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
       escapeCell(r.clientWhatsapp),
       escapeCell(r.clientCpf),
       escapeCell(r.tripName),
-      r.tripDepartureDate ? new Date(r.tripDepartureDate).toLocaleDateString("pt-BR") : "",
+      r.tripDepartureDate ? new Date(r.tripDepartureDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
       escapeCell((r.seats as string[] | null)?.join(", ")),
       parseFloat(String(r.totalValue)).toFixed(2),
       parseFloat(String(r.paidValue)).toFixed(2),
@@ -566,13 +566,13 @@ router.get("/reservations/export", async (req, res, next: NextFunction): Promise
       escapeCell(STATUS_PT[r.status] ?? r.status),
       r.storeOrderId ? "Vitrine" : "Balcão",
       autoRetryIds.has(r.id) ? "Sim" : "Não",
-      new Date(r.createdAt).toLocaleString("pt-BR"),
+      new Date(r.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
     ].join(","));
 
     const BOM = "\uFEFF";
     const csv = BOM + [headers.join(","), ...csvRows].join("\r\n");
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="reservas-${date}.csv"`);
     res.send(csv);
@@ -1034,7 +1034,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         const [tripRecord] = await db.select().from(tripsTable).where(eq(tripsTable.id, reservation.tripId)).limit(1);
         const dDate = formatted.trip.departureDate ? new Date(formatted.trip.departureDate) : null;
         const departureDate = dDate
-          ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+          ? dDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })
           : "";
         let duration = "";
         if (dDate && tripRecord?.returnDate) {

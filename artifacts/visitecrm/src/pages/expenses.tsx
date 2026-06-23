@@ -325,7 +325,7 @@ export default function Expenses() {
                   ) : "—"}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.tripId ? tripsData?.data.find(t => t.id === e.tripId)?.name ?? e.tripId.slice(0, 8) + "…" : "—"}</TableCell>
-                <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR")}</TableCell>
+                <TableCell className="text-sm">{new Date(e.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</TableCell>
                 <TableCell className="font-medium text-sm">{fmt(e.amount)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{METHOD_LABELS[e.paymentMethod ?? ""] ?? e.paymentMethod ?? "—"}</TableCell>
                 <TableCell>

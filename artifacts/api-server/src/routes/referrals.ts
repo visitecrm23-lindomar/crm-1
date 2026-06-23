@@ -409,7 +409,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res, next: NextFunction): Pr
     if (row.convertedAt) {
       const lockUntil = new Date(new Date(row.convertedAt).getTime() + payBonusGracePeriod * 24 * 60 * 60 * 1000);
       if (new Date() < lockUntil) {
-        const releaseDate = lockUntil.toLocaleDateString("pt-BR");
+        const releaseDate = lockUntil.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
         next(new AppError(`Bônus disponível somente após o período de carência de ${payBonusGracePeriod} dias. Liberação em ${releaseDate}`, 422, "BONUS_LOCKED"));
         return;
       }
@@ -428,7 +428,7 @@ router.post("/referrals/:id/pay-bonus", async (req, res, next: NextFunction): Pr
     const referrerName = row.referrerClientName ?? row.referrerName ?? "Indicador";
     const agencyName = row.tenantName ?? "Agência";
     const bonusValue = parseFloat(String(row.bonusAmount ?? "0"));
-    const paidDateStr = now.toLocaleDateString("pt-BR");
+    const paidDateStr = now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
     if (referrerEmail) {
       try {
@@ -631,7 +631,7 @@ router.post("/referrals/:id/resend-bonus-release", async (req, res, next: NextFu
     const bonusBlocked = bonusReleasesAt !== null && new Date() < bonusReleasesAt;
     if (bonusBlocked) {
       next(new AppError(
-        `O bônus ainda está em período de liberação — disponível em ${bonusReleasesAt!.toLocaleDateString("pt-BR")}`,
+        `O bônus ainda está em período de liberação — disponível em ${bonusReleasesAt!.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`,
         422,
         "BONUS_STILL_BLOCKED",
       ));
@@ -1170,7 +1170,7 @@ router.get("/referrals/analytics/export", async (req, res, next: NextFunction): 
     wsRoi.getColumn(1).width = 36;
     wsRoi.getColumn(2).width = 20;
 
-    const dateStr = new Date().toISOString().slice(0, 10);
+    const dateStr = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
     const filename = `analytics-indicacoes-${dateStr}.xlsx`;
     const buf = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1270,16 +1270,16 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
       r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
       r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
       r.bonusPaid ? "Sim" : "Não",
-      r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR") : "",
+      r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
       String(r.visitsCount ?? 0),
-      r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
-      r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
-      r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR") : "",
-      r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR") : "",
+      r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+      r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+      r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+      r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
       r.fraudReason ?? "",
     ]);
 
-    const dateStr = new Date().toISOString().slice(0, 10);
+    const dateStr = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).slice(0, 10);
 
     if (format === "json") {
       const jsonData = rows.map(r => ({
@@ -1292,12 +1292,12 @@ router.get("/referrals/export", async (req, res, next: NextFunction): Promise<vo
         bonusAmount: r.bonusAmount ? parseFloat(String(r.bonusAmount)).toFixed(2) : "0.00",
         discountAmount: r.discountAmount ? parseFloat(String(r.discountAmount)).toFixed(2) : "0.00",
         bonusPaid: r.bonusPaid ? "Sim" : "Não",
-        bonusReleaseNotifiedAt: r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR") : "",
+        bonusReleaseNotifiedAt: r.bonusReleaseNotifiedAt ? new Date(r.bonusReleaseNotifiedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
         visitsCount: r.visitsCount ?? 0,
-        lastVisit: r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR") : "",
-        createdAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : "",
-        convertedAt: r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR") : "",
-        expiresAt: r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR") : "",
+        lastVisit: r.lastVisit ? new Date(r.lastVisit).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+        createdAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+        convertedAt: r.convertedAt ? new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+        expiresAt: r.expiresAt ? new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
         fraudReason: r.fraudReason ?? "",
       }));
       res.json({ headers, rows: jsonData });

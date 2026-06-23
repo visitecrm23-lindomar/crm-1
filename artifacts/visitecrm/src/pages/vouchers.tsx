@@ -252,7 +252,7 @@ function BulkCheckIn() {
               <SelectItem value="__none__">Selecionar viagem...</SelectItem>
               {trips.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
-                  {t.name} — {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                  {t.name} — {new Date(t.departureDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                 </SelectItem>
               ))}
             </SelectContent>

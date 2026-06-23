@@ -122,7 +122,7 @@ function BillingSection({ tenant }: { tenant: TenantDetails }) {
                   <p className="font-mono text-xs">{inv.invoiceNumber ?? inv.id.slice(0, 8)}</p>
                   <p className="text-muted-foreground text-xs">
                     R$ {Number(inv.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    {inv.dueDate ? ` · vence ${new Date(inv.dueDate).toLocaleDateString("pt-BR")}` : ""}
+                    {inv.dueDate ? ` · vence ${new Date(inv.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}
                   </p>
                 </div>
                 <Badge variant={inv.status === "paid" ? "default" : inv.status === "failed" || inv.status === "overdue" ? "destructive" : "secondary"} className="text-xs shrink-0">

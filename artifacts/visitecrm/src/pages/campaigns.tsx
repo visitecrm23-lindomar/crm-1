@@ -352,7 +352,7 @@ function SegmentPanel({
               <SelectItem value="__all__">Todas as viagens</SelectItem>
               {trips.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
-                  {t.name} — {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                  {t.name} — {new Date(t.departureDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -622,7 +622,7 @@ function CampaignsTab() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {c.sentAt ? new Date(c.sentAt).toLocaleDateString("pt-BR") : c.scheduledAt ? new Date(c.scheduledAt).toLocaleDateString("pt-BR") : "—"}
+                      {c.sentAt ? new Date(c.sentAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : c.scheduledAt ? new Date(c.scheduledAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 justify-end">

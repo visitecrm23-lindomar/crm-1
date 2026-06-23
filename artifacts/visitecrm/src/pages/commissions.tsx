@@ -328,7 +328,7 @@ export default function Commissions() {
                       </span>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {c.paidAt ? new Date(c.paidAt).toLocaleDateString("pt-BR") : "—"}
+                      {c.paidAt ? new Date(c.paidAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">

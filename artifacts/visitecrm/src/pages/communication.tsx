@@ -637,7 +637,7 @@ export default function Communication() {
                       <div className="flex items-start justify-between">
                         <p className="font-medium text-sm truncate">{conv.clientName}</p>
                         <span className="text-xs text-muted-foreground shrink-0 ml-1">
-                          {new Date(conv.lastMessage.sentAt).toLocaleDateString("pt-BR")}
+                          {new Date(conv.lastMessage.sentAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessage.content}</p>

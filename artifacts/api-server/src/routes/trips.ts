@@ -1198,7 +1198,7 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
         const reservation = reservationMap.get(p.reservationId);
         const effectiveBoardingLocationId = p.boardingLocationId ?? reservation?.boardingLocationId ?? null;
         const boardingName = effectiveBoardingLocationId ? (bpMap.get(effectiveBoardingLocationId) ?? effectiveBoardingLocationId) : "";
-        const birthDateStr = p.birthDate ? p.birthDate.toLocaleDateString("pt-BR") : "";
+        const birthDateStr = p.birthDate ? p.birthDate.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "";
         const checkInStr = p.checkedInAt ? "Sim" : "Não";
         return [
           p.name,
@@ -1529,7 +1529,7 @@ function generateManifestHtml(p: ManifestPanel): string {
   const rows = p.passengers.map((pass, i) => {
     const nome = e(pass.name);
     const cpfStr = e(formatCpfServer(pass.cpf));
-    const nasc = pass.birthDate ? e(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
+    const nasc = pass.birthDate ? e(new Date(pass.birthDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })) : "—";
     const cat = e(AGE_CATEGORY_LABELS_SERVER[pass.ageCategory] ?? pass.ageCategory);
     const poltrona = e(seatWithPosition(pass.seatNumber, p.numberingType));
     const embarque = e(getBpName(pass.boardingLocationId));
@@ -1806,7 +1806,7 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
         String(i + 1).padStart(2, "0"),
         pass.name.slice(0, 25),
         formatCpfServer(pass.cpf),
-        pass.birthDate ? new Date(pass.birthDate).toLocaleDateString("pt-BR") : "—",
+        pass.birthDate ? new Date(pass.birthDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—",
         AGE_LABELS[pass.ageCategory] ?? pass.ageCategory,
         seatWithPosition(pass.seatNumber, p.numberingType),
         getBpName(pass.boardingLocationId),

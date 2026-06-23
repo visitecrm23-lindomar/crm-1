@@ -543,7 +543,7 @@ export default function Marketing() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {c.validUntil
-                          ? new Date(c.validUntil).toLocaleDateString("pt-BR")
+                          ? new Date(c.validUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
                           : "—"}
                       </TableCell>
                       <TableCell>
@@ -710,7 +710,7 @@ export default function Marketing() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Aniversariantes de hoje — {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}
+                    Aniversariantes de hoje — {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", timeZone: "America/Sao_Paulo" })}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -907,7 +907,7 @@ export default function Marketing() {
                             </TableCell>
                             <TableCell className="font-mono text-xs">{m.couponCode ?? "—"}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">
-                              {new Date(m.createdAt).toLocaleDateString("pt-BR")}
+                              {new Date(m.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                             </TableCell>
                             <TableCell>
                               <Badge variant={m.isManual ? "secondary" : "outline"} className="text-[10px] py-0">

@@ -185,7 +185,7 @@ function SupplierDetailModal({
                           <TableCell className="text-sm">{e.description}</TableCell>
                           <TableCell className="text-sm">{e.category}</TableCell>
                           <TableCell className="text-sm">
-                            {new Date(e.dueDate).toLocaleDateString("pt-BR")}
+                            {new Date(e.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                           </TableCell>
                           <TableCell className="font-mono text-sm">{formatCurrency(e.amount)}</TableCell>
                           <TableCell>

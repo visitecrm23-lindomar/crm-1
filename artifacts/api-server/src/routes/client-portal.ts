@@ -226,10 +226,10 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
           boardingPointName: boardingPoint?.name ?? null,
           boardingPointTime: boardingPoint?.time ?? null,
           tripDepartureDate: r.tripDepartureDate
-            ? (r.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
+            ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(r.tripDepartureDate as unknown as Date)
             : null,
           tripReturnDate: r.tripReturnDate
-            ? (r.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
+            ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(r.tripReturnDate as unknown as Date)
             : null,
           createdAt: r.createdAt.toISOString(),
           npsSubmitted: npsSubmittedSet.has(r.id),
@@ -416,7 +416,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             phone: client.phone,
             cpf: client.cpf,
             birthDate: client.birthDate
-              ? (client.birthDate as unknown as Date).toISOString().slice(0, 10)
+              ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(client.birthDate as unknown as Date)
               : null,
             addressCity: client.addressCity,
             addressState: client.addressState,
@@ -1011,10 +1011,10 @@ router.get("/client/reservations/:id/voucher", async (req, res, next: NextFuncti
     const balance = Math.max(totalValue - paidValue, 0);
     const seatsCount = Array.isArray(row.seats) ? row.seats.length : 0;
     const tripDepartureDate = row.tripDepartureDate
-      ? (row.tripDepartureDate as unknown as Date).toISOString().slice(0, 10)
+      ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(row.tripDepartureDate as unknown as Date)
       : null;
     const tripReturnDate = row.tripReturnDate
-      ? (row.tripReturnDate as unknown as Date).toISOString().slice(0, 10)
+      ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(row.tripReturnDate as unknown as Date)
       : null;
     const boardingPoints = Array.isArray(row.tripBoardingPoints) ? row.tripBoardingPoints : [];
     const boardingPoint = row.boardingLocationId
@@ -1155,7 +1155,7 @@ router.patch("/client/me", async (req, res, next: NextFunction): Promise<void> =
       phone: updated.phone,
       cpf: updated.cpf,
       birthDate: updated.birthDate
-        ? (updated.birthDate as unknown as Date).toISOString().slice(0, 10)
+        ? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(updated.birthDate as unknown as Date)
         : null,
       addressCity: updated.addressCity,
       addressState: updated.addressState,

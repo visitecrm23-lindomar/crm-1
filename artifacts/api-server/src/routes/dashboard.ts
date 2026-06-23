@@ -333,7 +333,7 @@ router.get("/dashboard/revenue-chart", async (req, res, next: NextFunction): Pro
         const dayAgo = Math.floor(i * daysBack / numPoints);
         startDate = new Date(now.getTime() - (dayAgo + Math.floor(daysBack / numPoints)) * 86400000);
         endDate = new Date(now.getTime() - dayAgo * 86400000);
-        label = startDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        label = startDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
       }
 
       const revenue = payments

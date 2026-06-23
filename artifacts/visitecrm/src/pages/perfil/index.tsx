@@ -1595,10 +1595,10 @@ function ReferralStatusBadge({ status }: { status: string }) {
 function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
   const displayName = r.referredName ?? r.referredEmail ?? "Pessoa indicada";
   const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
-    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR")}`
+    ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
     : r.status === "expired" && r.expiresAt
-    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR")}`
-    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR")}`;
+    ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+    : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`;
 
   const bonusValue = parseFloat(r.bonusAmount);
 
@@ -1619,7 +1619,7 @@ function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: str
         {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
             {r.bonusPaid
-              ? `✓ Bônus de ${formatBRL(bonusValue)} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR")}`
+              ? `✓ Bônus de ${formatBRL(bonusValue)} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
               : `⏳ Bônus de ${formatBRL(bonusValue)} aguardando pagamento`}
           </p>
         )}
@@ -2368,7 +2368,7 @@ function FidelidadeTab({
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{t.description}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {type.label} · {new Date(t.createdAt).toLocaleDateString("pt-BR")}
+                        {type.label} · {new Date(t.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </p>
                     </div>
                     <div className="ml-4 shrink-0 text-right">
@@ -3414,7 +3414,7 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
     .filter(({ benefits: bs }) => bs.length > 0);
 
   const month = ranking?.month
-    ? new Date(ranking.month + "-01T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    ? new Date(ranking.month + "-01T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" })
     : "";
 
   return (

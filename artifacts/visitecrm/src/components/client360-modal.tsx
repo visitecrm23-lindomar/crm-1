@@ -687,7 +687,7 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
             <div key={r.id} className="flex items-center justify-between py-2 border-b last:border-0">
               <div>
                 <p className="text-sm font-medium">{r.referredName ?? r.referredEmail ?? "—"}</p>
-                <p className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR") : ""}</p>
+                <p className="text-xs text-muted-foreground">{r.createdAt ? new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : ""}</p>
               </div>
               <div className="text-right">
                 <p className={`text-sm font-medium ${STATUS_COLORS[r.status] ?? ""}`}>

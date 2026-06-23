@@ -71,7 +71,7 @@ export function printPassengersManifest(
     ? formatTimeBR(p.departureDate)
     : "";
   const depTime = depTimeRaw && depTimeRaw !== "00:00" ? escapeHtml(depTimeRaw) : "";
-  const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR"));
+  const emitidoEm = escapeHtml(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }));
   const organizador = escapeHtml(p?.tenantName ?? "");
   const cnpj = escapeHtml(p?.tenantCnpj ?? "");
   const manifestNumber = escapeHtml(p?.manifestNumber ?? "");

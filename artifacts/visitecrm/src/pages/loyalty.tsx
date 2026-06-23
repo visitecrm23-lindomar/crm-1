@@ -735,7 +735,7 @@ export default function Loyalty() {
                           {m.availablePoints.toLocaleString("pt-BR")}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(m.joinedAt).toLocaleDateString("pt-BR")}
+                          {new Date(m.joinedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -800,7 +800,7 @@ export default function Loyalty() {
                           {tx.description}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(tx.createdAt).toLocaleDateString("pt-BR")}
+                          {new Date(tx.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                         </TableCell>
                       </TableRow>
                     );

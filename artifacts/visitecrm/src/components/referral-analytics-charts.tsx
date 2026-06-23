@@ -30,7 +30,7 @@ const Sector   = _Sector  as unknown as React.ComponentType<SectorProps>;
 function MonthLabel(month: string) {
   const [y, m] = month.split("-");
   const date = new Date(Number(y), Number(m) - 1, 1);
-  return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(" de ", "/");
+  return date.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" }).replace(" de ", "/");
 }
 
 function DeltaBadge({ current, prev, suffix = "" }: { current: number; prev: number; suffix?: string }) {

@@ -151,7 +151,7 @@ export function StepReview({ state, store }: { state: WizardState; store: Public
                             : "border-border hover:bg-muted"
                         }`}
                       >
-                        {new Date(a.date + "T12:00:00").toLocaleDateString("pt-BR")}
+                        {new Date(a.date + "T12:00:00").toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                         <span className="ml-1 text-xs opacity-70">
                           ({a.spotsTotal - a.spotsUsed} vagas)
                         </span>

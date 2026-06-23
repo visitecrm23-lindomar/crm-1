@@ -127,7 +127,7 @@ export async function calculateScoresForClient(clientId: string, tenantId: strin
         const tripsStr = upcomingTrips
           .map(
             (t) =>
-              `- ID: ${t.id} | ${t.name} | Destino: ${t.destination ?? "não especificado"} | Partida: ${t.departureDate ? new Date(t.departureDate).toLocaleDateString("pt-BR") : "a definir"}`,
+              `- ID: ${t.id} | ${t.name} | Destino: ${t.destination ?? "não especificado"} | Partida: ${t.departureDate ? new Date(t.departureDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "a definir"}`,
           )
           .join("\n");
 

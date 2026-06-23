@@ -85,24 +85,18 @@ export const PAYMENT_LABELS: Record<string, string> = Object.fromEntries(
   PAYMENT_METHODS_CONFIG.map((m) => [m.id, m.label]),
 );
 
+const _BRT = "America/Sao_Paulo";
+
 export function fmtDate(d?: string | null) {
   if (!d) return null;
-  const clean = d.slice(0, 10) + "T12:00:00";
-  return new Date(clean).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const dt = d.length <= 10 ? new Date(d + "T12:00:00") : new Date(d);
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: _BRT, day: "2-digit", month: "short", year: "numeric" }).format(dt);
 }
 
 export function fmtDateLong(d?: string | null) {
   if (!d) return null;
-  const clean = d.slice(0, 10) + "T12:00:00";
-  return new Date(clean).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const dt = d.length <= 10 ? new Date(d + "T12:00:00") : new Date(d);
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: _BRT, day: "2-digit", month: "long", year: "numeric" }).format(dt);
 }
 
 export type PublicSeatEntry = {

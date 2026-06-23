@@ -983,7 +983,7 @@ export default function LojaProdutos() {
                         )}
                         {product.startDate && (
                           <div className="text-xs text-muted-foreground">
-                            Saída: {new Date(product.startDate).toLocaleDateString("pt-BR")}
+                            Saída: {new Date(product.startDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                           </div>
                         )}
                       </div>

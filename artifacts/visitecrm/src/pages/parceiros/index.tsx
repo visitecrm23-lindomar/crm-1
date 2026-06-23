@@ -604,7 +604,7 @@ function PartnerDashboard({ profile, onLogout }: { profile: PartnerProfile; onLo
                       <div>
                         <div className="font-medium text-sm">{c.order?.orderNumber ?? c.orderId.slice(0, 8)}</div>
                         <div className="text-xs text-muted-foreground">
-                          {c.order?.customerName} · {c.period} · {new Date(c.createdAt).toLocaleDateString("pt-BR")}
+                          {c.order?.customerName} · {c.period} · {new Date(c.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                         </div>
                       </div>
                       <div className="text-right">

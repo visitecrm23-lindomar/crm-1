@@ -609,7 +609,7 @@ export default function Nps() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleDateString("pt-BR")}
+                        {new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </TableCell>
                       <TableCell>
                         <Dialog

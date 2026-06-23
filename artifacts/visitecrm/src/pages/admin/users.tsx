@@ -30,7 +30,7 @@ const ROLE_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "o
 };
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("pt-BR");
+  return new Date(dateStr).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
 export default function AdminUsers() {

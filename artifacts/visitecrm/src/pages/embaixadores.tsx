@@ -131,7 +131,7 @@ export default function EmbaixadoresPage() {
   }
 
   const monthLabel = data?.month
-    ? new Date(data.month + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    ? new Date(data.month + "-01T12:00:00").toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "America/Sao_Paulo" })
     : "";
 
   return (

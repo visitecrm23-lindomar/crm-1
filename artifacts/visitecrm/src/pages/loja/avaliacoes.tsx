@@ -113,6 +113,7 @@ function ReviewDetail({
           {new Date(review.createdAt).toLocaleDateString("pt-BR", {
             day: "2-digit",
             month: "long",
+            timeZone: "America/Sao_Paulo",
             year: "numeric",
           })}
         </p>
@@ -312,7 +313,7 @@ export default function LojaAvaliacoes() {
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground ml-4 shrink-0">
-                    {new Date(review.createdAt).toLocaleDateString("pt-BR")}
+                    {new Date(review.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   </span>
                 </div>
               </CardContent>

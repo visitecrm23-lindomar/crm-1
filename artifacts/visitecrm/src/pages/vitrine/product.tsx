@@ -651,7 +651,7 @@ export default function VitrineProduct({
                       <p className="text-xs font-semibold">
                         {new Date(
                           ((product.departureDate ?? product.startDate) as string).slice(0, 10) + "T12:00:00"
-                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })}
                         {product.departureTime && ` às ${product.departureTime}`}
                       </p>
                     </div>
@@ -674,7 +674,7 @@ export default function VitrineProduct({
                       <p className="text-xs font-semibold">
                         {new Date(
                           (product.returnDate ?? product.endDate)!.slice(0, 10) + "T12:00:00"
-                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        ).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" })}
                         {product.returnTime && ` às ${product.returnTime}`}
                       </p>
                     </div>
@@ -898,7 +898,7 @@ export default function VitrineProduct({
                     <StarRating rating={r.rating} />
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleDateString("pt-BR")}
+                    {new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   </span>
                 </div>
                 {r.comment && <p className="text-sm text-muted-foreground">{r.comment}</p>}

@@ -696,7 +696,7 @@ function PlanTab() {
         toast({
           title: `Trial do ${plan.name} ativado!`,
           description: result.trialEndsAt
-            ? `Seu trial vai até ${new Date(result.trialEndsAt).toLocaleDateString("pt-BR")}. Uma cobrança será gerada ao final.`
+            ? `Seu trial vai até ${new Date(result.trialEndsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Uma cobrança será gerada ao final.`
             : "Seu trial foi ativado com sucesso.",
         });
       } else if (result.upgraded) {
@@ -974,7 +974,7 @@ function PlanTab() {
                     <p className="font-medium">{formatCurrencyBRL(inv.amount)}</p>
                     {inv.dueDate && (
                       <p className="text-xs text-muted-foreground">
-                        Vence: {new Date(inv.dueDate).toLocaleDateString("pt-BR")}
+                        Vence: {new Date(inv.dueDate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </p>
                     )}
                   </div>
@@ -2746,7 +2746,7 @@ function TeamTab() {
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate text-muted-foreground">{inv.email}</p>
                           <p className="text-xs text-muted-foreground">
-                            Convite enviado · expira em {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString("pt-BR") : "7 dias"}
+                            Convite enviado · expira em {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "7 dias"}
                           </p>
                         </div>
                         <Badge className="text-xs bg-amber-100 text-amber-800">

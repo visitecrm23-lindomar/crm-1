@@ -424,7 +424,7 @@ function fmtMonthLabel(m: string): string {
 function fmtDateBR(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" });
 }
 
 const RISK_CONFIG: Record<string, { label: string; badge: string; dot: string }> = {

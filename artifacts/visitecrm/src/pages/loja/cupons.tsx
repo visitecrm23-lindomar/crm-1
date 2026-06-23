@@ -416,7 +416,7 @@ export default function LojaCupons() {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {coupon.expiresAt
-                        ? new Date(coupon.expiresAt).toLocaleDateString("pt-BR")
+                        ? new Date(coupon.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
                         : "—"}
                     </TableCell>
                     <TableCell>

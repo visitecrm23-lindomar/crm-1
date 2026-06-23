@@ -511,7 +511,7 @@ export default function MeuPainel() {
                 myCommissions.slice(0, 15).map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="text-sm">
-                      {new Date(c.createdAt).toLocaleDateString("pt-BR")}
+                      {new Date(c.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </TableCell>
                     <TableCell>{fmtCurrency(c.baseAmount)}</TableCell>
                     <TableCell className="text-green-600 font-medium">

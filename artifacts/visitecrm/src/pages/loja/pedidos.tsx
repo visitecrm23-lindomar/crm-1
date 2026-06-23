@@ -458,7 +458,7 @@ export default function LojaPedidos() {
       PAYMENT_METHODS[o.paymentMethod ?? ""] ?? o.paymentMethod ?? "",
       paymentLabel(o.paymentStatus),
       statusLabel(o.status),
-      new Date(o.createdAt).toLocaleDateString("pt-BR"),
+      new Date(o.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
     ]);
     const csv = [headers, ...rows].map((r) => r.map(String).map((v) => `"${v.replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
@@ -604,7 +604,7 @@ export default function LojaPedidos() {
                       </span>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString("pt-BR")}
+                      {new Date(order.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </TableCell>
                     <TableCell>
                       <Button

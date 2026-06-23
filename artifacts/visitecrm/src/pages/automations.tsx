@@ -636,7 +636,7 @@ export default function Automations() {
                     {a.lastExecutedAt && (
                       <span className="text-xs text-muted-foreground">
                         Última:{" "}
-                        {new Date(a.lastExecutedAt).toLocaleDateString("pt-BR")}
+                        {new Date(a.lastExecutedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </span>
                     )}
                   </div>

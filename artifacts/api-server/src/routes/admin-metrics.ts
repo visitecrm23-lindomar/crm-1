@@ -25,7 +25,7 @@ function getMonthBuckets(months = 12) {
   for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     buckets.push({
-      label: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+      label: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "America/Sao_Paulo" }),
       year: d.getFullYear(),
       month: d.getMonth() + 1,
     });

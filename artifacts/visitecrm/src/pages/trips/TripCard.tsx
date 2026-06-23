@@ -143,8 +143,8 @@ export function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open
                 <div className="flex items-center gap-1">
                   <Calendar className="w-3 h-3 shrink-0" />
                   <span>
-                    {new Date(trip.departureDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR")}
-                    {trip.returnDate && ` → ${new Date(trip.returnDate.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR")}`}
+                    {formatDate(trip.departureDate)}
+                    {trip.returnDate && ` → ${formatDate(trip.returnDate)}`}
                   </span>
                 </div>
                 {durationLabel && (

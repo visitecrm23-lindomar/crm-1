@@ -148,7 +148,7 @@ export async function processBirthdayForClient(
 
   const validUntil = new Date();
   validUntil.setDate(validUntil.getDate() + settings.validDays);
-  const validUntilStr = validUntil.toLocaleDateString("pt-BR");
+  const validUntilStr = validUntil.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
   const messageId = generateId();
   const record = {

@@ -29,7 +29,7 @@ function formatDate(value?: string | null): string | null {
   if (!value) return null;
   const d = new Date(value.slice(0, 10) + "T12:00:00");
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Sao_Paulo" });
 }
 
 function dateRange(p: StoreProduct): string | null {
