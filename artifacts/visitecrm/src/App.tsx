@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense, Component, type ComponentType, type ReactNode } from "react";
 import { ClerkProvider, Show, useClerk, useUser } from "@clerk/react";
+import { Button } from "@/components/ui/button";
 import { ptBR } from "@clerk/localizations";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -143,9 +144,11 @@ function RoleRedirect() {
   const syncMe = useSyncMe();
   const { data: me, isLoading, refetch } = useGetMe();
   const { user } = useUser();
+  const { signOut } = useClerk();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [synced, setSynced] = useState(false);
+  const [authError, setAuthError] = useState(false);
   const syncStartedRef = useRef(false);
 
   const { timedOut, retryKey, reset } = useApiTimeout();
@@ -176,7 +179,11 @@ function RoleRedirect() {
     if (timedOut && !synced) return;
     if (!synced || isLoading) return;
     if (!me) {
-      setLocation("/sign-in");
+      // Redirecting to /sign-in here causes an infinite loop: Clerk detects the
+      // active session and bounces the user straight back to /, which re-mounts
+      // RoleRedirect, which calls syncMe again, and so on.
+      // Show an auth-error state instead so the user can sign out cleanly.
+      setAuthError(true);
       return;
     }
 
@@ -198,11 +205,28 @@ function RoleRedirect() {
   function handleRetry() {
     syncStartedRef.current = false;
     setSynced(false);
+    setAuthError(false);
     reset();
   }
 
   if (timedOut && !synced) {
     return <ApiTimeoutFallback onRetry={handleRetry} />;
+  }
+
+  if (authError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Não foi possível verificar sua conta. Isso pode ser um problema temporário ou de configuração.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => void signOut({ redirectUrl: `${basePath}/sign-in` })}>
+            Sair
+          </Button>
+          <Button onClick={handleRetry}>Tentar novamente</Button>
+        </div>
+      </div>
+    );
   }
 
   return (

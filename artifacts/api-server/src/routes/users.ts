@@ -34,8 +34,16 @@ function formatUser(u: typeof usersTable.$inferSelect) {
 
 router.get("/users/me", async (req, res, next): Promise<void> => {
   try {
-    const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return; }
+    const auth = getAuth(req);
+    const { userId: clerkId } = auth;
+    if (!clerkId) {
+      req.log.warn({
+        sessionId: auth.sessionId ?? null,
+        hasAuthHeader: !!req.headers["authorization"],
+        origin: req.headers["origin"] ?? null,
+      }, "[auth] getAuth returned null userId on GET /users/me — token missing or rejected");
+      next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return;
+    }
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId)).limit(1);
     if (!user) { next(new NotFoundError("User not found", "USER_NOT_FOUND")); return; }
     let tenant = null;
@@ -97,8 +105,16 @@ async function resolveInviteForUser(
 
 router.post("/users/me/sync", async (req, res, next): Promise<void> => {
   try {
-    const { userId: clerkId } = getAuth(req);
-    if (!clerkId) { next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return; }
+    const auth = getAuth(req);
+    const { userId: clerkId } = auth;
+    if (!clerkId) {
+      req.log.warn({
+        sessionId: auth.sessionId ?? null,
+        hasAuthHeader: !!req.headers["authorization"],
+        origin: req.headers["origin"] ?? null,
+      }, "[auth] getAuth returned null userId on POST /users/me/sync — token missing or rejected");
+      next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return;
+    }
 
     const parsed = SyncMeBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(parsed.error.message, "VALIDATION_ERROR")); return; }

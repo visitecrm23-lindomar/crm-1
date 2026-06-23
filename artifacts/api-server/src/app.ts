@@ -145,7 +145,15 @@ const authorizedParties = [
   process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
   ...replitDomains,
   ...additionalOrigins,
-].filter(Boolean) as string[];
+].filter((s): s is string => Boolean(s))
+  .map((s) => s.replace(/\/+$/, ""));
+
+// Log at startup so production logs confirm which parties are allowed
+if (authorizedParties.length > 0) {
+  logger.info({ authorizedParties }, "[clerk] authorizedParties configured");
+} else {
+  logger.info("[clerk] authorizedParties is empty — all Clerk azp values are accepted");
+}
 
 const clerkAuth = clerkMiddleware(authorizedParties.length > 0 ? { authorizedParties } : {});
 
