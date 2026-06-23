@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQuery } from "@tanstack/react-query";
+import { SkeletonBox } from "@/components/Skeleton";
 import * as Clipboard from "expo-clipboard";
 import React, { useState } from "react";
 import {
@@ -182,9 +183,25 @@ export default function IndicacoesScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 20, gap: 16 }}
+        scrollEnabled={false}
+      >
+        <SkeletonBox height={120} borderRadius={14} />
+        <SkeletonBox height={80} borderRadius={14} />
+        <SkeletonBox width={140} height={18} />
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <SkeletonBox width={40} height={40} borderRadius={20} />
+            <View style={{ flex: 1, gap: 6 }}>
+              <SkeletonBox width="60%" height={14} />
+              <SkeletonBox width="40%" height={12} />
+            </View>
+            <SkeletonBox width={60} height={22} borderRadius={6} />
+          </View>
+        ))}
+      </ScrollView>
     );
   }
 

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth, useUser } from "@clerk/clerk-expo";
+import { SkeletonBox } from "@/components/Skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -128,9 +129,19 @@ export default function PerfilScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 20, gap: 16 }}
+        scrollEnabled={false}
+      >
+        <View style={{ alignItems: "center", gap: 12, paddingVertical: 16 }}>
+          <SkeletonBox width={80} height={80} borderRadius={40} />
+          <SkeletonBox width={160} height={20} />
+          <SkeletonBox width={200} height={14} />
+        </View>
+        <SkeletonBox height={100} borderRadius={14} />
+        <SkeletonBox height={180} borderRadius={14} />
+      </ScrollView>
     );
   }
 
