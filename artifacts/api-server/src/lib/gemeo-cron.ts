@@ -1,4 +1,5 @@
 import { db, tenantsTable, gemeoAlertsTable, gemeoOpportunitiesTable } from "@workspace/db";
+import { formatDateBR } from "@workspace/shared";
 import { and, eq, isNull, asc } from "drizzle-orm";
 import { getAIClientForTenant } from "./ai-client";
 import { generateId } from "./id";
@@ -55,7 +56,7 @@ async function runGemeoAlertsForTenant(tenantId: string): Promise<void> {
     changePct !== null
       ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(1)}%`
       : "sem comparativo";
-  const today = new Date().toLocaleDateString("pt-BR");
+  const today = formatDateBR(new Date());
 
   const prompt = `Você é o Gêmeo Digital de uma agência de turismo brasileira.
 Com base no snapshot abaixo, gere ENTRE 2 E 3 alertas executivos CONCISOS e ACIONÁVEIS.

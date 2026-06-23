@@ -24,7 +24,7 @@ import type { BoardingPoint } from "./types";
 import { printPassengersManifest } from "./PassengersListManifest";
 import { PassengersListShareDialog } from "./PassengersListShareDialog";
 
-import { formatCpf } from "@/lib/utils";
+import { formatCpf, formatDate } from "@/lib/utils";
 import { AGE_CATEGORY_LABELS } from "@/lib/labels";
 
 type ColKey = "nome" | "cpf" | "birthDate" | "seatNumber" | "ageCategory" | "whatsapp" | "checkedInAt" | "boardingLocation";
@@ -203,7 +203,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
         switch (col.key) {
           case "nome": values.push(p.name); break;
           case "cpf": values.push(formatCpf(p.cpf)); break;
-          case "birthDate": values.push(p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : ""); break;
+          case "birthDate": values.push(p.birthDate ? formatDate(p.birthDate) : ""); break;
           case "seatNumber": values.push(p.seatNumber ?? ""); break;
           case "ageCategory": values.push(AGE_CATEGORY_LABELS[p.ageCategory] ?? p.ageCategory); break;
           case "boardingLocation": values.push(getBoardingPointName(p.boardingLocationId)); break;
@@ -389,7 +389,7 @@ export function PassengersList({ tripId }: { tripId: string }) {
                       {visibleCols.cpf && <td className="p-3 text-muted-foreground text-xs">{formatCpf(p.cpf)}</td>}
                       {visibleCols.birthDate && (
                         <td className="p-3 text-muted-foreground text-xs whitespace-nowrap">
-                          {p.birthDate ? new Date(p.birthDate).toLocaleDateString("pt-BR") : "—"}
+                          {p.birthDate ? formatDate(p.birthDate) : "—"}
                         </td>
                       )}
                       {visibleCols.seatNumber && <td className="p-3 whitespace-nowrap">{p.seatNumber ?? "—"}</td>}

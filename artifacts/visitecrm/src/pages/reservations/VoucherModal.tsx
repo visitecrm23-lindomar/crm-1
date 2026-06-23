@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Download, Printer } from "lucide-react";
 import QRCodeLib from "qrcode";
 import { STATUS_COLORS, STATUS_LABELS, fmt } from "./constants";
+import { formatDate } from "@/lib/utils";
 
 function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; qrDataUrl: string }) {
   const trip = r?.trip;
@@ -57,7 +58,7 @@ function VoucherContent({ r, qrDataUrl }: { r: Reservation | null | undefined; q
           <p className="font-bold text-sm text-gray-900">{trip?.name ?? "—"}</p>
           {trip?.destination && <p className="text-xs text-gray-500">{trip.destination}</p>}
           {trip?.departureDate && (
-            <p className="text-xs text-gray-500">Partida: {new Date(trip.departureDate).toLocaleDateString("pt-BR")}</p>
+            <p className="text-xs text-gray-500">Partida: {formatDate(trip.departureDate)}</p>
           )}
         </div>
       </div>

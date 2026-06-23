@@ -38,7 +38,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Bus, Eye } from "lucide-react";
-import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
+import { formatCurrencyBRL as formatCurrency, formatDate } from "@/lib/utils";
 
 const VEHICLE_TYPES = ["Ônibus", "Micro-ônibus", "Van", "Carro", "Barco", "Avião", "Outro"];
 const AMENITY_OPTIONS = [
@@ -275,7 +275,7 @@ function VehicleDetailModal({
                           {t.destinationCity}/{t.destinationState}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                          {formatDate(t.departureDate)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {t.reservedSeats}/{t.totalCapacity}

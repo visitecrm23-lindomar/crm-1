@@ -31,9 +31,17 @@ type JsPDFWithAutoTable = InstanceType<typeof jsPDF> & {
   lastAutoTable: { finalY: number };
 };
 
+const _BRAZIL_TZ = "America/Sao_Paulo";
 function fmtDate(d?: Date | null): string {
   if (!d) return "";
-  try { return format(d, "dd/MM/yyyy", { locale: ptBR }); } catch { return ""; }
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: _BRAZIL_TZ,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(d);
+  } catch { return ""; }
 }
 
 function fmtCur(v?: string | number | null): string {

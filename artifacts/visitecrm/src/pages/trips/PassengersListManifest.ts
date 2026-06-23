@@ -92,7 +92,7 @@ export function printPassengersManifest(
   const paidRows = allPassengers.map((pass, i) => {
     const nome = escapeHtml(pass.name);
     const cpfStr = escapeHtml(formatCpf(pass.cpf));
-    const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate).toLocaleDateString("pt-BR")) : "—";
+    const nasc = pass.birthDate ? escapeHtml(new Date(pass.birthDate.length <= 10 ? pass.birthDate + "T12:00:00" : pass.birthDate).toLocaleDateString("pt-BR")) : "—";
     const cat = escapeHtml(AGE_CATEGORY_LABELS[pass.ageCategory] ?? pass.ageCategory);
     const poltrona = escapeHtml(pass.seatNumber ?? "—");
     const embarque = escapeHtml(getBoardingPointName(pass.boardingLocationId) || "—");

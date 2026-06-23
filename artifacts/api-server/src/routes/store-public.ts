@@ -6,7 +6,7 @@ import { broadcastSeatUpdate } from "../lib/realtime";
 import { RESERVATION_STATUS } from "@workspace/permissions";
 import { AppError, NotFoundError, ValidationError, ConflictError } from "../lib/errors";
 import { normalizeOrderEmail, roundMoney } from "../lib/pricing";
-import { formatBRL } from "@workspace/shared";
+import { formatBRL, localToday } from "@workspace/shared";
 import { getTenantUser } from "../lib/tenant";
 import {
   storesTable,
@@ -443,7 +443,7 @@ router.get("/public/store/:slug/products/:productSlug/partner-info", async (req,
 
     if (!pp) { res.json({ hasPartner: false }); return; }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const availability = await db.select({
       date: partnerAvailabilityTable.date,
       spotsTotal: partnerAvailabilityTable.spotsTotal,

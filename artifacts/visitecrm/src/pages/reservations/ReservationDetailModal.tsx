@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, DollarSign, Tag, Mail, RefreshCcw, Check, XCircle, Clock, Send } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS, fmt } from "./constants";
+import { formatDate } from "@/lib/utils";
 import { ReservationPassengersTab } from "./ReservationPassengersTab";
 import { ReservationInstallmentsTab } from "./ReservationInstallmentsTab";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,7 @@ export function ReservationDetailModal({ reservationId, open, onClose }: {
                   <p className="text-xs text-muted-foreground mb-1">Viagem</p>
                   <p className="font-medium">{data.trip?.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {data.trip?.departureDate ? new Date(data.trip.departureDate).toLocaleDateString("pt-BR") : "—"}
+                    {data.trip?.departureDate ? formatDate(data.trip.departureDate) : "—"}
                   </p>
                   <p className="text-sm text-muted-foreground">{data.trip?.destination}</p>
                 </div>

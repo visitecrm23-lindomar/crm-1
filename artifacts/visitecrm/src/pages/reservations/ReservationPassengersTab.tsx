@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertCircle, CheckCircle, LogIn, Pencil, RotateCcw, Trash2, UserPlus, Users } from "lucide-react";
 import { AGE_CATEGORY_LABELS } from "./constants";
 import { PassengerForm } from "./PassengerForm";
+import { formatDate } from "@/lib/utils";
 
 const PLACEHOLDER_NAME = "A preencher";
 
@@ -154,7 +155,7 @@ export function ReservationPassengersTab({ reservationId }: { reservationId: str
                   <div className="flex gap-3 mt-0.5 flex-wrap">
                     {p.cpf && <span className="text-xs text-muted-foreground">CPF: {p.cpf}</span>}
                     {p.seatNumber && <span className="text-xs text-muted-foreground">Assento: {p.seatNumber}</span>}
-                    {p.birthDate && <span className="text-xs text-muted-foreground">{new Date(p.birthDate as string).toLocaleDateString("pt-BR")}</span>}
+                    {p.birthDate && <span className="text-xs text-muted-foreground">{formatDate(p.birthDate as string)}</span>}
                     <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                       p.ageCategory === "adult" ? "bg-blue-100 text-blue-700" :
                       p.ageCategory === "child" ? "bg-amber-100 text-amber-700" :

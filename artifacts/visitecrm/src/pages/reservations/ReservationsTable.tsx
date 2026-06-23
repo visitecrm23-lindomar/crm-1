@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, METHOD_LABELS } from "./constants";
 import { RESERVATION_STATUS } from "@workspace/permissions";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface ReservationsTableProps {
   reservations: Reservation[];
@@ -209,7 +209,7 @@ export function ReservationsTable({
                   </TableCell>
                   <TableCell>
                     <p className="font-medium text-sm truncate max-w-[140px]">{r.trip?.name ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">{r.trip?.departureDate ? new Date(r.trip.departureDate).toLocaleDateString("pt-BR") : "—"}</p>
+                    <p className="text-xs text-muted-foreground">{r.trip?.departureDate ? formatDate(r.trip.departureDate) : "—"}</p>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {(r as { boardingLocationId?: string }).boardingLocationId ? boardingMap[(r as { boardingLocationId?: string }).boardingLocationId!] ?? "—" : "—"}

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { formatDate } from "@/lib/utils";
 import type { Trip } from "@workspace/api-client-react";
 import { SeatMapPicker } from "@/components/SeatMapPicker";
 import { Button } from "@/components/ui/button";
@@ -196,8 +197,8 @@ export function WizardStep1({
           </div>
           {selectedTripFull.type && <div><p className="text-xs text-muted-foreground">Tipo</p><p className="font-medium">{TRIP_TYPE_LABELS[selectedTripFull.type] ?? selectedTripFull.type}</p></div>}
           {selectedTripFull.destination && <div><p className="text-xs text-muted-foreground">Destino</p><p className="font-medium">{selectedTripFull.destination}</p></div>}
-          <div><p className="text-xs text-muted-foreground">Data de Saída</p><p className="font-medium">{new Date(selectedTripFull.departureDate).toLocaleDateString("pt-BR")}</p></div>
-          {selectedTripFull.returnDate && <div><p className="text-xs text-muted-foreground">Data de Retorno</p><p className="font-medium">{new Date(selectedTripFull.returnDate).toLocaleDateString("pt-BR")}</p></div>}
+          <div><p className="text-xs text-muted-foreground">Data de Saída</p><p className="font-medium">{formatDate(selectedTripFull.departureDate)}</p></div>
+          {selectedTripFull.returnDate && <div><p className="text-xs text-muted-foreground">Data de Retorno</p><p className="font-medium">{formatDate(selectedTripFull.returnDate)}</p></div>}
           <div><p className="text-xs text-muted-foreground">Vagas Disponíveis</p><p className="font-medium">{selectedTripFull.availableSeats ?? "—"}</p></div>
           {selectedTripFull.vehicleType && <div><p className="text-xs text-muted-foreground">Veículo</p><p className="font-medium">{selectedTripFull.vehicleType}</p></div>}
           <div><p className="text-xs text-muted-foreground">Preço Base</p><p className="font-medium">R$ {(selectedTripFull.priceAdult ?? 0).toFixed(2)}/pessoa</p></div>

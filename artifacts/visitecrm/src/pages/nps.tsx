@@ -46,6 +46,7 @@ import {
   User,
 } from "lucide-react";
 import type { NpsResponse, NpsSendLink } from "@workspace/api-client-react";
+import { formatDate } from "@/lib/utils";
 
 const classConfig: Record<
   string,
@@ -313,7 +314,7 @@ export default function Nps() {
                       {(trips?.data ?? []).map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name} —{" "}
-                          {new Date(t.departureDate).toLocaleDateString("pt-BR")}
+                          {formatDate(t.departureDate)}
                         </SelectItem>
                       ))}
                     </SelectContent>
