@@ -161,6 +161,7 @@ const CLERK_BYPASS_PATHS = new Set([
   "/api",
   "/api/health",
   "/api/healthz",
+  "/api/health/auth",
 ]);
 
 app.use((req, res, next) => {

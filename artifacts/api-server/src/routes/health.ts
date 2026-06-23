@@ -132,7 +132,6 @@ router.get("/health/auth", (_req: Request, res: Response): void => {
 
   res.json({
     hasClerkSecretKey: !!secretKey,
-    clerkSecretKeyPrefix: secretKey ? secretKey.slice(0, 7) + "…" : null,
     clerkProxyPath: "/api/__clerk",
     frontendUrl: frontendOrigin,
     replitDomains,
