@@ -120,6 +120,13 @@
       "when": 1801500000000,
       "tag": "0016_campaign_trigger_type",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1801600000000,
+      "tag": "0017_campaigns_auto_enabled",
+      "breakpoints": true
     }
   ]
 }
