@@ -177,9 +177,7 @@ timeoutMs = 300000
   [userenv]
 
   [userenv.production]
-FRONTEND_URL = "https://visitecariri.com.br"
 ADDITIONAL_ORIGINS = "https://visitecariri.com.br,https://visite-cariri-cearense-receptivo.replit.app"
-VITE_APP_URL = "https://visitecariri.com.br"
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
 CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
