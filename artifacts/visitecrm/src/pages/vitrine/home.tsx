@@ -633,6 +633,32 @@ export default function VitrineHome({
           </section>
         )}
 
+        {!loading && allProducts.length === 0 && (
+          <section className="flex flex-col items-center py-12 text-center">
+            <div
+              className="flex h-20 w-20 items-center justify-center rounded-full mb-6"
+              style={{ background: colors.primarySoft }}
+            >
+              <Sparkles className="h-10 w-10" style={{ color: colors.primary }} />
+            </div>
+            <h2 className="text-2xl font-bold mb-3">Em breve, novidades!</h2>
+            <p className="text-muted-foreground max-w-sm mb-6">
+              Estamos preparando pacotes incríveis para você. Fique de olho — novidades chegam em breve!
+            </p>
+            {store.contactWhatsapp && (
+              <a
+                href={`https://wa.me/${store.contactWhatsapp.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: colors.primary }}
+              >
+                Fale conosco no WhatsApp
+              </a>
+            )}
+          </section>
+        )}
+
         {reviews.length > 0 && (
           <section>
             <SectionHeader

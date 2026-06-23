@@ -572,6 +572,68 @@ export default function LojaConfiguracoes() {
 
           <Card>
             <CardHeader>
+              <CardTitle>Pré-visualização</CardTitle>
+              <CardDescription>Como as cores ficam na sua vitrine — atualiza em tempo real.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-xl border overflow-hidden shadow-sm select-none">
+                <div className="h-10 flex items-center px-4 gap-3" style={{ background: (form as Record<string, string>)["primaryColor"] ?? "#3B82F6" }}>
+                  {form.logo ? (
+                    <img src={form.logo} alt="logo" className="h-6 w-6 rounded object-contain bg-white/20" />
+                  ) : (
+                    <div className="w-6 h-6 bg-white/20 rounded shrink-0" />
+                  )}
+                  <span className="text-white text-sm font-semibold truncate">{form.name ?? "Minha Loja"}</span>
+                  <div className="ml-auto flex gap-2">
+                    <div className="w-12 h-2 rounded-full bg-white/30" />
+                    <div className="w-12 h-2 rounded-full bg-white/30" />
+                    <div className="w-12 h-2 rounded-full bg-white/30" />
+                  </div>
+                </div>
+                <div
+                  className="h-28 flex flex-col items-start justify-end p-4"
+                  style={{ background: `linear-gradient(135deg, ${(form as Record<string, string>)["primaryColor"] ?? "#3B82F6"}, ${(form as Record<string, string>)["secondaryColor"] ?? "#10B981"})` }}
+                >
+                  <div className="h-3 w-40 rounded-full bg-white/80 mb-1.5" />
+                  <div className="h-2 w-56 rounded-full bg-white/50 mb-3" />
+                  <div className="flex gap-2">
+                    <div
+                      className="h-7 px-4 rounded-full flex items-center text-xs font-semibold bg-white"
+                      style={{ color: (form as Record<string, string>)["primaryColor"] ?? "#3B82F6" }}
+                    >
+                      Explorar Pacotes
+                    </div>
+                    <div className="h-7 px-4 rounded-full flex items-center text-xs font-semibold border-2 border-white text-white">
+                      Contato
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 grid grid-cols-2 gap-3 bg-gray-50">
+                  {[
+                    (form as Record<string, string>)["primaryColor"] ?? "#3B82F6",
+                    (form as Record<string, string>)["secondaryColor"] ?? "#10B981",
+                  ].map((color, i) => (
+                    <div key={i} className="rounded-xl bg-white border overflow-hidden shadow-sm">
+                      <div className="h-16" style={{ background: color + "33" }} />
+                      <div className="p-2.5 space-y-1.5">
+                        <div className="h-2 w-20 rounded-full bg-gray-200" />
+                        <div className="flex items-center justify-between">
+                          <div
+                            className="h-2 w-12 rounded-full"
+                            style={{ background: ((form as Record<string, string>)["accentColor"] ?? "#F59E0B") + "80" }}
+                          />
+                          <div className="h-5 w-14 rounded-full" style={{ background: color }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Imagens</CardTitle>
               <CardDescription>Envie o logo e o banner da sua loja (PNG, JPG, WEBP).</CardDescription>
             </CardHeader>
