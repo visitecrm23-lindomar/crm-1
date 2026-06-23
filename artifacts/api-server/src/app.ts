@@ -357,7 +357,7 @@ app.post("/api/ai-integration/test", aiLimiter);
 app.post("/api/ai-integration/revoke", aiLimiter);
 app.post("/api/chatbot-conversations", aiLimiter);
 app.post("/api/chatbot-messages", aiLimiter);
-app.post("/api/marketing/ai-content", aiLimiter);
+app.post("/api/ai-content", aiLimiter);
 app.post("/api/insights/chat", aiLimiter);
 app.post("/api/insights/simulator", aiLimiter);
 app.post("/api/insights/ask", aiLimiter);
@@ -366,6 +366,9 @@ app.post("/api/insights/ask", aiLimiter);
 app.post("/api/reports/export", exportLimiter);
 app.get("/api/reservations/export", exportLimiter);
 app.get("/api/trips/:id/manifest/pdf", exportLimiter);
+app.get("/api/trips/:id/passengers/export", exportLimiter);
+app.get("/api/referrals/export", exportLimiter);
+app.get("/api/referrals/analytics/export", exportLimiter);
 
 // Apply email-send limiter
 app.post("/api/trips/:id/manifest/send", emailSendLimiter);
