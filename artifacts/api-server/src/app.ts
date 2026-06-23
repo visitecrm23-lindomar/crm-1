@@ -373,16 +373,15 @@ app.post("/api/email-logs/:id/resend", emailSendLimiter);
 app.post("/api/referrals/:id/resend-expiry-warning", emailSendLimiter);
 app.post("/api/referrals/:id/resend-bonus-release", emailSendLimiter);
 
-// Apply admin bulk limiter
-app.post("/api/admin/plans", adminBulkLimiter);
-app.delete("/api/admin/plans/:id", adminBulkLimiter);
-app.post("/api/admin/invoices", adminBulkLimiter);
-app.post("/api/admin/feature-flags", adminBulkLimiter);
-app.delete("/api/admin/feature-flags/:id", adminBulkLimiter);
-app.post("/api/admin/tenants/:id/suspend", adminBulkLimiter);
-app.post("/api/admin/tenants/:id/activate", adminBulkLimiter);
-app.post("/api/admin/cleanup-orphaned-uploadthing-files", adminBulkLimiter);
-app.post("/api/admin/maintenance/orphaned-files", adminBulkLimiter);
+// Apply admin bulk limiter to ALL POST and DELETE under /api/admin
+// Using a prefix middleware ensures complete coverage including future routes.
+app.use("/api/admin", (req: Request, res: Response, next: express.NextFunction): void => {
+  if (req.method === "POST" || req.method === "DELETE") {
+    adminBulkLimiter(req, res, next);
+    return;
+  }
+  next();
+});
 
 app.use("/api", router);
 
