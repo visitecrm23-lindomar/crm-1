@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import path from "node:path";
-import { clerkMiddleware } from "@clerk/express";
+import { clerkMiddleware, getAuth } from "@clerk/express";
 import rateLimit from "express-rate-limit";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import { requestId, errorHandler } from "./middlewares/errorHandler";
@@ -263,6 +263,126 @@ app.post("/api/public/store/:slug/referral/validate", referralValidateLimiter);
 app.post("/api/public/store/:slug/referral/track", referralTrackLimiter);
 app.get("/api/public/store/:slug/referral/info", referralInfoLimiter);
 app.post("/api/public/store/:slug/price-alerts", priceAlertSubscribeLimiter);
+
+// ── AUTHENTICATED RATE LIMITERS ──────────────────────────────────────────────
+// Keys use tenantId from Clerk session claims so the quota is shared across
+// every user of the same agency (not per-IP, which breaks multi-user tenants).
+// Superadmins (no tenantId) fall back to their Clerk userId.
+
+const rateLimitWarnCooldownMs = 30_000;
+const rateLimitWarnSeen = new Map<string, number>();
+
+function warnRateLimit(req: Request, label: string): void {
+  try {
+    const auth = getAuth(req);
+    const tenantId = (auth.sessionClaims?.["tenantId"] as string | undefined) ?? null;
+    const userId = auth.userId ?? null;
+    const cacheKey = `${userId ?? "anon"}:${req.method}:${req.path}`;
+    const now = Date.now();
+    const last = rateLimitWarnSeen.get(cacheKey) ?? 0;
+    if (now - last >= rateLimitWarnCooldownMs) {
+      rateLimitWarnSeen.set(cacheKey, now);
+      req.log?.warn({ tenantId, userId, path: req.path, method: req.method, limiter: label }, "[rate-limit] authenticated limit exceeded");
+    }
+  } catch {
+    // non-fatal — logging must never disrupt the 429 response
+  }
+}
+
+function makeAuthRateLimitHandler(label: string) {
+  return (req: Request, res: Response): void => {
+    warnRateLimit(req, label);
+    const retryAfter = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({
+      error: "TOO_MANY_REQUESTS",
+      code: "TOO_MANY_REQUESTS",
+      message: "Limite de requisições atingido. Aguarde um momento e tente novamente.",
+    });
+  };
+}
+
+const tenantKeyGenerator = (req: Request): string => {
+  const auth = getAuth(req);
+  return (auth.sessionClaims?.["tenantId"] as string | undefined) ?? auth.userId ?? req.ip ?? "unknown";
+};
+
+const userKeyGenerator = (req: Request): string => {
+  const auth = getAuth(req);
+  return auth.userId ?? req.ip ?? "unknown";
+};
+
+// AI / LLM endpoints: 20 req/min per tenant
+const aiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: parseRateLimitEnv("RATE_LIMIT_AI_MAX", 20),
+  keyGenerator: tenantKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeAuthRateLimitHandler("ai"),
+});
+
+// Export endpoints (PDF/XLSX/CSV): 10 req/min per tenant
+const exportLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: parseRateLimitEnv("RATE_LIMIT_EXPORT_MAX", 10),
+  keyGenerator: tenantKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeAuthRateLimitHandler("export"),
+});
+
+// Email-send endpoints: 30 req/min per tenant
+const emailSendLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: parseRateLimitEnv("RATE_LIMIT_EMAIL_SEND_MAX", 30),
+  keyGenerator: tenantKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeAuthRateLimitHandler("email-send"),
+});
+
+// Admin bulk / destructive operations: 10 req/min per user (superadmins have no tenantId)
+const adminBulkLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: parseRateLimitEnv("RATE_LIMIT_ADMIN_BULK_MAX", 10),
+  keyGenerator: userKeyGenerator,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeAuthRateLimitHandler("admin-bulk"),
+});
+
+// Apply AI limiter
+app.post("/api/ai-integration/test", aiLimiter);
+app.post("/api/ai-integration/revoke", aiLimiter);
+app.post("/api/chatbot-conversations", aiLimiter);
+app.post("/api/chatbot-messages", aiLimiter);
+app.post("/api/marketing/ai-content", aiLimiter);
+app.post("/api/insights/chat", aiLimiter);
+app.post("/api/insights/simulator", aiLimiter);
+app.post("/api/insights/ask", aiLimiter);
+
+// Apply export limiter
+app.post("/api/reports/export", exportLimiter);
+app.get("/api/reservations/export", exportLimiter);
+app.get("/api/trips/:id/manifest/pdf", exportLimiter);
+
+// Apply email-send limiter
+app.post("/api/trips/:id/manifest/send", emailSendLimiter);
+app.post("/api/email-logs/:id/resend", emailSendLimiter);
+app.post("/api/referrals/:id/resend-expiry-warning", emailSendLimiter);
+app.post("/api/referrals/:id/resend-bonus-release", emailSendLimiter);
+
+// Apply admin bulk limiter
+app.post("/api/admin/plans", adminBulkLimiter);
+app.delete("/api/admin/plans/:id", adminBulkLimiter);
+app.post("/api/admin/invoices", adminBulkLimiter);
+app.post("/api/admin/feature-flags", adminBulkLimiter);
+app.delete("/api/admin/feature-flags/:id", adminBulkLimiter);
+app.post("/api/admin/tenants/:id/suspend", adminBulkLimiter);
+app.post("/api/admin/tenants/:id/activate", adminBulkLimiter);
+app.post("/api/admin/cleanup-orphaned-uploadthing-files", adminBulkLimiter);
+app.post("/api/admin/maintenance/orphaned-files", adminBulkLimiter);
 
 app.use("/api", router);
 
