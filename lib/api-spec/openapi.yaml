@@ -1311,6 +1311,100 @@ paths:
                     description: Number of passenger records created
                 required: [created]
 
+  /trips/{id}/costs:
+    get:
+      operationId: listTripCosts
+      tags: [trips]
+      summary: List costs for a trip
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trip costs and summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTripCostsResponse"
+    post:
+      operationId: createTripCost
+      tags: [trips]
+      summary: Create a trip cost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTripCostBody"
+      responses:
+        "201":
+          description: Created trip cost
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripCost"
+
+  /trips/{id}/costs/{costId}:
+    patch:
+      operationId: updateTripCost
+      tags: [trips]
+      summary: Update a trip cost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: costId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTripCostBody"
+      responses:
+        "200":
+          description: Updated trip cost
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripCost"
+    delete:
+      operationId: deleteTripCost
+      tags: [trips]
+      summary: Delete a trip cost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: costId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /trips/{tripId}/passengers/{passengerId}:
     patch:
       operationId: updatePassengerBoarding
@@ -5370,8 +5464,15 @@ components:
           type: ["integer", "null"]
           minimum: 0
           maximum: 2
+        freePassengers:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/FreePassenger"
         layoutId:
           type: ["string", "null"]
+        showSeatMap:
+          type: ["boolean", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -5509,6 +5610,117 @@ components:
           type: integer
       required: [data, total, page, limit]
 
+    TripCostCategory:
+      type: string
+      enum: [Transporte, Hospedagem, "Alimentação", Guia, Marketing, Seguro, Taxas, Outros]
+
+    TripCost:
+      type: object
+      properties:
+        id:
+          type: string
+        tripId:
+          type: string
+        category:
+          $ref: "#/components/schemas/TripCostCategory"
+        description:
+          type: string
+        supplierId:
+          type: ["string", "null"]
+        supplierName:
+          type: ["string", "null"]
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, tripId, category, description, supplierId, supplierName, amount, status, dueDate, paidAt, notes, createdAt]
+
+    TripCostSummary:
+      type: object
+      properties:
+        expectedRevenue:
+          type: number
+        totalRealCosts:
+          type: number
+        totalPaidCosts:
+          type: number
+        totalPendingCosts:
+          type: number
+        profit:
+          type: number
+        margin:
+          type: number
+        plannedBudget:
+          type: number
+        budgetVariance:
+          type: number
+        confirmedSeats:
+          type: integer
+      required: [expectedRevenue, totalRealCosts, totalPaidCosts, totalPendingCosts, profit, margin, plannedBudget, budgetVariance, confirmedSeats]
+
+    ListTripCostsResponse:
+      type: object
+      properties:
+        costs:
+          type: array
+          items:
+            $ref: "#/components/schemas/TripCost"
+        summary:
+          $ref: "#/components/schemas/TripCostSummary"
+      required: [costs, summary]
+
+    CreateTripCostBody:
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/TripCostCategory"
+        description:
+          type: string
+        supplierName:
+          type: ["string", "null"]
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+      required: [category, description, amount]
+
+    UpdateTripCostBody:
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/TripCostCategory"
+        description:
+          type: string
+        supplierName:
+          type: ["string", "null"]
+        amount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+        dueDate:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
     CreateTripBody:
       type: object
       properties:
@@ -5622,6 +5834,12 @@ components:
           maximum: 2
         layoutId:
           type: ["string", "null"]
+        showSeatMap:
+          type: ["boolean", "null"]
+        freePassengers:
+          type: array
+          items:
+            $ref: "#/components/schemas/FreePassenger"
       required:
         - name
         - destination
@@ -5746,8 +5964,14 @@ components:
           type: ["integer", "null"]
           minimum: 0
           maximum: 2
+        freePassengers:
+          type: array
+          items:
+            $ref: "#/components/schemas/FreePassenger"
         layoutId:
           type: ["string", "null"]
+        showSeatMap:
+          type: ["boolean", "null"]
 
     SeatMap:
       type: object
@@ -6206,6 +6430,26 @@ components:
             $ref: "#/components/schemas/FreePassenger"
       required: [tripId, tripName, departureDate, totalPassengers, checkedIn, passengers, tenantName, boardingPoints, freePassengers]
 
+    FreePassenger:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        cpf:
+          type: string
+        whatsapp:
+          type: string
+        role:
+          type: string
+          enum: [organizer, guide]
+        seatNumber:
+          type: ["string", "null"]
+        checkedInAt:
+          type: ["string", "null"]
+      required: [id, name, cpf, whatsapp, role, seatNumber]
+
     UpdatePassengerBoardingBody:
       type: object
       properties:
@@ -6266,6 +6510,10 @@ components:
         name:
           type: ["string", "null"]
         cpf:
+          type: ["string", "null"]
+        rg:
+          type: ["string", "null"]
+        birthDate:
           type: ["string", "null"]
         seatNumber:
           type: ["string", "null"]
@@ -8025,17 +8273,31 @@ components:
           type: ["string", "null"]
         whatsappBonusPaidMessage:
           type: ["string", "null"]
+        whatsappReversedMessage:
+          type: ["string", "null"]
         expiryWarning7DaysEnabled:
           type: boolean
         expiryWarning1DayEnabled:
           type: boolean
         bonusReleaseEmailEnabled:
           type: boolean
+        pointsPerReferral:
+          type: integer
+        gracePeriodDays:
+          type: integer
+        bonusValidityDays:
+          type: integer
+        discountExpirationDays:
+          type: integer
+        minPurchaseAmount:
+          type: ["string", "null"]
+        maxReferralsPerUser:
+          type: integer
         createdAt:
           type: string
         updatedAt:
           type: string
-      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, tiersConfig, whatsappEnabled, expiryWarning7DaysEnabled, expiryWarning1DayEnabled, bonusReleaseEmailEnabled, createdAt, updatedAt]
+      required: [id, tenantId, isEnabled, discountType, discountValue, bonusType, bonusValue, expirationDays, allowSelfReferral, requireFirstPurchase, tiersConfig, whatsappEnabled, expiryWarning7DaysEnabled, expiryWarning1DayEnabled, bonusReleaseEmailEnabled, pointsPerReferral, gracePeriodDays, bonusValidityDays, discountExpirationDays, maxReferralsPerUser, createdAt, updatedAt]
 
     UpdateReferralSettingsBody:
       type: object
@@ -8070,12 +8332,26 @@ components:
           type: string
         whatsappBonusPaidMessage:
           type: string
+        whatsappReversedMessage:
+          type: string
         expiryWarning7DaysEnabled:
           type: boolean
         expiryWarning1DayEnabled:
           type: boolean
         bonusReleaseEmailEnabled:
           type: boolean
+        pointsPerReferral:
+          type: integer
+        gracePeriodDays:
+          type: integer
+        bonusValidityDays:
+          type: integer
+        discountExpirationDays:
+          type: integer
+        minPurchaseAmount:
+          type: number
+        maxReferralsPerUser:
+          type: integer
 
     ClientReferralInfo:
       type: object
