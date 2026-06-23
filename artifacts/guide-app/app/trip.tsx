@@ -107,11 +107,12 @@ export default function TripScreen() {
         setTrip(data.trip);
         setPassengers(mergePassengers(data.passengers, data.checkins));
         setIsOffline(false);
-        setCachedAt(null);
         const now = new Date().toISOString();
+        setCachedAt(now);
         AsyncStorage.setItem(cacheKey, JSON.stringify({ data, cachedAt: now })).catch(() => {});
       }
     } catch {
+      setIsOffline(true);
       if (!silent) {
         try {
           const raw = await AsyncStorage.getItem(cacheKey);
@@ -122,13 +123,10 @@ export default function TripScreen() {
             };
             setTrip(data.trip);
             setPassengers(mergePassengers(data.passengers, data.checkins));
-            setIsOffline(true);
             setCachedAt(ts);
           }
         } catch {
         }
-      } else {
-        setIsOffline(true);
       }
     } finally {
       setLoading(false);
