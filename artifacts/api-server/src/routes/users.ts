@@ -40,6 +40,8 @@ router.get("/users/me", async (req, res, next): Promise<void> => {
       req.log.warn({
         sessionId: auth.sessionId ?? null,
         hasAuthHeader: !!req.headers["authorization"],
+        hasSessionCookie: !!req.cookies?.["__session"],
+        sessionClaimsKeys: auth.sessionClaims ? Object.keys(auth.sessionClaims) : null,
         origin: req.headers["origin"] ?? null,
       }, "[auth] getAuth returned null userId on GET /users/me — token missing or rejected");
       next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return;
@@ -111,6 +113,8 @@ router.post("/users/me/sync", async (req, res, next): Promise<void> => {
       req.log.warn({
         sessionId: auth.sessionId ?? null,
         hasAuthHeader: !!req.headers["authorization"],
+        hasSessionCookie: !!req.cookies?.["__session"],
+        sessionClaimsKeys: auth.sessionClaims ? Object.keys(auth.sessionClaims) : null,
         origin: req.headers["origin"] ?? null,
       }, "[auth] getAuth returned null userId on POST /users/me/sync — token missing or rejected");
       next(new AppError("Not authenticated", 401, "UNAUTHENTICATED")); return;
