@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
+import { SkeletonBox } from "@/components/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -259,9 +260,32 @@ export default function ReservasScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
+        scrollEnabled={false}
+      >
+        <View style={styles.section}>
+          <SkeletonBox width={130} height={18} style={{ marginBottom: 10 }} />
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardTitleRow}>
+                  <SkeletonBox width="65%" height={16} />
+                  <SkeletonBox width={70} height={22} borderRadius={6} />
+                </View>
+                <SkeletonBox width="45%" height={13} style={{ marginTop: 4 }} />
+              </View>
+              <View style={[styles.divider, { backgroundColor: colors.border }]} />
+              <View style={styles.metaRow}>
+                <View style={styles.metaItem}><SkeletonBox height={30} /></View>
+                <View style={styles.metaItem}><SkeletonBox height={30} /></View>
+                <View style={styles.metaItem}><SkeletonBox height={30} /></View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     );
   }
 

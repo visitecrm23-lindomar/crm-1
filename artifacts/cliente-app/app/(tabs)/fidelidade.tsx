@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
+import { SkeletonBox } from "@/components/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import {
@@ -157,9 +158,19 @@ export default function FidelidadeScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
+        scrollEnabled={false}
+      >
+        <SkeletonBox height={220} borderRadius={20} />
+        <View style={styles.statsRow}>
+          <SkeletonBox height={70} style={{ flex: 1, borderRadius: 12 }} />
+          <SkeletonBox height={70} style={{ flex: 1, borderRadius: 12 }} />
+          <SkeletonBox height={70} style={{ flex: 1, borderRadius: 12 }} />
+        </View>
+        <SkeletonBox height={200} borderRadius={14} />
+      </ScrollView>
     );
   }
 

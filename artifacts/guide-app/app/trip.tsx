@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { router } from "expo-router";
@@ -55,8 +56,9 @@ interface Passenger {
   customerCode?: string | null;
 }
 
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
 const LOCATION_INTERVAL_MS = 30_000;
+const CACHE_KEY_PREFIX = "guide_trip_cache_";
 
 export default function TripScreen() {
   const { auth, logout } = useAuth();
@@ -71,6 +73,8 @@ export default function TripScreen() {
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth) router.replace("/");
@@ -95,14 +99,37 @@ export default function TripScreen() {
   const fetchData = useCallback(async (silent = false) => {
     if (!auth) return;
     if (!silent) setLoading(true);
+    const cacheKey = `${CACHE_KEY_PREFIX}${auth.tripId}`;
     try {
       const res = await apiFetch(`/api/guide/trip/${auth.tripId}`, auth.token);
       if (res.ok) {
         const data = await res.json() as { trip: TripData; passengers: ApiPassenger[]; checkins: ApiCheckin[] };
         setTrip(data.trip);
         setPassengers(mergePassengers(data.passengers, data.checkins));
+        setIsOffline(false);
+        setCachedAt(null);
+        const now = new Date().toISOString();
+        AsyncStorage.setItem(cacheKey, JSON.stringify({ data, cachedAt: now })).catch(() => {});
       }
     } catch {
+      if (!silent) {
+        try {
+          const raw = await AsyncStorage.getItem(cacheKey);
+          if (raw) {
+            const { data, cachedAt: ts } = JSON.parse(raw) as {
+              data: { trip: TripData; passengers: ApiPassenger[]; checkins: ApiCheckin[] };
+              cachedAt: string;
+            };
+            setTrip(data.trip);
+            setPassengers(mergePassengers(data.passengers, data.checkins));
+            setIsOffline(true);
+            setCachedAt(ts);
+          }
+        } catch {
+        }
+      } else {
+        setIsOffline(true);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -332,6 +359,17 @@ export default function TripScreen() {
         </Pressable>
       </View>
 
+      {isOffline ? (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={14} color="#92400e" />
+          <Text style={styles.offlineBannerText}>
+            {cachedAt
+              ? `Sem conexão — dados de ${new Date(cachedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+              : "Sem conexão com a internet"}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>{checkedCount}</Text>
@@ -414,6 +452,22 @@ export default function TripScreen() {
 }
 
 const styles = StyleSheet.create({
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#fde68a",
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#92400e",
+    flex: 1,
+  },
   center: {
     flex: 1,
     alignItems: "center",
