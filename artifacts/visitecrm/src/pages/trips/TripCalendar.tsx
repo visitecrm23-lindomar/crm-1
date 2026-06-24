@@ -9,13 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ArrowLeft, ChevronLeft, ChevronRight, Edit, Eye } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
+import { TRIP_STATUS } from "@workspace/permissions";
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-200 text-gray-700",
-  active: "bg-green-100 text-green-700",
-  confirmed: "bg-blue-100 text-blue-700",
-  completed: "bg-purple-100 text-purple-700",
-  cancelled: "bg-red-100 text-red-700",
+  [TRIP_STATUS.DRAFT]: "bg-gray-200 text-gray-700",
+  [TRIP_STATUS.ACTIVE]: "bg-green-100 text-green-700",
+  [TRIP_STATUS.CONFIRMED]: "bg-blue-100 text-blue-700",
+  [TRIP_STATUS.COMPLETED]: "bg-purple-100 text-purple-700",
+  [TRIP_STATUS.CANCELLED]: "bg-red-100 text-red-700",
 };
 
 export function TripCalendar() {

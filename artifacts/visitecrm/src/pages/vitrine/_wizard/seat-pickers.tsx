@@ -78,10 +78,6 @@ export function PublicLayoutSeatPicker({
     [seats, selected],
   );
 
-  function formatPrice(price: number) {
-    return formatCurrency(price);
-  }
-
   function SeatCell({ seat }: { seat: PublicSeatEntry }) {
     const isNonSeat = NON_SEAT_TYPES_PUB.includes(seat.type);
     const isOccupied = !isNonSeat && seat.status !== "available";
@@ -153,7 +149,7 @@ export function PublicLayoutSeatPicker({
         {seatPrice != null && !isOccupied && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             <div className="bg-gray-900 text-white text-[10px] font-semibold px-2 py-1 rounded-lg shadow-xl whitespace-nowrap">
-              {formatPrice(seatPrice)}
+              {formatCurrency(seatPrice)}
               {isVip && <span className="ml-1 text-yellow-300">(+10%)</span>}
             </div>
             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 -mt-px" />
@@ -385,7 +381,7 @@ export function PublicLayoutSeatPicker({
                       </div>
                     </div>
                     {price != null && (
-                      <p className="font-bold text-green-600 text-sm">{formatPrice(price)}</p>
+                      <p className="font-bold text-green-600 text-sm">{formatCurrency(price)}</p>
                     )}
                   </motion.div>
                 );
@@ -398,7 +394,7 @@ export function PublicLayoutSeatPicker({
                   Total
                 </span>
                 <span className="text-xl font-bold text-green-600">
-                  {formatPrice(
+                  {formatCurrency(
                     selectedSeatObjects.reduce(
                       (sum, s) => sum + pricePerPerson * (s.type === "vip" ? 1.1 : 1),
                       0,

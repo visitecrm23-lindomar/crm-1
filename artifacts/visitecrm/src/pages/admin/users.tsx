@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useListAdminUsers, useListTenants } from "@workspace/api-client-react";
+import { TENANT_STATUS } from "@workspace/permissions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -136,8 +137,8 @@ export default function AdminUsers() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="text-sm">{user.tenantName ?? "—"}</div>
-                          {user.tenantStatus && user.tenantStatus !== "active" && (
-                            <div className="text-xs text-destructive">{user.tenantStatus === "suspended" ? "Agência suspensa" : user.tenantStatus}</div>
+                          {user.tenantStatus && user.tenantStatus !== TENANT_STATUS.ACTIVE && (
+                            <div className="text-xs text-destructive">{user.tenantStatus === TENANT_STATUS.SUSPENDED ? "Agência suspensa" : user.tenantStatus}</div>
                           )}
                         </td>
                         <td className="px-4 py-3">

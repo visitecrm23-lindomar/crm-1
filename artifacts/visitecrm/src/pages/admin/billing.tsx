@@ -34,17 +34,17 @@ import { getListAdminInvoicesQueryKey } from "@workspace/api-client-react";
 import { formatCurrencyBRL as formatCurrency } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
-  paid: "Pago",
-  pending: "Pendente",
-  overdue: "Vencido",
-  cancelled: "Cancelado",
+  [INVOICE_STATUS.PAID]: "Pago",
+  [INVOICE_STATUS.PENDING]: "Pendente",
+  [INVOICE_STATUS.OVERDUE]: "Vencido",
+  [INVOICE_STATUS.CANCELLED]: "Cancelado",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  paid: "default",
-  pending: "secondary",
-  overdue: "destructive",
-  cancelled: "outline",
+  [INVOICE_STATUS.PAID]: "default",
+  [INVOICE_STATUS.PENDING]: "secondary",
+  [INVOICE_STATUS.OVERDUE]: "destructive",
+  [INVOICE_STATUS.CANCELLED]: "outline",
 };
 
 function formatDate(dateStr: string | null | undefined) {

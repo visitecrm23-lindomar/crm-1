@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/utils";
 import { useGetAdminStats, useGetSystemHealth, getGetSystemHealthQueryKey } from "@workspace/api-client-react";
+import { TENANT_STATUS } from "@workspace/permissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Building2, CheckCircle2, Clock, XCircle, TrendingUp, History } from "lucide-react";
 
@@ -11,26 +12,22 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Ativos",
-  trial: "Em Trial",
-  suspended: "Suspensos",
+  [TENANT_STATUS.ACTIVE]: "Ativos",
+  [TENANT_STATUS.TRIAL]: "Em Trial",
+  [TENANT_STATUS.SUSPENDED]: "Suspensos",
 };
 
 const STATUS_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  active: CheckCircle2,
-  trial: Clock,
-  suspended: XCircle,
+  [TENANT_STATUS.ACTIVE]: CheckCircle2,
+  [TENANT_STATUS.TRIAL]: Clock,
+  [TENANT_STATUS.SUSPENDED]: XCircle,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "text-green-600",
-  trial: "text-amber-600",
-  suspended: "text-red-600",
+  [TENANT_STATUS.ACTIVE]: "text-green-600",
+  [TENANT_STATUS.TRIAL]: "text-amber-600",
+  [TENANT_STATUS.SUSPENDED]: "text-red-600",
 };
-
-function formatMRR(value: number) {
-  return formatCurrency(value);
-}
 
 const REDIS_STATUS_CONFIG = {
   degraded: {
@@ -90,7 +87,7 @@ export default function AdminDashboard() {
     );
   }
 
-  const statusKeys = ["active", "trial", "suspended"];
+  const statusKeys = [TENANT_STATUS.ACTIVE, TENANT_STATUS.TRIAL, TENANT_STATUS.SUSPENDED];
   const planKeys = Object.keys(stats?.byPlan ?? {});
   const redisStatus = systemHealth?.redis?.status;
   const redisAlert = redisStatus && redisStatus !== "ok" ? REDIS_STATUS_CONFIG[redisStatus] : null;
@@ -164,7 +161,7 @@ export default function AdminDashboard() {
             <TrendingUp className="w-4 h-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{formatMRR(stats?.mrr ?? 0)}</div>
+            <div className="text-3xl font-bold text-green-600">{formatCurrency(stats?.mrr ?? 0)}</div>
             <p className="text-xs text-muted-foreground mt-1">Apenas tenants ativos</p>
           </CardContent>
         </Card>

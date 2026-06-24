@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { formatBRL } from "@workspace/shared";
+import { formatBRL, formatBRLPlain } from "@workspace/shared";
 
 const BRAZIL_TZ = "America/Sao_Paulo";
 
@@ -8,15 +8,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(v: number): string {
-  return formatBRL(v);
-}
+export { formatBRL as formatCurrency, formatBRLPlain };
 
 export function formatCurrencyBRL(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "Grátis";
   const num = Number(value);
   if (num === 0) return "Grátis";
-  return formatCurrency(num);
+  return formatBRL(num);
 }
 
 export function formatDate(d: string): string {

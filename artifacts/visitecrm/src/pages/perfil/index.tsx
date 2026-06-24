@@ -3,7 +3,7 @@ import { useLocation, useSearch } from "wouter";
 import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem, type ClubBenefit, type ClubRankingResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
 import { useGetMe } from "@workspace/api-client-react";
-import { RESERVATION_STATUS } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, INVOICE_STATUS } from "@workspace/permissions";
 import { useSignIn, useClerk } from "@clerk/react";
 import {
   AlertDialog,
@@ -67,11 +67,11 @@ import { formatCurrencyBRL as fmtCurrency, formatDateShort } from "@/lib/utils";
 import { formatBRL } from "@workspace/shared";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending:   { label: "Aguardando",  variant: "secondary" },
-  confirmed: { label: "Confirmado",  variant: "default" },
-  completed: { label: "Concluído",   variant: "default" },
-  cancelled: { label: "Cancelado",   variant: "destructive" },
-  processing:{ label: "Processando", variant: "secondary" },
+  [RESERVATION_STATUS.PENDING]:   { label: "Aguardando",  variant: "secondary" },
+  [RESERVATION_STATUS.CONFIRMED]: { label: "Confirmado",  variant: "default" },
+  [RESERVATION_STATUS.COMPLETED]: { label: "Concluído",   variant: "default" },
+  [RESERVATION_STATUS.CANCELLED]: { label: "Cancelado",   variant: "destructive" },
+  [INVOICE_STATUS.PROCESSING]:    { label: "Processando", variant: "secondary" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -1576,10 +1576,10 @@ function DadosTab({ profile, onUpdated }: { profile: ClientPortalProfile; onUpda
 }
 
 const REFERRAL_STATUS_MAP: Record<string, { label: string; color: string; icon: ReactElement | null }> = {
-  pending:   { label: "Pendente",   color: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
-  completed: { label: "Confirmada", color: "bg-green-100 text-green-800",    icon: <CheckCircle className="w-3.5 h-3.5" /> },
-  converted: { label: "Convertida", color: "bg-blue-100 text-blue-800",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
-  expired:   { label: "Expirada",   color: "bg-slate-100 text-slate-500",    icon: <XCircle className="w-3.5 h-3.5" /> },
+  [REFERRAL_STATUS.PENDING]:   { label: "Pendente",   color: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
+  [REFERRAL_STATUS.COMPLETED]: { label: "Confirmada", color: "bg-green-100 text-green-800",    icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  [REFERRAL_STATUS.CONVERTED]: { label: "Convertida", color: "bg-blue-100 text-blue-800",      icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  [REFERRAL_STATUS.EXPIRED]:   { label: "Expirada",   color: "bg-slate-100 text-slate-500",    icon: <XCircle className="w-3.5 h-3.5" /> },
 };
 
 function ReferralStatusBadge({ status }: { status: string }) {

@@ -9,7 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Reservation, PaymentListResponse } from "@workspace/api-client-react";
 import { GetDashboardChartsPeriod } from "@workspace/api-client-react";
-import { PAYMENT_STATUS, PAYMENT_TYPE, ROLES } from "@workspace/permissions";
+import { PAYMENT_STATUS, PAYMENT_TYPE, ROLES, RESERVATION_STATUS } from "@workspace/permissions";
 import { VoucherModal } from "./reservations";
 import { ReservationCardVisual } from "@/components/reservation-card-visual";
 import {
@@ -140,10 +140,10 @@ function KpiCard({ title, value, sub, icon: Icon, loading, color = "text-primary
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Confirmada",
-  pending: "Pendente",
-  cancelled: "Cancelada",
-  completed: "Concluída",
+  [RESERVATION_STATUS.CONFIRMED]: "Confirmada",
+  [RESERVATION_STATUS.PENDING]: "Pendente",
+  [RESERVATION_STATUS.CANCELLED]: "Cancelada",
+  [RESERVATION_STATUS.COMPLETED]: "Concluída",
 };
 
 function SectionTitle({ icon: Icon, title, description }: { icon: ElementType; title: string; description?: string }) {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { TENANT_STATUS, INVOICE_STATUS } from "@workspace/permissions";
 import {
   useGetTenantDetails,
   useListTenantUsers,
@@ -36,15 +37,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetTenantDetailsQueryKey } from "@workspace/api-client-react";
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Ativo",
-  trial: "Trial",
-  suspended: "Suspenso",
+  [TENANT_STATUS.ACTIVE]: "Ativo",
+  [TENANT_STATUS.TRIAL]: "Trial",
+  [TENANT_STATUS.SUSPENDED]: "Suspenso",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  active: "default",
-  trial: "secondary",
-  suspended: "destructive",
+  [TENANT_STATUS.ACTIVE]: "default",
+  [TENANT_STATUS.TRIAL]: "secondary",
+  [TENANT_STATUS.SUSPENDED]: "destructive",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -62,12 +63,13 @@ function formatDate(dateStr: string | null | undefined) {
 }
 
 const STATUS_INVOICE_LABELS: Record<string, string> = {
-  pending: "Pendente",
-  pending_payment: "Aguardando Pgto.",
-  processing: "Processando",
-  paid: "Pago",
-  failed: "Falhou",
-  overdue: "Vencido",
+  [INVOICE_STATUS.PENDING]: "Pendente",
+  [INVOICE_STATUS.PENDING_PAYMENT]: "Aguardando Pgto.",
+  [INVOICE_STATUS.PROCESSING]: "Processando",
+  [INVOICE_STATUS.PAID]: "Pago",
+  [INVOICE_STATUS.FAILED]: "Falhou",
+  [INVOICE_STATUS.OVERDUE]: "Vencido",
+  [INVOICE_STATUS.CANCELLED]: "Cancelado",
   canceled: "Cancelado",
 };
 
@@ -221,7 +223,7 @@ function InfoTab({ tenant }: InfoTabProps) {
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <Badge variant={STATUS_VARIANTS[tenant.status] ?? "outline"}>{STATUS_LABELS[tenant.status] ?? tenant.status}</Badge>
-        {tenant.status !== "suspended" ? (
+        {tenant.status !== TENANT_STATUS.SUSPENDED ? (
           <Button variant="destructive" size="sm" onClick={() => setShowConfirm("suspend")}>
             <AlertTriangle className="w-3.5 h-3.5 mr-1" />
             Suspender

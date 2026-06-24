@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Pencil, Users, ChevronLeft, ChevronRight, ExternalLink, ShieldCheck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDate } from "@/lib/utils";
+import { TENANT_STATUS } from "@workspace/permissions";
 
 const PAGE_SIZE = 15;
 
@@ -36,18 +37,18 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Ativo",
-  trial: "Trial",
-  suspended: "Suspenso",
-  pending_payment: "Pgto. Pendente",
+  [TENANT_STATUS.ACTIVE]: "Ativo",
+  [TENANT_STATUS.TRIAL]: "Trial",
+  [TENANT_STATUS.SUSPENDED]: "Suspenso",
+  [TENANT_STATUS.PENDING_PAYMENT]: "Pgto. Pendente",
   overdue: "Em atraso",
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  active: "default",
-  trial: "secondary",
-  suspended: "destructive",
-  pending_payment: "outline",
+  [TENANT_STATUS.ACTIVE]: "default",
+  [TENANT_STATUS.TRIAL]: "secondary",
+  [TENANT_STATUS.SUSPENDED]: "destructive",
+  [TENANT_STATUS.PENDING_PAYMENT]: "outline",
   overdue: "destructive",
 };
 

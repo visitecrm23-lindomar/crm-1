@@ -45,16 +45,16 @@ import {
 import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
-  confirmed: "Confirmada",
-  pending: "Pendente",
-  cancelled: "Cancelada",
+  [RESERVATION_STATUS.CONFIRMED]: "Confirmada",
+  [RESERVATION_STATUS.PENDING]: "Pendente",
+  [RESERVATION_STATUS.CANCELLED]: "Cancelada",
   waiting: "Aguardando",
 };
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  paid: "Pago",
+  [STORE_PAYMENT_STATUS.PAID]: "Pago",
   partial: "Parcial",
-  pending: "Pendente",
+  [STORE_PAYMENT_STATUS.PENDING]: "Pendente",
   overdue: "Em atraso",
 };
 

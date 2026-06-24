@@ -143,11 +143,11 @@ function fmtWhatsapp(w: string | null | undefined) {
 }
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  pending: { label: "Pendente", variant: "secondary" },
-  completed: { label: "Convertida", variant: "default" },
-  expired: { label: "Expirada", variant: "destructive" },
-  converted: { label: "Convertida", variant: "default" },
-  reversed: { label: "Revertida", variant: "destructive" },
+  [REFERRAL_STATUS.PENDING]: { label: "Pendente", variant: "secondary" },
+  [REFERRAL_STATUS.COMPLETED]: { label: "Convertida", variant: "default" },
+  [REFERRAL_STATUS.EXPIRED]: { label: "Expirada", variant: "destructive" },
+  [REFERRAL_STATUS.CONVERTED]: { label: "Convertida", variant: "default" },
+  [REFERRAL_STATUS.REVERSED]: { label: "Revertida", variant: "destructive" },
 };
 
 function StatusBadge({ status }: { status: string }) {

@@ -961,11 +961,21 @@ function PlanTab() {
           <div className="rounded-md border divide-y text-sm">
             {subData.invoices.map((inv) => {
               const statusLabels: Record<string, string> = {
-                pending: "Pendente", pending_payment: "Aguardando Pgto.", processing: "Processando PIX",
-                paid: "Pago", failed: "Falhou", overdue: "Vencido", canceled: "Cancelado",
+                [INVOICE_STATUS.PENDING]: "Pendente",
+                [INVOICE_STATUS.PENDING_PAYMENT]: "Aguardando Pgto.",
+                [INVOICE_STATUS.PROCESSING]: "Processando PIX",
+                [INVOICE_STATUS.PAID]: "Pago",
+                [INVOICE_STATUS.FAILED]: "Falhou",
+                [INVOICE_STATUS.OVERDUE]: "Vencido",
+                [INVOICE_STATUS.CANCELLED]: "Cancelado",
+                canceled: "Cancelado",
               };
               const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-                paid: "default", failed: "destructive", overdue: "destructive", canceled: "outline",
+                [INVOICE_STATUS.PAID]: "default",
+                [INVOICE_STATUS.FAILED]: "destructive",
+                [INVOICE_STATUS.OVERDUE]: "destructive",
+                [INVOICE_STATUS.CANCELLED]: "outline",
+                canceled: "outline",
               };
               return (
                 <div key={inv.id} className="flex items-center gap-3 px-4 py-3">

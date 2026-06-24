@@ -209,10 +209,6 @@ export default function AdminPlans() {
     }
   }
 
-  function formatPrice(price: string) {
-    return formatCurrency(Number(price));
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -259,8 +255,8 @@ export default function AdminPlans() {
                         </div>
                         <div className="text-xs text-muted-foreground">{plan.slug}</div>
                       </td>
-                      <td className="px-4 py-3">{formatPrice(plan.monthlyPrice)}/mês</td>
-                      <td className="px-4 py-3">{formatPrice(plan.annualPrice)}/ano</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(plan.monthlyPrice))}/mês</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(plan.annualPrice))}/ano</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {plan.maxUsers} usuários · {plan.maxClients} clientes · {plan.maxTrips} viagens
                       </td>

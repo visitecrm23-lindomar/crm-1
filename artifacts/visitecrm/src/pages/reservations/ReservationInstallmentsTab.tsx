@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { fmt } from "./constants";
+import { PAYMENT_STATUS } from "@workspace/permissions";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -22,21 +23,21 @@ interface Installment {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  paid: "bg-green-100 text-green-700 border-green-200",
-  overdue: "bg-red-100 text-red-700 border-red-200",
-  pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  [PAYMENT_STATUS.PAID]: "bg-green-100 text-green-700 border-green-200",
+  [PAYMENT_STATUS.OVERDUE]: "bg-red-100 text-red-700 border-red-200",
+  [PAYMENT_STATUS.PENDING]: "bg-yellow-100 text-yellow-700 border-yellow-200",
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  paid: "Pago",
-  overdue: "Vencido",
-  pending: "Pendente",
+  [PAYMENT_STATUS.PAID]: "Pago",
+  [PAYMENT_STATUS.OVERDUE]: "Vencido",
+  [PAYMENT_STATUS.PENDING]: "Pendente",
 };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
-  paid: <CheckCircle className="w-3 h-3 mr-1" />,
-  overdue: <AlertCircle className="w-3 h-3 mr-1" />,
-  pending: <Clock className="w-3 h-3 mr-1" />,
+  [PAYMENT_STATUS.PAID]: <CheckCircle className="w-3 h-3 mr-1" />,
+  [PAYMENT_STATUS.OVERDUE]: <AlertCircle className="w-3 h-3 mr-1" />,
+  [PAYMENT_STATUS.PENDING]: <Clock className="w-3 h-3 mr-1" />,
 };
 
 function toDateInputValue(isoStr: string) {

@@ -513,10 +513,10 @@ function ClientReferralTab({ clientId }: { clientId: string }) {
   }
 
   const STATUS_COLORS: Record<string, string> = {
-    pending: "text-yellow-600",
-    completed: "text-green-600",
-    expired: "text-red-500",
-    converted: "text-green-600",
+    [REFERRAL_STATUS.PENDING]: "text-yellow-600",
+    [REFERRAL_STATUS.COMPLETED]: "text-green-600",
+    [REFERRAL_STATUS.EXPIRED]: "text-red-500",
+    [REFERRAL_STATUS.CONVERTED]: "text-green-600",
   };
 
   return (
