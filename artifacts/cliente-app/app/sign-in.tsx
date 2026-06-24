@@ -34,7 +34,7 @@ export default function SignInScreen() {
 
   useEffect(() => {
     if (isSignedIn) {
-      router.replace("/(tabs)/reservas");
+      router.replace("/(tabs)");
     }
   }, [isSignedIn]);
 

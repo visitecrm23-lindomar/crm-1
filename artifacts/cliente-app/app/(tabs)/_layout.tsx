@@ -12,6 +12,10 @@ import { useColors } from "@/hooks/useColors";
 function NativeTabLayout() {
   return (
     <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Icon sf={{ default: "house", selected: "house.fill" }} />
+        <Label>Início</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reservas">
         <Icon sf={{ default: "calendar", selected: "calendar.circle.fill" }} />
         <Label>Reservas</Label>
@@ -71,6 +75,20 @@ function ClassicTabLayout() {
         headerShadowVisible: false,
       }}
     >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Início",
+          tabBarLabel: "Início",
+          headerShown: false,
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="house.fill" tintColor={color} size={24} />
+            ) : (
+              <Feather name="home" size={22} color={color} />
+            ),
+        }}
+      />
       <Tabs.Screen
         name="reservas"
         options={{

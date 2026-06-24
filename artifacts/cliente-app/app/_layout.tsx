@@ -110,7 +110,7 @@ function AuthGate() {
       .then(async (tok) => {
         await apiFetch<ClientPortalProfile>(tok, "GET", "/client/me");
         setRoleStatus("ok");
-        router.replace("/(tabs)/reservas");
+        router.replace("/(tabs)");
         if (tok) {
           registerPushToken(tok);
         }
