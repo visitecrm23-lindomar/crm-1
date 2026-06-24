@@ -17,19 +17,54 @@ const app: Express = express();
 app.set("trust proxy", 1);
 
 // ── HTTP Security Headers ──────────────────────────────────────────────────
-// helmet sets X-Content-Type-Options, X-Frame-Options, Referrer-Policy,
-// X-DNS-Prefetch-Control, X-Download-Options, and several other protective
-// headers automatically. We disable contentSecurityPolicy here because Clerk
-// injects scripts from its own CDN with dynamic nonces — configuring CSP
-// safely requires per-request nonce injection, which is a separate effort.
-// crossOriginEmbedderPolicy is also disabled to avoid blocking cross-origin
-// resources loaded by Clerk and UploadThing widgets.
+// helmet applies X-Content-Type-Options, X-Frame-Options, Referrer-Policy,
+// X-DNS-Prefetch-Control, X-Download-Options, HSTS and CSP.
+//
+// CSP notes:
+//  - script-src allows Clerk (*.clerk.com, *.clerk.accounts.dev), Cloudflare
+//    Turnstile (challenges.cloudflare.com), and Stripe.js (js.stripe.com).
+//    No 'unsafe-inline' or 'unsafe-eval' → unauthorized inline scripts blocked.
+//  - style-src includes 'unsafe-inline' because Clerk and Radix inject styles
+//    at runtime without nonces. Removing it would require per-request nonce
+//    injection — tracked as a future improvement.
+//  - connect-src covers the Clerk backend API, UploadThing CDN (ufs.sh / utfs.io),
+//    and Stripe API.
+//  - frame-ancestors 'none' makes the X-Frame-Options: DENY belt-and-suspenders.
+//  - crossOriginEmbedderPolicy is disabled to avoid blocking Clerk and
+//    UploadThing cross-origin widgets.
 app.use(
   helmet({
-    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
     xFrameOptions: { action: "deny" },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "https://*.clerk.com",
+          "https://*.clerk.accounts.dev",
+          "https://challenges.cloudflare.com",
+          "https://js.stripe.com",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://*.clerk.com",
+          "https://*.clerk.accounts.dev",
+          "https://uploadthing.com",
+          "https://*.ufs.sh",
+          "https://utfs.io",
+          "https://api.stripe.com",
+        ],
+        frameSrc: ["'self'", "https://challenges.cloudflare.com"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
   }),
 );
 
