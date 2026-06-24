@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import path from "node:path";
@@ -14,6 +15,33 @@ import { handleStripeWebhook } from "./lib/stripeWebhookHandler";
 const app: Express = express();
 
 app.set("trust proxy", 1);
+
+// ── HTTP Security Headers ──────────────────────────────────────────────────
+// helmet sets X-Content-Type-Options, X-Frame-Options, Referrer-Policy,
+// X-DNS-Prefetch-Control, X-Download-Options, and several other protective
+// headers automatically. We disable contentSecurityPolicy here because Clerk
+// injects scripts from its own CDN with dynamic nonces — configuring CSP
+// safely requires per-request nonce injection, which is a separate effort.
+// crossOriginEmbedderPolicy is also disabled to avoid blocking cross-origin
+// resources loaded by Clerk and UploadThing widgets.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    xFrameOptions: { action: "deny" },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
+// Permissions-Policy: disable hardware sensors that this API never uses.
+// Helmet 8 doesn't ship a permissionsPolicy module, so we set it manually.
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=()",
+  );
+  next();
+});
 
 app.use(requestId);
 app.use(
