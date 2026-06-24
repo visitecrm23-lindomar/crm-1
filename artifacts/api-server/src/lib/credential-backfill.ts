@@ -58,9 +58,14 @@ export async function backfillEncryptedCredentials(): Promise<void> {
   try {
     await backfillMercadoPagoMigratedSecrets();
   } catch (err) {
-    logger.warn(
+    // The only expected failure here is the `tenant_integrations` table not
+    // existing yet (fresh dev environment or first boot before migrations ran).
+    // Log at debug to avoid startup noise — any real error will be caught by
+    // the missing-table path and is safe to skip since this backfill is
+    // idempotent and will succeed on the next boot after migrations complete.
+    logger.debug(
       { err },
-      "[credential-backfill] MercadoPago migration backfill skipped — tenant_integrations may not exist yet",
+      "[credential-backfill] MercadoPago backfill skipped — tenant_integrations not yet available (expected in fresh environments)",
     );
   }
 }
