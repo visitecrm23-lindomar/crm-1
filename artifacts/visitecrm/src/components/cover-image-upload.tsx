@@ -2,13 +2,10 @@ import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
-import { useUploadThing } from "@/lib/uploadthing";
-import type { OurFileRouter } from "@/lib/uploadthing";
-
-type SingleImageEndpoint = Exclude<keyof OurFileRouter, "tripGalleryImages">;
+import { useUploadImage } from "@/hooks/use-upload";
 
 interface CoverImageUploadProps {
-  endpoint?: SingleImageEndpoint;
+  endpoint?: string;
   value: string;
   onChange: (url: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
@@ -20,7 +17,7 @@ interface CoverImageUploadProps {
 }
 
 export function CoverImageUpload({
-  endpoint = "tripCoverImage",
+  endpoint,
   value,
   onChange,
   onUploadingChange,
@@ -34,21 +31,19 @@ export function CoverImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const { startUpload, isUploading } = useUploadThing(endpoint, {
-    onUploadBegin: () => onUploadingChange?.(true),
-    onClientUploadComplete: (res) => {
+  const { startUpload, isUploading } = useUploadImage({
+    onBegin: () => onUploadingChange?.(true),
+    onComplete: (result) => {
       onUploadingChange?.(false);
-      if (res?.[0]) {
-        onChange(res[0].ufsUrl ?? res[0].url);
-      }
+      onChange(result.url);
     },
-    onUploadError: (err) => {
+    onError: (err) => {
       onUploadingChange?.(false);
       toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
     },
   });
 
-  const upload = (file: File) => startUpload([file]);
+  const upload = (file: File) => startUpload(file);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,6 +76,8 @@ export function CoverImageUpload({
   const handleRemove = () => onChange("");
 
   const labelText = emptyLabel ?? placeholder ?? "Clique ou arraste a imagem aqui";
+
+  const isSmallEndpoint = endpoint === "storeLogo" || endpoint === "agencyLogo";
 
   return (
     <div className="space-y-3">
@@ -166,7 +163,7 @@ export function CoverImageUpload({
                 {labelText}
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. {endpoint === "storeLogo" || endpoint === "agencyLogo" ? "2 MB" : "4 MB"}
+                PNG, JPG, WEBP · máx. {isSmallEndpoint ? "2 MB" : "8 MB"}
               </span>
             </>
           )}
