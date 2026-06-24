@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { uploadthingRouter } from "./uploadthing";
+import uploadRouter from "./upload";
 import healthRouter from "./health";
 import usersRouter from "./users";
 import clientsRouter from "./clients";
@@ -112,5 +113,6 @@ router.use(gemeoRouter);
 router.use(webhooksRouter);
 router.use(npsPublicRouter);
 router.use("/uploadthing", uploadthingRouter);
+router.use("/upload", uploadRouter);
 
 export default router;

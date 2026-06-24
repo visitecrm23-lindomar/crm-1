@@ -2,15 +2,14 @@ import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Images } from "lucide-react";
-import { useUploadThing } from "@/lib/uploadthing";
-import type { OurFileRouter } from "@/lib/uploadthing";
+import { useUploadImages } from "@/hooks/use-upload";
 
 interface GalleryUploadProps {
   value: string[];
   onChange: (urls: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
-  endpoint?: keyof OurFileRouter;
+  endpoint?: string;
   maxImages?: number;
   fileSizeMB?: string;
 }
@@ -30,18 +29,15 @@ export function GalleryUpload({
 
   const canAdd = value.length < maxImages;
 
-  const { startUpload, isUploading } = useUploadThing(endpoint, {
-    onUploadBegin: () => onUploadingChange?.(true),
-    onClientUploadComplete: (res) => {
+  const { startUpload, isUploading } = useUploadImages({
+    onBegin: () => onUploadingChange?.(true),
+    onComplete: (urls) => {
       onUploadingChange?.(false);
-      if (res?.length) {
-        const newUrls = res.map((r) => r.ufsUrl ?? r.url);
-        onChange([...value, ...newUrls].slice(0, maxImages));
-      }
+      onChange([...value, ...urls].slice(0, maxImages));
     },
-    onUploadError: (err) => {
+    onError: (msg) => {
       onUploadingChange?.(false);
-      toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
+      toast({ title: `Erro no upload: ${msg}`, variant: "destructive" });
     },
   });
 

@@ -162,12 +162,15 @@ const CLERK_BYPASS_PATHS = new Set([
   "/api/health",
   "/api/healthz",
   "/api/health/auth",
-  // UploadThing CDN posts completion callbacks here without a user session.
-  // The SDK verifies the request via x-uploadthing-signature internally.
-  "/api/uploadthing",
 ]);
 
 app.use((req, res, next) => {
+  // UploadThing CDN callbacks carry no user session — bypass Clerk only for
+  // actionType=callback. All other /api/uploadthing requests (actionType=upload,
+  // etc.) need Clerk running so that getAuth(req) works inside the route middleware.
+  if (req.path === "/api/uploadthing" && req.query["actionType"] === "callback") {
+    return next();
+  }
   if (CLERK_BYPASS_PATHS.has(req.path)) {
     return next();
   }
