@@ -2,10 +2,13 @@ import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
-import { useUploadImage } from "@/hooks/use-upload";
+import { useUploadThing } from "@/lib/uploadthing";
+import type { OurFileRouter } from "@/lib/uploadthing";
+
+type SingleImageEndpoint = Exclude<keyof OurFileRouter, "tripGalleryImages">;
 
 interface CoverImageUploadProps {
-  endpoint?: string;
+  endpoint?: SingleImageEndpoint;
   value: string;
   onChange: (url: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
@@ -31,15 +34,17 @@ export function CoverImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const { startUpload, isUploading } = useUploadImage({
-    onBegin: () => onUploadingChange?.(true),
-    onComplete: (url) => {
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
+    onUploadBegin: () => onUploadingChange?.(true),
+    onClientUploadComplete: (res) => {
       onUploadingChange?.(false);
-      onChange(url);
+      if (res?.[0]) {
+        onChange(res[0].ufsUrl ?? res[0].url);
+      }
     },
-    onError: (msg) => {
+    onUploadError: (err) => {
       onUploadingChange?.(false);
-      toast({ title: `Erro no upload: ${msg}`, variant: "destructive" });
+      toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
     },
   });
 
