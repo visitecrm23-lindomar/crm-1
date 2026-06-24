@@ -75,10 +75,16 @@ function permanentError(errorCode: string): Error {
   return err;
 }
 
+function networkError(code: string, message?: string): Error {
+  const err = new Error(message ?? code);
+  (err as unknown as { code: string }).code = code;
+  return err;
+}
+
 // ── isTransientCalendarError ─────────────────────────────────────────────────
 
 describe("isTransientCalendarError", () => {
-  it.each([429, 500, 502, 503, 504])("returns true for status %d", (status) => {
+  it.each([429, 500, 502, 503, 504])("returns true for HTTP status %d", (status) => {
     expect(isTransientCalendarError(transientError(status))).toBe(true);
   });
 
@@ -92,6 +98,25 @@ describe("isTransientCalendarError", () => {
 
   it("returns true for rate limit message", () => {
     expect(isTransientCalendarError(new Error("Rate limit exceeded"))).toBe(true);
+  });
+
+  it.each(["ETIMEDOUT", "ECONNRESET", "ECONNABORTED", "EAI_AGAIN", "EPIPE"])(
+    "returns true for Node.js network code %s",
+    (code) => {
+      expect(isTransientCalendarError(networkError(code))).toBe(true);
+    },
+  );
+
+  it("returns true for timeout message", () => {
+    expect(isTransientCalendarError(new Error("Request timeout after 30000ms"))).toBe(true);
+  });
+
+  it("returns true for socket hang up message", () => {
+    expect(isTransientCalendarError(new Error("socket hang up"))).toBe(true);
+  });
+
+  it("returns false for a generic non-network error", () => {
+    expect(isTransientCalendarError(new Error("Something unexpected"))).toBe(false);
   });
 });
 
@@ -271,6 +296,47 @@ describe("GoogleCalendarService.deleteEvent", () => {
     mockEventsDelete.mockRejectedValue(permanentError("invalid_grant"));
     const svc = makeService();
     await expect(svc.deleteEvent("evt-123")).resolves.toBe(false);
+  });
+});
+
+// ── timeout/network errors — re-thrown for retry ─────────────────────────────
+
+describe("GoogleCalendarService — timeout/network errors are re-thrown for retry", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("createEvent: re-throws ETIMEDOUT so withCalendarRetry can retry", async () => {
+    mockEventsInsert.mockRejectedValue(networkError("ETIMEDOUT", "connect ETIMEDOUT 74.125.131.101:443"));
+    const svc = makeService();
+    await expect(svc.createEvent({ summary: "Test", startDateTime: new Date() })).rejects.toMatchObject({
+      message: expect.stringContaining("ETIMEDOUT"),
+    });
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it("createEvent: re-throws socket hang up error for retry", async () => {
+    mockEventsInsert.mockRejectedValue(new Error("socket hang up"));
+    const svc = makeService();
+    await expect(svc.createEvent({ summary: "Test", startDateTime: new Date() })).rejects.toMatchObject({
+      message: "socket hang up",
+    });
+  });
+
+  it("updateEvent: re-throws ECONNRESET for retry", async () => {
+    mockEventsPatch.mockRejectedValue(networkError("ECONNRESET"));
+    const svc = makeService();
+    await expect(svc.updateEvent("evt-123", {})).rejects.toMatchObject({
+      message: "ECONNRESET",
+    });
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it("withCalendarRetry retries on ETIMEDOUT and succeeds on next attempt", async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(networkError("ETIMEDOUT", "connect ETIMEDOUT"))
+      .mockResolvedValue("ok");
+    await expect(withCalendarRetry(fn, 4, FAST)).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
   });
 });
 

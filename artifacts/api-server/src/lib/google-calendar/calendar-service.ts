@@ -26,14 +26,28 @@ export function isEventNotFoundError(err: unknown): boolean {
   return status === 404;
 }
 
+/** Node.js error codes that indicate a transient network/transport failure. */
+const TRANSIENT_NODE_CODES = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNABORTED", "ECONNREFUSED",
+  "EAI_AGAIN", "ENETUNREACH", "EPIPE", "EHOSTUNREACH",
+]);
+
 export function isTransientCalendarError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const anyErr = err as { code?: number | string; response?: { status?: number }; message?: string };
-  const status = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
-  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  const httpStatus = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
+  if (httpStatus === 429 || httpStatus === 500 || httpStatus === 502 || httpStatus === 503 || httpStatus === 504) return true;
+  // Node.js transport-level errors (ETIMEDOUT, ECONNRESET, etc.)
+  if (typeof anyErr.code === "string" && TRANSIENT_NODE_CODES.has(anyErr.code)) return true;
   if (typeof anyErr.message === "string") {
     const m = anyErr.message.toLowerCase();
-    if (m.includes("rate limit") || m.includes("quota") || m.includes("too many requests") || m.includes("backend error") || m.includes("internal error")) return true;
+    if (
+      m.includes("rate limit") || m.includes("quota") ||
+      m.includes("too many requests") || m.includes("backend error") ||
+      m.includes("internal error") || m.includes("timeout") ||
+      m.includes("socket hang up") || m.includes("etimedout") ||
+      m.includes("econnreset") || m.includes("econnaborted")
+    ) return true;
   }
   return false;
 }
