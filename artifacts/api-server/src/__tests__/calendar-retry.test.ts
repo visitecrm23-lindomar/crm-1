@@ -10,9 +10,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── mock googleapis before importing the service ───────────────────────────
 
-const mockEventsInsert = vi.fn();
-const mockEventsPatch = vi.fn();
-const mockEventsDelete = vi.fn();
+const { mockEventsInsert, mockEventsPatch, mockEventsDelete, mockDbUpdate } = vi.hoisted(() => {
+  const mockDbUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) }));
+  return {
+    mockEventsInsert: vi.fn(),
+    mockEventsPatch: vi.fn(),
+    mockEventsDelete: vi.fn(),
+    mockDbUpdate,
+  };
+});
+
 const mockCalendar = {
   events: {
     insert: mockEventsInsert,
@@ -31,7 +38,7 @@ vi.mock("googleapis", () => ({
 vi.mock("@workspace/db", () => ({
   db: {
     select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })) })) })),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+    update: mockDbUpdate,
   },
   usersTable: {},
 }));
@@ -234,5 +241,77 @@ describe("GoogleCalendarService.deleteEvent", () => {
     mockEventsDelete.mockRejectedValue(permanentError("invalid_grant"));
     const svc = makeService();
     await expect(svc.deleteEvent("evt-123")).resolves.toBe(false);
+  });
+});
+
+// ── auth error → marks connection invalid, no retry ──────────────────────────
+
+describe("GoogleCalendarService — auth error marks invalid without retry", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("createEvent: calls db.update to mark invalid on 401 invalid_grant", async () => {
+    mockEventsInsert.mockRejectedValue(permanentError("invalid_grant"));
+    const svc = makeService();
+    const result = await svc.createEvent({ summary: "Test", startDateTime: new Date() });
+    expect(result).toBeNull();
+    expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEventsInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("createEvent: does NOT call db.update on 429 transient error — should re-throw", async () => {
+    mockEventsInsert.mockRejectedValue(transientError(429));
+    const svc = makeService();
+    await expect(svc.createEvent({ summary: "Test", startDateTime: new Date() })).rejects.toMatchObject({
+      message: "HTTP 429",
+    });
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it("updateEvent: calls db.update to mark invalid on 401 invalid_grant", async () => {
+    mockEventsPatch.mockRejectedValue(permanentError("invalid_grant"));
+    const svc = makeService();
+    const result = await svc.updateEvent("evt-123", { summary: "Updated" });
+    expect(result).toBe(false);
+    expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEventsPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("updateEvent: does NOT call db.update on 500 transient error — should re-throw", async () => {
+    mockEventsPatch.mockRejectedValue(transientError(500));
+    const svc = makeService();
+    await expect(svc.updateEvent("evt-123", {})).rejects.toMatchObject({ message: "HTTP 500" });
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ── withCalendarRetry — structured logging ────────────────────────────────────
+
+describe("withCalendarRetry — structured logging", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("logs a warning on transient retry and info on success", async () => {
+    const { logger } = await import("../lib/logger");
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(transientError(429))
+      .mockResolvedValue("ok");
+
+    await expect(withCalendarRetry(fn, 3)).resolves.toBe("ok");
+
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, maxAttempts: 3 }),
+      expect.stringContaining("retrying after backoff"),
+    );
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 2, maxAttempts: 3 }),
+      expect.stringContaining("retry succeeded"),
+    );
+  });
+
+  it("does NOT log a warning when first attempt succeeds", async () => {
+    const { logger } = await import("../lib/logger");
+    const fn = vi.fn().mockResolvedValue("ok");
+    await withCalendarRetry(fn, 3);
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, useGetCalendarStatus, getGetCalendarStatusQueryKey } from "@workspace/api-client-react";
 import { ROLES } from "@workspace/permissions";
 import { AlertsBell } from "./alerts-bell";
 import {
+  AlertCircle,
   LayoutDashboard,
   Users,
   Map,
@@ -52,6 +53,35 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+
+const CALENDAR_CAN_CONNECT_ROLES: string[] = [ROLES.AGENCY_ADMIN, ROLES.SALES, ROLES.SUPER_ADMIN];
+
+function GoogleCalendarExpiryBanner({ userRole }: { userRole?: string }) {
+  const enabled = !!userRole && CALENDAR_CAN_CONNECT_ROLES.includes(userRole);
+  const { data: status } = useGetCalendarStatus({
+    query: { enabled, queryKey: getGetCalendarStatusQueryKey(), staleTime: 60_000 },
+  });
+
+  if (!enabled || status?.status !== "invalid") return null;
+
+  return (
+    <div className="flex items-center gap-3 bg-amber-50 border-b border-amber-200 px-6 py-2 text-sm text-amber-800 shrink-0">
+      <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+      <span className="flex-1">
+        Sua integração com o Google Calendar expirou. A sincronização automática está pausada.
+      </span>
+      <Link href="/configuracoes?tab=integrations">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 hover:border-amber-400"
+        >
+          Reconectar
+        </Button>
+      </Link>
+    </div>
+  );
+}
 
 interface NavItem {
   name: string;
@@ -368,6 +398,8 @@ export default function Layout({ children }: { children: ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
+
+        <GoogleCalendarExpiryBanner userRole={userRole} />
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-6">{children}</main>

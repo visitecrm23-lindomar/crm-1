@@ -45,11 +45,19 @@ export async function withCalendarRetry<T>(
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fn();
+      const result = await fn();
+      if (attempt > 1) {
+        logger.info({ attempt, maxAttempts }, "google-calendar: retry succeeded");
+      }
+      return result;
     } catch (err) {
       lastErr = err;
       if (!isTransientCalendarError(err) || attempt === maxAttempts) throw err;
       const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      logger.warn(
+        { attempt, maxAttempts, delayMs, errMessage: (err as Error)?.message },
+        "google-calendar: transient error — retrying after backoff",
+      );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
