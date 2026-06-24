@@ -24,3 +24,7 @@ export { ReferralWelcomeEmail } from './templates/referral-welcome';
 export type { ReferralWelcomeEmailProps as ReferralWelcomeEmailTemplateProps } from './templates/referral-welcome';
 export { sendReferralCodeSuspendedEmail } from './service';
 export type { SendReferralCodeSuspendedEmailProps } from './service';
+export { sendAgencySuspendedEmail, sendAgencyReactivatedEmail } from './service';
+export type { AgencySuspendedEmailProps, AgencyReactivatedEmailProps } from './service';
+export { AgencySuspendedEmail } from './templates/agency-suspended';
+export { AgencyReactivatedEmail } from './templates/agency-reactivated';

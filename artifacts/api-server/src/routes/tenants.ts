@@ -7,6 +7,7 @@ import { requireAuth } from "../lib/tenant";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { deleteOrphanedFile } from "../lib/uploadthing";
 import { ROLES } from "@workspace/permissions";
+import { enqueueAgencySuspendedEmail, enqueueAgencyReactivatedEmail } from "../queues/email-helpers";
 import { canEnableFeature, getFeatureLabel, getFeatureRequiredPlanLabel, hasSeatMapFeature } from "../lib/plan-features";
 
 const router = Router();
@@ -168,7 +169,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
       }
       updateData.reservationPrefix = rawPrefix || null;
     }
-    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl, planId: tenantsTable.planId, prefixLocked: tenantsTable.prefixLocked }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
+    const [existing] = await db.select({ settings: tenantsTable.settings, logoUrl: tenantsTable.logoUrl, planId: tenantsTable.planId, prefixLocked: tenantsTable.prefixLocked, status: tenantsTable.status, email: tenantsTable.email }).from(tenantsTable).where(eq(tenantsTable.id, req.params.id)).limit(1);
     if (updateData.reservationPrefix != null && existing?.prefixLocked) {
       next(new AppError("O prefixo de identificação já foi definido e não pode ser alterado", 422, "PREFIX_LOCKED"));
       return;
@@ -225,6 +226,21 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
       await deleteOrphanedFile(oldLogoUrl, parsed.data.logoUrl, req.log, req.params.id);
     }
     res.json(tenant);
+
+    // Fire-and-forget status-change emails (after response so latency is not affected)
+    if (isSuperadmin && typeof updateData.status === "string" && existing && updateData.status !== existing.status) {
+      const newStatus = updateData.status;
+      const tenantId = req.params.id;
+      if (newStatus === "suspended") {
+        enqueueAgencySuspendedEmail(tenantId, null).catch((err) => {
+          req.log.error({ err, tenantId }, "[tenants] failed to send agency-suspended email");
+        });
+      } else if (newStatus === "active" && existing.status === "suspended") {
+        enqueueAgencyReactivatedEmail(tenantId).catch((err) => {
+          req.log.error({ err, tenantId }, "[tenants] failed to send agency-reactivated email");
+        });
+      }
+    }
   } catch (err) {
     next(err);
   }

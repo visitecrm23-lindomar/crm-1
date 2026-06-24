@@ -13,7 +13,10 @@ import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from
 import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
 import { ReferralTierUpgradeEmail, type ReferralTierUpgradeEmailProps } from './templates/referral-tier-upgrade';
 import { NpsSurveyEmail, type NpsSurveyEmailProps } from './templates/nps-survey';
+import { AgencySuspendedEmail, type AgencySuspendedEmailProps } from './templates/agency-suspended';
+import { AgencyReactivatedEmail, type AgencyReactivatedEmailProps } from './templates/agency-reactivated';
 export type { ReferralWelcomeEmailProps };
+export type { AgencySuspendedEmailProps, AgencyReactivatedEmailProps };
 export type { ReferralTierUpgradeEmailProps };
 
 export type { ReservationCancellationEmailProps };
@@ -846,3 +849,61 @@ export async function sendNpsSurveyEmail(props: NpsSurveyEmailProps): Promise<Se
 }
 
 export type { NpsSurveyEmailProps };
+
+export async function sendAgencySuspendedEmail(
+  props: AgencySuspendedEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: 'VisiteCRM <noreply@resend.visitecrm.com>',
+      to: [props.agencyEmail],
+      subject: `[${props.platformName ?? 'VisiteCRM'}] Conta Suspensa — Ação Necessária`,
+      react: React.createElement(AgencySuspendedEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send agency-suspended email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending agency-suspended email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendAgencyReactivatedEmail(
+  props: AgencyReactivatedEmailProps & { agencyEmail: string }
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: 'VisiteCRM <noreply@resend.visitecrm.com>',
+      to: [props.agencyEmail],
+      subject: `[${props.platformName ?? 'VisiteCRM'}] Conta Reativada — Acesso Restaurado`,
+      react: React.createElement(AgencyReactivatedEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send agency-reactivated email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending agency-reactivated email:', message);
+    return { success: false, error: message };
+  }
+}

@@ -3,7 +3,7 @@ import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
 import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail } from "@workspace/email";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail, sendAgencySuspendedEmail, sendAgencyReactivatedEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { formatBRL } from "@workspace/shared";
 import { logger } from "../lib/logger";
@@ -1594,4 +1594,101 @@ export async function dispatchReferralCodeSuspendedEmail(opts: {
   );
 
   return sendResult.success;
+}
+
+// ── Agency lifecycle notifications (suspension / reactivation) ────────────────
+
+/**
+ * Sends an e-mail to the agency's primary contact informing them their account
+ * has been suspended by a superadmin. Fire-and-forget (no BullMQ queue needed
+ * for infrequent admin actions; logs outcome to email_logs for auditability).
+ */
+export async function enqueueAgencySuspendedEmail(
+  tenantId: string,
+  reason?: string | null,
+): Promise<void> {
+  const [row] = await db
+    .select({
+      agencyName: tenantsTable.name,
+      agencyEmail: tenantsTable.email,
+    })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  if (!row?.agencyEmail) {
+    logger.warn({ tenantId }, "[email-queue] agency-suspended: tenant has no email — skipping");
+    return;
+  }
+
+  const emailLogId = generateId();
+  const subject = "[VisiteCRM] Conta Suspensa — Ação Necessária";
+
+  const sendResult = await sendAgencySuspendedEmail({
+    agencyName: row.agencyName,
+    agencyEmail: row.agencyEmail,
+    reason: reason ?? null,
+  });
+
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: row.agencyEmail,
+    subject,
+    status: sendResult.success ? "sent" : "failed",
+    messageId: sendResult.messageId ?? null,
+    errorMessage: sendResult.error ?? null,
+  });
+
+  logger.info(
+    { emailLogId, tenantId, success: sendResult.success },
+    "[email-queue] agency-suspended email dispatched",
+  );
+}
+
+/**
+ * Sends an e-mail to the agency's primary contact informing them their account
+ * has been reactivated by a superadmin.
+ */
+export async function enqueueAgencyReactivatedEmail(tenantId: string): Promise<void> {
+  const [row] = await db
+    .select({
+      agencyName: tenantsTable.name,
+      agencyEmail: tenantsTable.email,
+    })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  if (!row?.agencyEmail) {
+    logger.warn({ tenantId }, "[email-queue] agency-reactivated: tenant has no email — skipping");
+    return;
+  }
+
+  const emailLogId = generateId();
+  const subject = "[VisiteCRM] Conta Reativada — Acesso Restaurado";
+  const loginUrl = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
+
+  const sendResult = await sendAgencyReactivatedEmail({
+    agencyName: row.agencyName,
+    agencyEmail: row.agencyEmail,
+    loginUrl,
+  });
+
+  await db.insert(emailLogsTable).values({
+    id: emailLogId,
+    tenantId,
+    reservationId: null,
+    recipient: row.agencyEmail,
+    subject,
+    status: sendResult.success ? "sent" : "failed",
+    messageId: sendResult.messageId ?? null,
+    errorMessage: sendResult.error ?? null,
+  });
+
+  logger.info(
+    { emailLogId, tenantId, success: sendResult.success },
+    "[email-queue] agency-reactivated email dispatched",
+  );
 }
