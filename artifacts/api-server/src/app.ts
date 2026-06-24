@@ -162,6 +162,9 @@ const CLERK_BYPASS_PATHS = new Set([
   "/api/health",
   "/api/healthz",
   "/api/health/auth",
+  // UploadThing CDN posts completion callbacks here without a user session.
+  // The SDK verifies the request via x-uploadthing-signature internally.
+  "/api/uploadthing",
 ]);
 
 app.use((req, res, next) => {

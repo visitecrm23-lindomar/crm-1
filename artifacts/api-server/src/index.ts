@@ -1,3 +1,11 @@
+// Force IPv4 for all outbound DNS lookups. In Replit's production container,
+// IPv6 connectivity is limited — without this, outbound HTTPS connections to
+// services like sea1.ingest.uploadthing.com fail with a silent Transport error.
+// This must be set before any network calls (including UploadThing metadata
+// registration and other SDK initializations).
+import dns from "node:dns";
+dns.setDefaultResultOrder("ipv4first");
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "@workspace/db";

@@ -1,5 +1,6 @@
 import { createUploadthing, createRouteHandler, type FileRouter } from "uploadthing/express";
 import { getAuth } from "@clerk/express";
+import { logger } from "../lib/logger";
 
 const f = createUploadthing();
 
@@ -104,10 +105,23 @@ function resolveCallbackUrl(): string | undefined {
   if (process.env["FRONTEND_URL"]) {
     return `${process.env["FRONTEND_URL"].replace(/\/$/, "")}/api/uploadthing`;
   }
+  // Fallback: use first domain from REPLIT_DOMAINS (platform-injected in deployment).
+  // This variable is already used for CORS/authorizedParties and reliably contains
+  // the public hostname in Replit-deployed environments.
+  const firstReplitDomain = (process.env["REPLIT_DOMAINS"] ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean)[0];
+  if (firstReplitDomain) {
+    return `https://${firstReplitDomain}/api/uploadthing`;
+  }
   return undefined;
 }
 
+const callbackUrl = resolveCallbackUrl();
+logger.info({ callbackUrl: callbackUrl ?? "(undefined — UploadThing will use its own default)" }, "[uploadthing] resolved callback URL");
+
 export const uploadthingRouter = createRouteHandler({
   router: uploadRouter,
-  config: { callbackUrl: resolveCallbackUrl() },
+  config: { callbackUrl },
 });
