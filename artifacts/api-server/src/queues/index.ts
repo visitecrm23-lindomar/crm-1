@@ -309,9 +309,11 @@ export function getCalendarSyncQueue(): Queue<CalendarSyncJobData> | null {
     _calendarSyncQueue = new Queue<CalendarSyncJobData>(QUEUES.CALENDAR_SYNC, {
       connection: conn,
       defaultJobOptions: {
-        // Retries are handled inline by withCalendarRetry (30s/5min backoff, 3 attempts total).
-        // BullMQ attempts:1 avoids multiplying retries (3 inline × N BullMQ = excessive).
-        attempts: 1,
+        // withCalendarRetry handles inline retries (30s/5min/20min, 4 attempts).
+        // BullMQ attempts:2 is a safety net for paths not wrapped in withCalendarRetry
+        // (e.g. deleteEvent calls). Avoids excessive multiplication for wrapped paths (4×2=8 max).
+        attempts: 2,
+        backoff: { type: "exponential", delay: 30_000 },
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 100 },
       },

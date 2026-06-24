@@ -97,7 +97,7 @@ describe("isTransientCalendarError", () => {
 
 // ── withCalendarRetry ────────────────────────────────────────────────────────
 
-const FAST = [0, 0] as const; // zero-delay overrides used in all retry tests
+const FAST = [0, 0, 0] as const; // zero-delay overrides used in all retry tests
 
 describe("withCalendarRetry", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -131,11 +131,11 @@ describe("withCalendarRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("default backoff delays are 30s and 5min", () => {
-    expect(CALENDAR_RETRY_DELAYS_MS).toEqual([30_000, 300_000]);
+  it("default backoff delays are 30s, 5min, and 20min", () => {
+    expect(CALENDAR_RETRY_DELAYS_MS).toEqual([30_000, 300_000, 1_200_000]);
   });
 
-  it("passes correct delay values to setTimeout on each transient retry", async () => {
+  it("passes correct delay values to setTimeout on each transient retry (30s→5min→20min)", async () => {
     const capturedDelays: number[] = [];
     const realSetTimeout = globalThis.setTimeout;
     // @ts-expect-error intentional partial mock for timer capture
@@ -149,11 +149,12 @@ describe("withCalendarRetry", () => {
       .fn()
       .mockRejectedValueOnce(transientError(429))
       .mockRejectedValueOnce(transientError(503))
+      .mockRejectedValueOnce(transientError(502))
       .mockResolvedValue("ok");
 
-    await withCalendarRetry(fn, 3); // uses default CALENDAR_RETRY_DELAYS_MS
+    await withCalendarRetry(fn, 4); // uses default CALENDAR_RETRY_DELAYS_MS with 4 attempts
 
-    expect(capturedDelays).toEqual([30_000, 300_000]);
+    expect(capturedDelays).toEqual([30_000, 300_000, 1_200_000]);
     globalThis.setTimeout = realSetTimeout;
   });
 });

@@ -38,18 +38,18 @@ export function isTransientCalendarError(err: unknown): boolean {
   return false;
 }
 
-/** Backoff delays between retry attempts: 30s then 5min. */
-export const CALENDAR_RETRY_DELAYS_MS = [30_000, 300_000] as const;
+/** Backoff delays between retry attempts: 30s → 5min → 20min (3 retries, 4 total attempts). */
+export const CALENDAR_RETRY_DELAYS_MS = [30_000, 300_000, 1_200_000] as const;
 
 /**
  * Retries `fn` up to `maxAttempts` times for transient errors (429/5xx/timeout).
  * Permanent errors (401/invalid_grant) are re-thrown immediately without retry.
- * @param delaysMs - milliseconds to wait before each retry; defaults to [30s, 5min].
+ * @param delaysMs - milliseconds to wait before each retry; defaults to [30s, 5min, 20min].
  *   Override in tests to use fast zero delays.
  */
 export async function withCalendarRetry<T>(
   fn: () => Promise<T>,
-  maxAttempts = 3,
+  maxAttempts = 4,
   delaysMs: readonly number[] = CALENDAR_RETRY_DELAYS_MS,
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
