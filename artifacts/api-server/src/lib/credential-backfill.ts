@@ -58,15 +58,22 @@ export async function backfillEncryptedCredentials(): Promise<void> {
   try {
     await backfillMercadoPagoMigratedSecrets();
   } catch (err) {
-    // The only expected failure here is the `tenant_integrations` table not
-    // existing yet (fresh dev environment or first boot before migrations ran).
-    // Log at debug to avoid startup noise — any real error will be caught by
-    // the missing-table path and is safe to skip since this backfill is
-    // idempotent and will succeed on the next boot after migrations complete.
-    logger.debug(
-      { err },
-      "[credential-backfill] MercadoPago backfill skipped — tenant_integrations not yet available (expected in fresh environments)",
-    );
+    // PostgreSQL error code 42P01 = "undefined_table" (relation does not exist).
+    // Drizzle wraps the original PG error in _DrizzleQueryError, so the PG error
+    // may be at err.cause. We check both levels to be safe.
+    const pgCode =
+      (err as Record<string, unknown> | null)?.["code"] ??
+      ((err as Record<string, unknown> | null)?.["cause"] as Record<string, unknown> | null)?.["code"];
+    if (pgCode === "42P01") {
+      logger.debug(
+        "[credential-backfill] tenant_integrations table not yet created — MercadoPago backfill skipped (expected in fresh environments)",
+      );
+    } else {
+      logger.warn(
+        { err },
+        "[credential-backfill] MercadoPago migration backfill skipped — unexpected error",
+      );
+    }
   }
 }
 
