@@ -29,9 +29,9 @@ router.post("/image", upload.single("file"), async (req, res, next) => {
       return;
     }
 
-    // Buffer<ArrayBufferLike> is not narrowed to BlobPart in strict TS, but at runtime
-    // multer's memoryStorage always returns a regular ArrayBuffer-backed Buffer.
-    const file = new File([req.file.buffer as unknown as BlobPart], req.file.originalname, {
+    // Buffer<ArrayBufferLike> is not narrowed to an accepted File bit type in strict TS,
+    // but at runtime multer's memoryStorage always returns a regular ArrayBuffer-backed Buffer.
+    const file = new File([req.file.buffer as unknown as ArrayBuffer], req.file.originalname, {
       type: req.file.mimetype,
     });
     const result = await utapi.uploadFiles(file);
@@ -59,7 +59,7 @@ router.post("/images", upload.array("file", 10), async (req, res, next) => {
     }
 
     const toUpload = files.map(
-      (f) => new File([f.buffer as unknown as BlobPart], f.originalname, { type: f.mimetype })
+      (f) => new File([f.buffer as unknown as ArrayBuffer], f.originalname, { type: f.mimetype })
     );
     const results = await utapi.uploadFiles(toUpload);
     const urls: string[] = [];
@@ -88,7 +88,7 @@ router.post("/document", upload.single("file"), async (req, res, next) => {
       return;
     }
 
-    const file = new File([req.file.buffer as unknown as BlobPart], req.file.originalname, {
+    const file = new File([req.file.buffer as unknown as ArrayBuffer], req.file.originalname, {
       type: req.file.mimetype,
     });
     const result = await utapi.uploadFiles(file);
