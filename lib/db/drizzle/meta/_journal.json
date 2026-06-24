@@ -127,6 +127,13 @@
       "when": 1801600000000,
       "tag": "0017_campaigns_auto_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1801700000000,
+      "tag": "0018_reversal_warning_acknowledged_at",
+      "breakpoints": true
     }
   ]
 }
