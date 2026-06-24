@@ -177,10 +177,9 @@ timeoutMs = 300000
   [userenv]
 
   [userenv.production]
-ADDITIONAL_ORIGINS = "https://visitecariri.com.br,https://visite-cariri-cearense-receptivo.replit.app"
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
-UPLOADTHING_CALLBACK_URL = "https://visitecariri.com.br/api/uploadthing"
+UPLOADTHING_CALLBACK_URL = "https://visitecrm.com/api/uploadthing"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
