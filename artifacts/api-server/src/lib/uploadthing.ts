@@ -21,8 +21,8 @@ function patchFetchForUploadThingCDN() {
   const _original = globalThis.fetch.bind(globalThis);
 
   (globalThis as unknown as { fetch: typeof fetch }).fetch = async (
-    input: RequestInfo | URL,
-    init?: RequestInit
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]
   ): Promise<Response> => {
     const urlStr =
       typeof input === "string"
@@ -37,7 +37,7 @@ function patchFetchForUploadThingCDN() {
 
     if (urlStr.includes(".ingest.uploadthing.com") && method === "PUT") {
       // Fix 1: strip the spurious Range header added by Effect-Platform
-      const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+      const headers = new Headers((init?.headers ?? {}) as ConstructorParameters<typeof Headers>[0]);
       headers.delete("range");
 
       // Fix 2: un-double-encode query params — Effect-Platform percent-encodes the
