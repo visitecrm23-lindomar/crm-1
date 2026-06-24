@@ -33,12 +33,15 @@ interface CommissionReport {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  active: "bg-green-100 text-green-800 border-green-200",
-  suspended: "bg-red-100 text-red-800 border-red-200",
+  [TENANT_STATUS.ACTIVE]: "bg-green-100 text-green-800 border-green-200",
+  [TENANT_STATUS.SUSPENDED]: "bg-red-100 text-red-800 border-red-200",
   rejected: "bg-red-100 text-red-800 border-red-200",
 };
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Pendente", active: "Ativo", suspended: "Suspenso", rejected: "Rejeitado",
+  pending: "Pendente",
+  [TENANT_STATUS.ACTIVE]: "Ativo",
+  [TENANT_STATUS.SUSPENDED]: "Suspenso",
+  rejected: "Rejeitado",
 };
 const TYPE_LABELS: Record<string, string> = {
   passeio: "Passeio", transfer: "Transfer", experiencia: "Experiência", ingresso: "Ingresso",
@@ -265,7 +268,7 @@ function PartnerProductsPanel({ partnerId }: { partnerId: string }) {
         price: p.price,
         ...(p.description && { shortDescription: p.description }),
         partnerProductId: p.id,
-        status: "active",
+        status: TENANT_STATUS.ACTIVE,
       }),
     });
     if (res.ok) {
@@ -360,7 +363,7 @@ export default function LojaParceiros() {
   }
 
   const pendingApprovals = partners.filter(p => p.status === "pending").length;
-  const activePartners = partners.filter(p => p.status === "active").length;
+  const activePartners = partners.filter(p => p.status === TENANT_STATUS.ACTIVE).length;
   const totalPendingPayout = report.reduce((s, r) => s + Number(r.partnerAmount), 0);
 
   return (
