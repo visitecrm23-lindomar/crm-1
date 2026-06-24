@@ -66,7 +66,7 @@ function CreateInvoiceModal({ onClose }: CreateInvoiceModalProps) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState<string>(INVOICE_STATUS.PENDING);
 
   async function handleSave() {
     if (!tenantId || !amount) return;
@@ -121,9 +121,9 @@ function CreateInvoiceModal({ onClose }: CreateInvoiceModalProps) {
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="paid">Pago</SelectItem>
-                <SelectItem value="overdue">Vencido</SelectItem>
+                <SelectItem value={INVOICE_STATUS.PENDING}>Pendente</SelectItem>
+                <SelectItem value={INVOICE_STATUS.PAID}>Pago</SelectItem>
+                <SelectItem value={INVOICE_STATUS.OVERDUE}>Vencido</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -317,10 +317,10 @@ export default function AdminBilling() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="paid">Pago</SelectItem>
-            <SelectItem value="overdue">Vencido</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value={INVOICE_STATUS.PENDING}>Pendente</SelectItem>
+            <SelectItem value={INVOICE_STATUS.PAID}>Pago</SelectItem>
+            <SelectItem value={INVOICE_STATUS.OVERDUE}>Vencido</SelectItem>
+            <SelectItem value={INVOICE_STATUS.CANCELLED}>Cancelado</SelectItem>
           </SelectContent>
         </Select>
         <Select value={tenantFilter} onValueChange={setTenantFilter}>

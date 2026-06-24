@@ -95,9 +95,9 @@ function maskEmail(email: string | null): string {
 
 function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
   const displayName = r.referredName ? maskName(r.referredName) : (r.referredEmail ? maskEmail(r.referredEmail) : "Pessoa indicada");
-  const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
+  const dateLabel = (r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) && r.convertedAt
     ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
-    : r.status === "expired" && r.expiresAt
+    : r.status === REFERRAL_STATUS.EXPIRED && r.expiresAt
     ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
     : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`;
 
@@ -117,17 +117,17 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
           <ReferralStatusBadge status={r.status} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
-        {r.status === "reversed" && bonusValue > 0 && (
+        {r.status === REFERRAL_STATUS.REVERSED && bonusValue > 0 && (
           <p className="text-xs mt-1 font-medium text-red-500">
             ✕ Bônus de {formatBRL(bonusValue)} revertido
           </p>
         )}
-        {r.status === "reversed" && r.reversalReason && (
+        {r.status === REFERRAL_STATUS.REVERSED && r.reversalReason && (
           <p className="text-[11px] text-red-400 mt-0.5">
             Motivo: {reversalReasonLabel(r.reversalReason)}
           </p>
         )}
-        {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
+        {(r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${
             r.bonusCreditUsedAt
               ? "text-purple-600"
@@ -482,16 +482,16 @@ export default function MyReferralPage({ slug, store }: Props) {
   const tierColors = TIER_COLORS[ref.currentTierLevel] ?? TIER_COLORS.bronze;
 
   const filteredReferrals = (referrals ?? []).filter((r) => {
-    if (statusFilter === "pending") return r.status === "pending";
-    if (statusFilter === "confirmed") return r.status === "completed" || r.status === "converted";
-    if (statusFilter === "expired") return r.status === "expired";
-    if (statusFilter === "reversed") return r.status === "reversed";
+    if (statusFilter === "pending") return r.status === REFERRAL_STATUS.PENDING;
+    if (statusFilter === "confirmed") return r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED;
+    if (statusFilter === "expired") return r.status === REFERRAL_STATUS.EXPIRED;
+    if (statusFilter === "reversed") return r.status === REFERRAL_STATUS.REVERSED;
     return true;
   });
 
   const { paidBonus, pendingBonus, creditUsedBonus } = (referrals ?? []).reduce(
     (acc, r) => {
-      if (r.status === "completed" || r.status === "converted") {
+      if (r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) {
         const amount = parseFloat(r.bonusAmount) || 0;
         if (r.bonusCreditUsedAt) {
           // Use actual amount consumed (supports partial rows)
@@ -885,10 +885,10 @@ export default function MyReferralPage({ slug, store }: Props) {
                 {(
                   [
                     { key: "all",       label: "Todas",       count: referrals.length },
-                    { key: "pending",   label: "Pendentes",   count: referrals.filter((r) => r.status === "pending").length },
-                    { key: "confirmed", label: "Confirmadas", count: referrals.filter((r) => r.status === "completed" || r.status === "converted").length },
-                    { key: "expired",   label: "Expiradas",   count: referrals.filter((r) => r.status === "expired").length },
-                    { key: "reversed",  label: "Canceladas",  count: referrals.filter((r) => r.status === "reversed").length },
+                    { key: "pending",   label: "Pendentes",   count: referrals.filter((r) => r.status === REFERRAL_STATUS.PENDING).length },
+                    { key: "confirmed", label: "Confirmadas", count: referrals.filter((r) => r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED).length },
+                    { key: "expired",   label: "Expiradas",   count: referrals.filter((r) => r.status === REFERRAL_STATUS.EXPIRED).length },
+                    { key: "reversed",  label: "Canceladas",  count: referrals.filter((r) => r.status === REFERRAL_STATUS.REVERSED).length },
                   ] as const
                 ).filter(({ key, count }) => key === "all" || count > 0)
                   .map(({ key, label, count }) => {

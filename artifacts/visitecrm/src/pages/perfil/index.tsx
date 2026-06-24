@@ -1594,9 +1594,9 @@ function ReferralStatusBadge({ status }: { status: string }) {
 
 function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: string }) {
   const displayName = r.referredName ?? r.referredEmail ?? "Pessoa indicada";
-  const dateLabel = (r.status === "completed" || r.status === "converted") && r.convertedAt
+  const dateLabel = (r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) && r.convertedAt
     ? `Convertida em ${new Date(r.convertedAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
-    : r.status === "expired" && r.expiresAt
+    : r.status === REFERRAL_STATUS.EXPIRED && r.expiresAt
     ? `Expirou em ${new Date(r.expiresAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
     : `Indicada em ${new Date(r.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`;
 
@@ -1616,7 +1616,7 @@ function ReferralRow({ r, primaryColor }: { r: ClientReferral; primaryColor: str
           <ReferralStatusBadge status={r.status} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
-        {(r.status === "completed" || r.status === "converted") && bonusValue > 0 && (
+        {(r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) && bonusValue > 0 && (
           <p className={`text-xs mt-1 font-medium ${r.bonusPaid ? "text-green-600" : "text-orange-500"}`}>
             {r.bonusPaid
               ? `✓ Bônus de ${formatBRL(bonusValue)} pago em ${new Date(r.bonusPaidAt!).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
@@ -1656,7 +1656,7 @@ function IndicacoesTab({ profile }: { profile: ClientPortalProfile }) {
       .finally(() => setLoadingReferrals(false));
   }, []);
 
-  const isConverted = (status: string) => status === "completed" || status === "converted";
+  const isConverted = (status: string) => status === REFERRAL_STATUS.COMPLETED || status === REFERRAL_STATUS.CONVERTED;
   const pendingBonus = (referrals ?? [])
     .filter((r) => isConverted(r.status) && !r.bonusPaid)
     .reduce((sum, r) => sum + parseFloat(r.bonusAmount), 0);
@@ -2135,7 +2135,7 @@ function FidelidadeTab({
   const equivalentValue = formatBRL(loyalty.availablePoints * loyalty.realPerPoint);
 
   const pendingReservations = reservations.filter(
-    (r) => r.balance > 0 && r.status !== "cancelled",
+    (r) => r.balance > 0 && r.status !== RESERVATION_STATUS.CANCELLED,
   );
 
   const selectedReservation = pendingReservations.find((r) => r.id === redeemReservationId);

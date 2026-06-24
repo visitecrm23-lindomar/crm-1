@@ -130,9 +130,9 @@ function EditTenantModal({ tenant, onClose }: EditModalProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Ativo</SelectItem>
-                <SelectItem value="trial">Trial</SelectItem>
-                <SelectItem value="suspended">Suspenso</SelectItem>
+                <SelectItem value={TENANT_STATUS.ACTIVE}>Ativo</SelectItem>
+                <SelectItem value={TENANT_STATUS.TRIAL}>Trial</SelectItem>
+                <SelectItem value={TENANT_STATUS.SUSPENDED}>Suspenso</SelectItem>
               </SelectContent>
             </Select>
           </div>
