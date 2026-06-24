@@ -2,6 +2,59 @@ import { UTApi } from "uploadthing/server";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
+/**
+ * Work-around for a bug in UploadThing SDK v7.x / Effect-Platform HTTP client
+ * that causes PUT requests to UploadThing's ingest CDN to fail with
+ * "Failed to verify URL: Invalid signature" in production.
+ *
+ * Root causes identified from production logs:
+ * 1. Effect-Platform adds a spurious `Range: bytes=0-` header to PUT requests.
+ *    UploadThing CDN rejects any request that deviates from the signed parameters.
+ * 2. Effect-Platform double-encodes already percent-encoded query parameters:
+ *    e.g. `image%2Fpng` becomes `image%252Fpng`, then the CDN decodes once to
+ *    `image%2Fpng` instead of `image/png`, breaking the HMAC signature check.
+ *
+ * This patch intercepts the native fetch used by the Effect HTTP client and
+ * fixes both issues transparently for all utapi.* calls.
+ */
+function patchFetchForUploadThingCDN() {
+  const _original = globalThis.fetch.bind(globalThis);
+
+  (globalThis as unknown as { fetch: typeof fetch }).fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const urlStr =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+        ? input.href
+        : (input as Request).url;
+
+    const method =
+      init?.method?.toUpperCase() ??
+      (input instanceof Request ? (input as Request).method : "GET");
+
+    if (urlStr.includes(".ingest.uploadthing.com") && method === "PUT") {
+      // Fix 1: strip the spurious Range header added by Effect-Platform
+      const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+      headers.delete("range");
+
+      // Fix 2: un-double-encode query params — Effect-Platform percent-encodes the
+      // `%` in already-encoded sequences (e.g. %2F → %252F). One pass of this
+      // regex restores each `%25XX` back to `%XX`, making the URL match what
+      // UploadThing signed.
+      const fixedUrl = urlStr.replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
+
+      return _original(fixedUrl, { ...init, headers });
+    }
+
+    return _original(input, init);
+  };
+}
+
+patchFetchForUploadThingCDN();
+
 export const utapi = new UTApi();
 
 const UPLOADTHING_HOSTNAME_SUFFIXES = ["utfs.io", "ufs.io", "uploadthing.com"];
