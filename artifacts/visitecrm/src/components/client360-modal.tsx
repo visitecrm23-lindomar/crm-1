@@ -41,7 +41,7 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
 import { formatCurrency } from "@/lib/utils";
-import { useUploadDocument } from "@/hooks/use-upload";
+import { useUploadThing } from "@/lib/uploadthing";
 
 const API_BASE_ADMIN = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -289,18 +289,20 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  const { startUpload, isUploading } = useUploadDocument({
-    onComplete: async (result) => {
+  const { startUpload, isUploading } = useUploadThing("clientDocument", {
+    onClientUploadComplete: async (res) => {
+      if (!res?.[0]) return;
+      const file = res[0];
       try {
         const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: result.name,
-            url: result.url,
-            mimeType: result.mimeType,
-            sizeBytes: result.size,
+            name: file.name,
+            url: file.ufsUrl,
+            mimeType: file.type,
+            sizeBytes: file.size,
           }),
         });
         if (!resp.ok) throw new Error("Failed to save");
@@ -312,7 +314,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
       }
       if (inputRef.current) inputRef.current.value = "";
     },
-    onError: () => {
+    onUploadError: () => {
       toast({ title: "Erro ao enviar documento", variant: "destructive" });
     },
   });
