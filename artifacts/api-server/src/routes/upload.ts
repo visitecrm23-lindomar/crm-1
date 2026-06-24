@@ -45,7 +45,7 @@ router.post("/image", imageUpload.single("file"), async (req, res) => {
     return;
   }
 
-  const file = new File([req.file.buffer], req.file.originalname, {
+  const file = new File([new Uint8Array(req.file.buffer)], req.file.originalname, {
     type: req.file.mimetype,
   });
 
@@ -70,7 +70,7 @@ router.post("/images", imageUpload.array("files", 10), async (req, res) => {
   }
 
   const uploadFiles = files.map(
-    (f) => new File([f.buffer], f.originalname, { type: f.mimetype })
+    (f) => new File([new Uint8Array(f.buffer)], f.originalname, { type: f.mimetype })
   );
 
   const results = await utapi.uploadFiles(uploadFiles);
@@ -93,7 +93,7 @@ router.post("/document", documentUpload.single("file"), async (req, res) => {
     return;
   }
 
-  const file = new File([req.file.buffer], req.file.originalname, {
+  const file = new File([new Uint8Array(req.file.buffer)], req.file.originalname, {
     type: req.file.mimetype,
   });
 

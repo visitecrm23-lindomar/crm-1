@@ -350,8 +350,8 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    if (files[0].size > 10 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "Máximo 10 MB.", variant: "destructive" });
+    if (files[0].size > 16 * 1024 * 1024) {
+      toast({ title: "Arquivo muito grande", description: "Máximo 16 MB.", variant: "destructive" });
       return;
     }
     startUpload(files[0]);
