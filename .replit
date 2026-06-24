@@ -185,6 +185,10 @@ CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
 SUPERADMIN_CLERK_ID = "user_3BxZQjJcO6wyIcaiDIe678ikmnba"
+CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
+FRONTEND_URL = "https://visitecrm.com"
+VITE_APP_URL = "https://visitecrm.com"
+VITE_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudmlzaXRlY3JtLnBybyQ"
 
   [userenv.development]
-CLERK_PUBLISHABLE_KEY = "pk_test_bWVycnkta2l0ZS03NC5jbGVyay5hY2NvdW50cy5kZXYk"
+CLERK_PUBLISHABLE_KEY = "pk_test_ZWFnZXItZ3JhY2tsZS0yOC5jbGVyay5hY2NvdW50cy5kZXYk"
