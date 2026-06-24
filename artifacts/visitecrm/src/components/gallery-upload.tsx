@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Upload, X, Loader2, Images } from "lucide-react";
 import { useUploadImages } from "@/hooks/use-upload";
 
@@ -30,7 +29,7 @@ export function GalleryUpload({
 
   const canAdd = value.length < maxImages;
 
-  const { startUpload, isUploading, progress } = useUploadImages({
+  const { startUpload, isUploading } = useUploadImages({
     onBegin: () => onUploadingChange?.(true),
     onComplete: (urls) => {
       onUploadingChange?.(false);
@@ -105,7 +104,7 @@ export function GalleryUpload({
             {isUploading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                {progress !== null ? `${progress}%` : "Enviando..."}
+                Enviando...
               </>
             ) : (
               <>
@@ -180,15 +179,8 @@ export function GalleryUpload({
             </div>
           ))}
           {isUploading && (
-            <div className="rounded-lg aspect-video bg-muted flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-muted-foreground/30 px-3">
-              {progress !== null ? (
-                <>
-                  <span className="text-xs text-muted-foreground font-medium">{progress}%</span>
-                  <Progress value={progress} className="h-1.5 w-full" />
-                </>
-              ) : (
-                <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-              )}
+            <div className="rounded-lg aspect-video bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
             </div>
           )}
         </div>

@@ -41,7 +41,6 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
 import { formatCurrency } from "@/lib/utils";
-import { Progress } from "@/components/ui/progress";
 import { useUploadDocument } from "@/hooks/use-upload";
 
 const API_BASE_ADMIN = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -290,7 +289,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  const { startUpload, isUploading, progress } = useUploadDocument({
+  const { startUpload, isUploading } = useUploadDocument({
     onComplete: async ({ url, name, size, mimeType }) => {
       try {
         const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
@@ -373,19 +372,10 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
         <p className="text-sm font-medium text-muted-foreground">
           {loadingDocs ? "Carregando…" : `${docs.length} documento(s)`}
         </p>
-        <div className="flex flex-col items-end gap-1.5">
-          <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
-            {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-            {isUploading
-              ? progress !== null
-                ? `Enviando... ${progress}%`
-                : "Enviando..."
-              : "Enviar Documento"}
-          </Button>
-          {isUploading && progress !== null && (
-            <Progress value={progress} className="h-1.5 w-32" />
-          )}
-        </div>
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
+          {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+          {isUploading ? "Enviando..." : "Enviar Documento"}
+        </Button>
         <input
           ref={inputRef}
           type="file"

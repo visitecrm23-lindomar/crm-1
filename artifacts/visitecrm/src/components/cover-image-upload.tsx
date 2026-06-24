@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { useUploadImage } from "@/hooks/use-upload";
 
@@ -32,7 +31,7 @@ export function CoverImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const { startUpload, isUploading, progress } = useUploadImage({
+  const { startUpload, isUploading } = useUploadImage({
     onBegin: () => onUploadingChange?.(true),
     onComplete: (url) => {
       onUploadingChange?.(false);
@@ -125,15 +124,6 @@ export function CoverImageUpload({
               Remover
             </Button>
           </div>
-          {isUploading && progress !== null && (
-            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-white">Enviando...</span>
-                <span className="text-xs text-white font-medium">{progress}%</span>
-              </div>
-              <Progress value={progress} className="h-1.5 bg-white/30 [&>div]:bg-white" />
-            </div>
-          )}
         </div>
       ) : (
         <button
@@ -153,15 +143,10 @@ export function CoverImageUpload({
           ].join(" ")}
         >
           {isUploading ? (
-            <div className="w-full px-6 space-y-2 pointer-events-none">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Enviando...</span>
-                {progress !== null && (
-                  <span className="text-sm font-medium text-muted-foreground">{progress}%</span>
-                )}
-              </div>
-              <Progress value={progress ?? 0} className="h-2" />
-            </div>
+            <>
+              <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+              <span className="text-sm text-muted-foreground">Enviando...</span>
+            </>
           ) : isDragging ? (
             <>
               <Upload className="w-8 h-8 text-primary" />
