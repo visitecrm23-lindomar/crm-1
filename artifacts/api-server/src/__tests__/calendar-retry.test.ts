@@ -81,6 +81,15 @@ function networkError(code: string, message?: string): Error {
   return err;
 }
 
+function permissionError(errorCode?: string): Error {
+  const err = new Error(errorCode ?? "FORBIDDEN");
+  (err as unknown as { response: { status: number; data?: { error?: string } } }).response = {
+    status: 403,
+    ...(errorCode ? { data: { error: errorCode } } : {}),
+  };
+  return err;
+}
+
 // ── isTransientCalendarError ─────────────────────────────────────────────────
 
 describe("isTransientCalendarError", () => {
@@ -117,6 +126,50 @@ describe("isTransientCalendarError", () => {
 
   it("returns false for a generic non-network error", () => {
     expect(isTransientCalendarError(new Error("Something unexpected"))).toBe(false);
+  });
+
+  it("returns true for 403 with rateLimitExceeded (quota error)", () => {
+    expect(isTransientCalendarError(permissionError("rateLimitExceeded"))).toBe(true);
+  });
+
+  it("returns true for 403 with userRateLimitExceeded (quota error)", () => {
+    expect(isTransientCalendarError(permissionError("userRateLimitExceeded"))).toBe(true);
+  });
+
+  it("returns false for 403 without quota error code (auth-revoked)", () => {
+    expect(isTransientCalendarError(permissionError())).toBe(false);
+  });
+});
+
+// ── isInvalidGrantError ───────────────────────────────────────────────────────
+
+describe("isInvalidGrantError", () => {
+  it("returns true for invalid_grant response error", () => {
+    expect(isInvalidGrantError(permanentError("invalid_grant"))).toBe(true);
+  });
+
+  it("returns true for 401 status", () => {
+    expect(isInvalidGrantError(transientError(401))).toBe(true);
+  });
+
+  it("returns true for 403 without quota error code (auth-revoked/scope-missing)", () => {
+    expect(isInvalidGrantError(permissionError())).toBe(true);
+  });
+
+  it("returns false for 403 with rateLimitExceeded (retryable quota error)", () => {
+    expect(isInvalidGrantError(permissionError("rateLimitExceeded"))).toBe(false);
+  });
+
+  it("returns false for 403 with dailyLimitExceeded", () => {
+    expect(isInvalidGrantError(permissionError("dailyLimitExceeded"))).toBe(false);
+  });
+
+  it("returns false for 429 (rate limit, not an auth error)", () => {
+    expect(isInvalidGrantError(transientError(429))).toBe(false);
+  });
+
+  it("returns false for a plain Error with no response", () => {
+    expect(isInvalidGrantError(new Error("something else"))).toBe(false);
   });
 });
 
@@ -377,6 +430,32 @@ describe("GoogleCalendarService — auth error marks invalid without retry", () 
     const svc = makeService();
     await expect(svc.updateEvent("evt-123", {})).rejects.toMatchObject({ message: "HTTP 500" });
     expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it("createEvent: calls db.update to mark invalid on 403 auth error (no error code)", async () => {
+    mockEventsInsert.mockRejectedValue(permissionError());
+    const svc = makeService();
+    const result = await svc.createEvent({ summary: "Test", startDateTime: new Date() });
+    expect(result).toBeNull();
+    expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+    expect(mockEventsInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("createEvent: re-throws 403 rateLimitExceeded as transient (no db.update)", async () => {
+    mockEventsInsert.mockRejectedValue(permissionError("rateLimitExceeded"));
+    const svc = makeService();
+    await expect(svc.createEvent({ summary: "Test", startDateTime: new Date() })).rejects.toMatchObject({
+      message: "rateLimitExceeded",
+    });
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it("updateEvent: calls db.update to mark invalid on 403 auth error (no error code)", async () => {
+    mockEventsPatch.mockRejectedValue(permissionError());
+    const svc = makeService();
+    const result = await svc.updateEvent("evt-123", {});
+    expect(result).toBe(false);
+    expect(mockDbUpdate).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -8,6 +8,20 @@ import { logger } from "../logger";
 export const CALENDAR_STATUS_CONNECTED = "connected";
 export const CALENDAR_STATUS_INVALID = "invalid";
 
+/** Google API 403 error codes that indicate a quota/rate issue (retryable, not auth-expired). */
+const GOOGLE_QUOTA_ERROR_CODES = new Set([
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+  "dailyLimitExceeded",
+  "quotaExceeded",
+]);
+
+/** Node.js error codes that indicate a transient network/transport failure. */
+const TRANSIENT_NODE_CODES = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNABORTED", "ECONNREFUSED",
+  "EAI_AGAIN", "ENETUNREACH", "EPIPE", "EHOSTUNREACH",
+]);
+
 export function isInvalidGrantError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const anyErr = err as { code?: number | string; response?: { status?: number; data?: { error?: string } }; message?: string };
@@ -15,6 +29,8 @@ export function isInvalidGrantError(err: unknown): boolean {
   const errorCode = anyErr.response?.data?.error;
   if (errorCode === "invalid_grant" || errorCode === "invalid_token") return true;
   if (status === 401) return true;
+  // 403 without a quota error code = revoked token / insufficient scopes → mark invalid
+  if (status === 403 && !GOOGLE_QUOTA_ERROR_CODES.has(errorCode ?? "")) return true;
   if (typeof anyErr.message === "string" && (anyErr.message.includes("invalid_grant") || anyErr.message.includes("invalid_token"))) return true;
   return false;
 }
@@ -26,17 +42,13 @@ export function isEventNotFoundError(err: unknown): boolean {
   return status === 404;
 }
 
-/** Node.js error codes that indicate a transient network/transport failure. */
-const TRANSIENT_NODE_CODES = new Set([
-  "ETIMEDOUT", "ECONNRESET", "ECONNABORTED", "ECONNREFUSED",
-  "EAI_AGAIN", "ENETUNREACH", "EPIPE", "EHOSTUNREACH",
-]);
-
 export function isTransientCalendarError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const anyErr = err as { code?: number | string; response?: { status?: number }; message?: string };
+  const anyErr = err as { code?: number | string; response?: { status?: number; data?: { error?: string } }; message?: string };
   const httpStatus = anyErr.response?.status ?? (typeof anyErr.code === "number" ? anyErr.code : undefined);
   if (httpStatus === 429 || httpStatus === 500 || httpStatus === 502 || httpStatus === 503 || httpStatus === 504) return true;
+  // 403 with a quota/rate-limit error code is transient (retryable)
+  if (httpStatus === 403 && GOOGLE_QUOTA_ERROR_CODES.has(anyErr.response?.data?.error ?? "")) return true;
   // Node.js transport-level errors (ETIMEDOUT, ECONNRESET, etc.)
   if (typeof anyErr.code === "string" && TRANSIENT_NODE_CODES.has(anyErr.code)) return true;
   if (typeof anyErr.message === "string") {

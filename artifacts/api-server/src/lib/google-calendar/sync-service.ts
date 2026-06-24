@@ -233,7 +233,7 @@ export class CalendarSyncService {
             .from(usersTable).where(eq(usersTable.id, ev.userId)).limit(1);
           if (userRec?.role === ROLES.SALES) {
             const svc = await getCalendarService(ev.userId);
-            if (svc) await svc.deleteEvent(ev.googleEventId).catch(() => {});
+            if (svc) await withCalendarRetry(() => svc.deleteEvent(ev.googleEventId)).catch(() => {});
             await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
           }
         }
@@ -333,7 +333,7 @@ export class CalendarSyncService {
             eq(calendarEventsTable.eventType, "trip"),
           )).limit(1);
         if (existing) {
-          await svc.deleteEvent(existing.googleEventId).catch(() => {});
+          await withCalendarRetry(() => svc.deleteEvent(existing.googleEventId)).catch(() => {});
           await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
         }
         return;
@@ -359,7 +359,7 @@ export class CalendarSyncService {
               eq(calendarEventsTable.eventType, "trip"),
             )).limit(1);
           if (existing) {
-            await svc.deleteEvent(existing.googleEventId).catch(() => {});
+            await withCalendarRetry(() => svc.deleteEvent(existing.googleEventId)).catch(() => {});
             await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
           }
           return;
@@ -421,7 +421,7 @@ export class CalendarSyncService {
       for (const ev of events) {
         if (ev.userId) {
           const svc = await getCalendarService(ev.userId);
-          if (svc) await svc.deleteEvent(ev.googleEventId);
+          if (svc) await withCalendarRetry(() => svc.deleteEvent(ev.googleEventId));
         }
         await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
       }
@@ -441,7 +441,7 @@ export class CalendarSyncService {
       for (const ev of events) {
         if (ev.userId) {
           const svc = await getCalendarService(ev.userId);
-          if (svc) await svc.deleteEvent(ev.googleEventId);
+          if (svc) await withCalendarRetry(() => svc.deleteEvent(ev.googleEventId));
         }
         await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
       }
@@ -633,7 +633,7 @@ export class CalendarSyncService {
         for (const ev of existingEvents) {
           if (!ev.userId) continue;
           const svc = await getCalendarService(ev.userId);
-          if (svc) await svc.deleteEvent(ev.googleEventId).catch(() => {});
+          if (svc) await withCalendarRetry(() => svc.deleteEvent(ev.googleEventId)).catch(() => {});
           await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, ev.id));
         }
         return;
@@ -726,7 +726,7 @@ export class CalendarSyncService {
             eq(calendarEventsTable.eventType, "birthday"),
           )).limit(1);
         if (existing) {
-          await svc.deleteEvent(existing.googleEventId).catch(() => {});
+          await withCalendarRetry(() => svc.deleteEvent(existing.googleEventId)).catch(() => {});
           await db.delete(calendarEventsTable).where(eq(calendarEventsTable.id, existing.id));
         }
         return;
