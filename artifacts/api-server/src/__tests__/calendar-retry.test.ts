@@ -53,6 +53,7 @@ import {
   isTransientCalendarError,
   isInvalidGrantError,
   isEventNotFoundError,
+  CALENDAR_RETRY_DELAYS_MS,
 } from "../lib/google-calendar/calendar-service";
 
 function makeService() {
@@ -96,12 +97,14 @@ describe("isTransientCalendarError", () => {
 
 // ── withCalendarRetry ────────────────────────────────────────────────────────
 
+const FAST = [0, 0] as const; // zero-delay overrides used in all retry tests
+
 describe("withCalendarRetry", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns value on first success", async () => {
     const fn = vi.fn().mockResolvedValue("ok");
-    await expect(withCalendarRetry(fn, 3)).resolves.toBe("ok");
+    await expect(withCalendarRetry(fn, 3, FAST)).resolves.toBe("ok");
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -110,22 +113,48 @@ describe("withCalendarRetry", () => {
       .fn()
       .mockRejectedValueOnce(transientError(429))
       .mockResolvedValue("ok");
-    await expect(withCalendarRetry(fn, 3)).resolves.toBe("ok");
+    await expect(withCalendarRetry(fn, 3, FAST)).resolves.toBe("ok");
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
   it("throws after exhausting all retries on transient error", async () => {
     const err = transientError(503);
     const fn = vi.fn().mockRejectedValue(err);
-    await expect(withCalendarRetry(fn, 3)).rejects.toBe(err);
+    await expect(withCalendarRetry(fn, 3, FAST)).rejects.toBe(err);
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
   it("does NOT retry permanent errors (throws immediately)", async () => {
     const err = permanentError("invalid_grant");
     const fn = vi.fn().mockRejectedValue(err);
-    await expect(withCalendarRetry(fn, 3)).rejects.toBe(err);
+    await expect(withCalendarRetry(fn, 3, FAST)).rejects.toBe(err);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("default backoff delays are 30s and 5min", () => {
+    expect(CALENDAR_RETRY_DELAYS_MS).toEqual([30_000, 300_000]);
+  });
+
+  it("passes correct delay values to setTimeout on each transient retry", async () => {
+    const capturedDelays: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    // @ts-expect-error intentional partial mock for timer capture
+    globalThis.setTimeout = (fn: () => void, delay: number) => {
+      capturedDelays.push(delay);
+      fn(); // resolve the promise immediately so the test doesn't block
+      return 0;
+    };
+
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(transientError(429))
+      .mockRejectedValueOnce(transientError(503))
+      .mockResolvedValue("ok");
+
+    await withCalendarRetry(fn, 3); // uses default CALENDAR_RETRY_DELAYS_MS
+
+    expect(capturedDelays).toEqual([30_000, 300_000]);
+    globalThis.setTimeout = realSetTimeout;
   });
 });
 
@@ -296,7 +325,7 @@ describe("withCalendarRetry — structured logging", () => {
       .mockRejectedValueOnce(transientError(429))
       .mockResolvedValue("ok");
 
-    await expect(withCalendarRetry(fn, 3)).resolves.toBe("ok");
+    await expect(withCalendarRetry(fn, 3, FAST)).resolves.toBe("ok");
 
     expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
       expect.objectContaining({ attempt: 1, maxAttempts: 3 }),
@@ -311,7 +340,7 @@ describe("withCalendarRetry — structured logging", () => {
   it("does NOT log a warning when first attempt succeeds", async () => {
     const { logger } = await import("../lib/logger");
     const fn = vi.fn().mockResolvedValue("ok");
-    await withCalendarRetry(fn, 3);
+    await withCalendarRetry(fn, 3, FAST);
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
   });
 });

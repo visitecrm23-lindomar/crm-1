@@ -38,11 +38,20 @@ export function isTransientCalendarError(err: unknown): boolean {
   return false;
 }
 
+/** Backoff delays between retry attempts: 30s then 5min. */
+export const CALENDAR_RETRY_DELAYS_MS = [30_000, 300_000] as const;
+
+/**
+ * Retries `fn` up to `maxAttempts` times for transient errors (429/5xx/timeout).
+ * Permanent errors (401/invalid_grant) are re-thrown immediately without retry.
+ * @param delaysMs - milliseconds to wait before each retry; defaults to [30s, 5min].
+ *   Override in tests to use fast zero delays.
+ */
 export async function withCalendarRetry<T>(
   fn: () => Promise<T>,
   maxAttempts = 3,
+  delaysMs: readonly number[] = CALENDAR_RETRY_DELAYS_MS,
 ): Promise<T> {
-  let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const result = await fn();
@@ -51,9 +60,8 @@ export async function withCalendarRetry<T>(
       }
       return result;
     } catch (err) {
-      lastErr = err;
       if (!isTransientCalendarError(err) || attempt === maxAttempts) throw err;
-      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      const delayMs = delaysMs[attempt - 1] ?? delaysMs[delaysMs.length - 1] ?? 30_000;
       logger.warn(
         { attempt, maxAttempts, delayMs, errMessage: (err as Error)?.message },
         "google-calendar: transient error — retrying after backoff",
@@ -61,7 +69,8 @@ export async function withCalendarRetry<T>(
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
-  throw lastErr;
+  /* istanbul ignore next — loop always throws or returns before this */
+  throw new Error("withCalendarRetry: unreachable");
 }
 
 export async function markCalendarConnectionInvalid(userId: string, reason: string): Promise<void> {

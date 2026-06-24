@@ -309,8 +309,9 @@ export function getCalendarSyncQueue(): Queue<CalendarSyncJobData> | null {
     _calendarSyncQueue = new Queue<CalendarSyncJobData>(QUEUES.CALENDAR_SYNC, {
       connection: conn,
       defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: "exponential", delay: 30_000 },
+        // Retries are handled inline by withCalendarRetry (30s/5min backoff, 3 attempts total).
+        // BullMQ attempts:1 avoids multiplying retries (3 inline × N BullMQ = excessive).
+        attempts: 1,
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 100 },
       },
