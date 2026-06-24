@@ -305,12 +305,12 @@ function makeAuthRateLimitHandler(label: string) {
 
 const tenantKeyGenerator = (req: Request): string => {
   const auth = getAuth(req);
-  return (auth.sessionClaims?.["tenantId"] as string | undefined) ?? auth.userId ?? ipKeyGenerator(req);
+  return (auth.sessionClaims?.["tenantId"] as string | undefined) ?? auth.userId ?? ipKeyGenerator(req.ip ?? "unknown");
 };
 
 const userKeyGenerator = (req: Request): string => {
   const auth = getAuth(req);
-  return auth.userId ?? ipKeyGenerator(req);
+  return auth.userId ?? ipKeyGenerator(req.ip ?? "unknown");
 };
 
 // AI / LLM endpoints: 20 req/min per tenant
