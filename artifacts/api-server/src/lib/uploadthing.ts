@@ -3,16 +3,30 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 /**
- * Work-around for a bug in UploadThing SDK v7.x / Effect-Platform HTTP client
- * that causes PUT requests to UploadThing's ingest CDN to fail with
+ * PATCHED VERSION: uploadthing@7.7.4 (pinned — do NOT remove the ^ pin in package.json)
+ *
+ * Work-around for two bugs in UploadThing SDK v7.x / Effect-Platform HTTP client
+ * that cause PUT requests to UploadThing's ingest CDN to fail with
  * "Failed to verify URL: Invalid signature" in production.
  *
- * Root causes identified from production logs:
- * 1. Effect-Platform adds a spurious `Range: bytes=0-` header to PUT requests.
- *    UploadThing CDN rejects any request that deviates from the signed parameters.
- * 2. Effect-Platform double-encodes already percent-encoded query parameters:
- *    e.g. `image%2Fpng` becomes `image%252Fpng`, then the CDN decodes once to
- *    `image%2Fpng` instead of `image/png`, breaking the HMAC signature check.
+ * Root causes identified from production logs (confirmed on uploadthing@7.7.4):
+ *
+ * Bug 1 — Spurious `Range: bytes=0-` header
+ *   Effect-Platform adds this header to all PUT requests. UploadThing's CDN HMAC
+ *   verifies the exact set of signed headers; any extra unsigned header breaks the
+ *   signature check.
+ *
+ * Bug 2 — Double-encoded query parameters
+ *   Effect-Platform percent-encodes already-encoded sequences in the presigned URL:
+ *   `image%2Fpng` → `image%252Fpng`, `Visite%20Cariri` → `Visite%2520Cariri`.
+ *   The CDN decodes once, receiving `image%2Fpng` instead of `image/png`. Since the
+ *   HMAC was computed over the decoded value, the check fails.
+ *
+ * BEFORE UPGRADING uploadthing:
+ *   Check whether Effect-Platform's HTTP client still adds the Range header and
+ *   double-encodes params on CDN PUT requests. If fixed upstream, remove this patch
+ *   and the exact-version pin in package.json.
+ *   Relevant upstream tracking: https://github.com/pingdotgg/uploadthing/issues
  *
  * This patch intercepts the native fetch used by the Effect HTTP client and
  * fixes both issues transparently for all utapi.* calls.
