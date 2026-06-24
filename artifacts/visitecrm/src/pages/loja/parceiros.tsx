@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { TENANT_STATUS } from "@workspace/permissions";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -189,8 +190,8 @@ function EditPartnerDialog({ partner, onSaved }: { partner: Partner; onSaved: ()
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="suspended">Suspenso</SelectItem>
+                  <SelectItem value={TENANT_STATUS.ACTIVE}>Ativo</SelectItem>
+                  <SelectItem value={TENANT_STATUS.SUSPENDED}>Suspenso</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -242,7 +243,7 @@ function PartnerProductsPanel({ partnerId }: { partnerId: string }) {
       body: JSON.stringify({ status }),
     });
     if (res.ok) {
-      toast({ title: status === "active" ? "Listagem aprovada!" : "Listagem rejeitada" });
+      toast({ title: status === TENANT_STATUS.ACTIVE ? "Listagem aprovada!" : "Listagem rejeitada" });
       void load();
     } else {
       toast({ title: "Erro ao atualizar", variant: "destructive" });
@@ -296,14 +297,14 @@ function PartnerProductsPanel({ partnerId }: { partnerId: string }) {
           </div>
           <div className="flex gap-1 shrink-0">
             {p.status === "pending" && (<>
-              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => updateStatus(p.id, "active")}>
+              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => updateStatus(p.id, TENANT_STATUS.ACTIVE as "active")}>
                 <CheckCircle className="w-3.5 h-3.5 mr-1" />Aprovar
               </Button>
               <Button size="sm" variant="destructive" onClick={() => updateStatus(p.id, "rejected")}>
                 <XCircle className="w-3.5 h-3.5 mr-1" />Rejeitar
               </Button>
             </>)}
-            {p.status === "active" && (
+            {p.status === TENANT_STATUS.ACTIVE && (
               <Button size="sm" variant="outline" onClick={() => void createStoreProduct(p)} title="Criar produto na vitrine vinculado a este parceiro">
                 <Store className="w-3.5 h-3.5 mr-1" />Criar na Vitrine
               </Button>

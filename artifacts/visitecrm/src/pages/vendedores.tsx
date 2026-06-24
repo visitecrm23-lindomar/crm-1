@@ -53,7 +53,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ROLES, COMMISSION_STATUS } from "@workspace/permissions";
+import { ROLES, COMMISSION_STATUS, GOAL_STATUS } from "@workspace/permissions";
 import { formatCurrencyBRL as fmtCurrency } from "@/lib/utils";
 
 interface SellerStats {
@@ -393,7 +393,7 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
   async function handleToggle(id: string, status: string) {
     await updateGoal.mutateAsync({
       id,
-      data: { status: status === "active" ? "inactive" : "active" },
+      data: { status: status === GOAL_STATUS.ACTIVE ? "inactive" : GOAL_STATUS.ACTIVE },
     });
     refetch();
   }
@@ -555,11 +555,11 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge
-                      variant={g.status === "active" ? "default" : "secondary"}
+                      variant={g.status === GOAL_STATUS.ACTIVE ? "default" : "secondary"}
                       className="cursor-pointer text-xs"
                       onClick={() => handleToggle(g.id, g.status)}
                     >
-                      {g.status === "active" ? "Ativa" : "Inativa"}
+                      {g.status === GOAL_STATUS.ACTIVE ? "Ativa" : "Inativa"}
                     </Badge>
                     <Button
                       variant="ghost"
@@ -571,7 +571,7 @@ function GoalsTab({ seller }: { seller: UserProfile }) {
                     </Button>
                   </div>
                 </div>
-                {g.status === "active" && (
+                {g.status === GOAL_STATUS.ACTIVE && (
                   <div className="space-y-0.5">
                     <Progress value={progress} className="h-1.5" />
                     <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}%</p>

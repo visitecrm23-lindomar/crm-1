@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -286,9 +287,9 @@ export function PassengersList({ tripId }: { tripId: string }) {
             <SelectTrigger className="w-36 h-8"><SelectValue placeholder="Ativos" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">Ativos</SelectItem>
-              <SelectItem value="confirmed">Confirmados</SelectItem>
-              <SelectItem value="pending">Pendentes</SelectItem>
-              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmados</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.PENDING}>Pendentes</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluídos</SelectItem>
               <SelectItem value="all">Todos</SelectItem>
             </SelectContent>
           </Select>

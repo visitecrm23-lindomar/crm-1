@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useListTrips, useGetTrip, useListReservations, useUpdateReservation, useGetMe } from "@workspace/api-client-react";
-import { RESERVATION_STATUS, hasPermission, RESOURCES, ACTIONS, type ReservationStatus } from "@workspace/permissions";
+import { RESERVATION_STATUS, TRIP_STATUS, hasPermission, RESOURCES, ACTIONS, type ReservationStatus } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -245,9 +245,9 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
             <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Ativos" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">Ativos</SelectItem>
-              <SelectItem value="confirmed">Confirmados</SelectItem>
-              <SelectItem value="pending">Pendentes</SelectItem>
-              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmados</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.PENDING}>Pendentes</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluídos</SelectItem>
               <SelectItem value="all">Todos</SelectItem>
             </SelectContent>
           </Select>
@@ -255,7 +255,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
           <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
           <Link href={`/trips/${tripId}/checkin-panel`}><Button variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"><ClipboardCheck className="w-4 h-4 mr-2" />Check-in ao Vivo</Button></Link>
-          {trip && !["cancelled", "draft"].includes(trip.status) && (
+          {trip && trip.status !== TRIP_STATUS.CANCELLED && trip.status !== TRIP_STATUS.DRAFT && (
             <Link href={`/trips/${tripId}/boarding-control`}><Button className="bg-blue-700 hover:bg-blue-800 text-white gap-2"><Bus className="w-4 h-4" />Central de Embarque</Button></Link>
           )}
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>

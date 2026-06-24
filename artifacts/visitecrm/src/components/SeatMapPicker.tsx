@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useState } from "react";
 import { useGetTripSeatMap } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const CLICKABLE_TYPES = ["seat", "vip", "accessible"];
@@ -31,7 +32,7 @@ export function getSeatColor(status: string, selected: boolean, type?: string) {
     case "reserved":
     case "occupied":
       return "bg-orange-400 border-2 border-orange-500 text-white cursor-not-allowed";
-    case "confirmed":
+    case RESERVATION_STATUS.CONFIRMED:
       return "bg-green-500 border-2 border-green-600 text-white cursor-not-allowed";
     case "free":
       return "bg-violet-500 border-2 border-violet-600 text-white cursor-not-allowed";
@@ -218,7 +219,7 @@ export function SeatMapPicker({ tripId, selectedSeats, onSeatsChange, maxSeats, 
   const seatCounts = useMemo(() => ({
     available: clickableSeats.filter(s => s.status === "available").length,
     reserved: clickableSeats.filter(s => s.status === "reserved" || s.status === "occupied").length,
-    confirmed: clickableSeats.filter(s => s.status === "confirmed").length,
+    confirmed: clickableSeats.filter(s => s.status === RESERVATION_STATUS.CONFIRMED).length,
   }), [clickableSeats]);
 
   const floorCounts = useMemo(() => {

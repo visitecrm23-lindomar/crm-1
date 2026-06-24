@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { RESERVATION_STATUS } from "@workspace/permissions";
 import { useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeatStream } from "@/hooks/useSeatStream";
@@ -86,7 +87,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     return {
       available: statusList.filter(st => st === "available").length,
       reserved: statusList.filter(st => st === "reserved" || st === "occupied").length,
-      confirmed: statusList.filter(st => st === "confirmed").length,
+      confirmed: statusList.filter(st => st === RESERVATION_STATUS.CONFIRMED).length,
       free: statusList.filter(st => st === "free").length,
       blocked: statusList.filter(st => st === "blocked").length,
     };
@@ -184,7 +185,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const confirmedSeatCount = useMemo(() => {
     return seats.filter(s => {
       const eff = optimisticSeats[s.number] ?? s.status;
-      return eff === "confirmed";
+      return eff === RESERVATION_STATUS.CONFIRMED;
     }).length;
   }, [seats, optimisticSeats]);
 
@@ -229,9 +230,9 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Ativos" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">Ativos</SelectItem>
-              <SelectItem value="confirmed">Confirmados</SelectItem>
-              <SelectItem value="pending">Pendentes</SelectItem>
-              <SelectItem value="completed">Concluídos</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmados</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.PENDING}>Pendentes</SelectItem>
+              <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluídos</SelectItem>
               <SelectItem value="all">Todos</SelectItem>
             </SelectContent>
           </Select>

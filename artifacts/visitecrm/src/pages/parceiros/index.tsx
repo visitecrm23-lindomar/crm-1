@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { COMMISSION_STATUS } from "@workspace/permissions";
 import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -295,7 +296,7 @@ function PartnerDashboard({ profile, onLogout }: { profile: PartnerProfile; onLo
   }
 
   const totalPending = commissions
-    .filter(c => c.status === "pending")
+    .filter(c => c.status === COMMISSION_STATUS.PENDING)
     .reduce((s, c) => s + Number(c.partnerAmount), 0);
   const totalPaid = commissions
     .filter(c => c.status === "paid")
