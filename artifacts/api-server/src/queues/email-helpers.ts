@@ -1607,17 +1607,30 @@ export async function enqueueAgencySuspendedEmail(
   tenantId: string,
   reason?: string | null,
 ): Promise<void> {
-  const [row] = await db
-    .select({
-      agencyName: tenantsTable.name,
-      agencyEmail: tenantsTable.email,
-    })
-    .from(tenantsTable)
-    .where(eq(tenantsTable.id, tenantId))
-    .limit(1);
+  const [[tenantRow], [storeRow]] = await Promise.all([
+    db
+      .select({ agencyName: tenantsTable.name, agencyEmail: tenantsTable.email })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1),
+    db
+      .select({ email: storesTable.email })
+      .from(storesTable)
+      .where(eq(storesTable.tenantId, tenantId))
+      .limit(1),
+  ]);
 
-  if (!row?.agencyEmail) {
-    logger.warn({ tenantId }, "[email-queue] agency-suspended: tenant has no email — skipping");
+  if (!tenantRow) {
+    logger.warn({ tenantId }, "[email-queue] agency-suspended: tenant not found — skipping");
+    return;
+  }
+
+  // Prefer store contact email (client-facing), fall back to tenant platform email
+  const agencyEmail = storeRow?.email || tenantRow.agencyEmail;
+  const row = { agencyName: tenantRow.agencyName, agencyEmail };
+
+  if (!agencyEmail) {
+    logger.warn({ tenantId }, "[email-queue] agency-suspended: no email on record — skipping");
     return;
   }
 
@@ -1652,17 +1665,29 @@ export async function enqueueAgencySuspendedEmail(
  * has been reactivated by a superadmin.
  */
 export async function enqueueAgencyReactivatedEmail(tenantId: string): Promise<void> {
-  const [row] = await db
-    .select({
-      agencyName: tenantsTable.name,
-      agencyEmail: tenantsTable.email,
-    })
-    .from(tenantsTable)
-    .where(eq(tenantsTable.id, tenantId))
-    .limit(1);
+  const [[tenantRow], [storeRow]] = await Promise.all([
+    db
+      .select({ agencyName: tenantsTable.name, agencyEmail: tenantsTable.email })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1),
+    db
+      .select({ email: storesTable.email })
+      .from(storesTable)
+      .where(eq(storesTable.tenantId, tenantId))
+      .limit(1),
+  ]);
 
-  if (!row?.agencyEmail) {
-    logger.warn({ tenantId }, "[email-queue] agency-reactivated: tenant has no email — skipping");
+  if (!tenantRow) {
+    logger.warn({ tenantId }, "[email-queue] agency-reactivated: tenant not found — skipping");
+    return;
+  }
+
+  // Prefer store contact email (client-facing), fall back to tenant platform email
+  const agencyEmail = storeRow?.email || tenantRow.agencyEmail;
+
+  if (!agencyEmail) {
+    logger.warn({ tenantId }, "[email-queue] agency-reactivated: no email on record — skipping");
     return;
   }
 
@@ -1671,8 +1696,8 @@ export async function enqueueAgencyReactivatedEmail(tenantId: string): Promise<v
   const loginUrl = (process.env["FRONTEND_URL"] ?? "https://app.visitecrm.com.br").replace(/\/$/, "");
 
   const sendResult = await sendAgencyReactivatedEmail({
-    agencyName: row.agencyName,
-    agencyEmail: row.agencyEmail,
+    agencyName: tenantRow.agencyName,
+    agencyEmail,
     loginUrl,
   });
 
@@ -1680,7 +1705,7 @@ export async function enqueueAgencyReactivatedEmail(tenantId: string): Promise<v
     id: emailLogId,
     tenantId,
     reservationId: null,
-    recipient: row.agencyEmail,
+    recipient: agencyEmail,
     subject,
     status: sendResult.success ? "sent" : "failed",
     messageId: sendResult.messageId ?? null,

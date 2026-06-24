@@ -16,6 +16,7 @@ const UpdateTenantBody = z.object({
   name: z.string().min(1).optional(),
   planId: z.string().optional(),
   status: z.string().optional(),
+  suspensionReason: z.string().max(500).optional(),
   logoUrl: z.string().optional(),
   primaryColor: z.string().optional(),
   secondaryColor: z.string().optional(),
@@ -152,7 +153,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
-    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, ...rest } = parsed.data;
+    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, suspensionReason, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
@@ -232,7 +233,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
       const newStatus = updateData.status;
       const tenantId = req.params.id;
       if (newStatus === "suspended") {
-        enqueueAgencySuspendedEmail(tenantId, null).catch((err) => {
+        enqueueAgencySuspendedEmail(tenantId, suspensionReason ?? null).catch((err) => {
           req.log.error({ err, tenantId }, "[tenants] failed to send agency-suspended email");
         });
       } else if (newStatus === "active" && existing.status === "suspended") {
