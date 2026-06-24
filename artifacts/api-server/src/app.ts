@@ -4,7 +4,7 @@ import pinoHttp from "pino-http";
 import cookieParser from "cookie-parser";
 import path from "node:path";
 import { clerkMiddleware, getAuth } from "@clerk/express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import { requestId, errorHandler } from "./middlewares/errorHandler";
 import router from "./routes";
@@ -305,12 +305,12 @@ function makeAuthRateLimitHandler(label: string) {
 
 const tenantKeyGenerator = (req: Request): string => {
   const auth = getAuth(req);
-  return (auth.sessionClaims?.["tenantId"] as string | undefined) ?? auth.userId ?? req.ip ?? "unknown";
+  return (auth.sessionClaims?.["tenantId"] as string | undefined) ?? auth.userId ?? ipKeyGenerator(req);
 };
 
 const userKeyGenerator = (req: Request): string => {
   const auth = getAuth(req);
-  return auth.userId ?? req.ip ?? "unknown";
+  return auth.userId ?? ipKeyGenerator(req);
 };
 
 // AI / LLM endpoints: 20 req/min per tenant
