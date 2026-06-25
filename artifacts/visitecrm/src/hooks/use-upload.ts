@@ -6,12 +6,14 @@ interface UploadCallbacks {
   onBegin?: () => void;
   onComplete?: (result: { url: string; key: string; name: string; size?: number; mimeType?: string }) => void;
   onError?: (error: Error) => void;
+  onCancel?: () => void;
 }
 
 interface MultiUploadCallbacks {
   onBegin?: () => void;
   onComplete?: (results: Array<{ url: string; key: string; name: string }>) => void;
   onError?: (error: Error) => void;
+  onCancel?: () => void;
 }
 
 interface UploadOptions {
@@ -47,6 +49,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
+        callbacks.onCancel?.();
         return;
       }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
@@ -95,6 +98,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
+        callbacks.onCancel?.();
         return;
       }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
@@ -137,6 +141,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
+        callbacks.onCancel?.();
         return;
       }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));

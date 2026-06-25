@@ -44,6 +44,7 @@ export function CoverImageUpload({
         onUploadingChange?.(false);
         toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
       },
+      onCancel: () => onUploadingChange?.(false),
     },
     { maxSizeMB }
   );
