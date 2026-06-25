@@ -353,6 +353,8 @@ export default function VitrineCheckout({
   const [referralResult, setReferralResult] = useState<ReferralValidation | null>(null);
   const [validatingReferral, setValidatingReferral] = useState(false);
   const [stripeState, setStripeState] = useState<{ clientSecret: string; publishableKey: string } | null>(null);
+  const [paymentToken, setPaymentToken] = useState<string | null>(null);
+  const [stripePaymentConfirmed, setStripePaymentConfirmed] = useState<"processing" | "confirmed" | "timeout" | null>(null);
 
   // Fetch referral credit balance for logged-in users
   useEffect(() => {
@@ -491,6 +493,7 @@ export default function VitrineCheckout({
         notes: form.notes || undefined,
       });
       setOrderNumber(order.orderNumber);
+      setPaymentToken(order.paymentToken as string ?? null);
       if (order.reservationExpiresAt) {
         setReservationExpiresAt(order.reservationExpiresAt);
         localStorage.setItem("pending_order", JSON.stringify({
@@ -548,6 +551,38 @@ export default function VitrineCheckout({
     return () => clearInterval(timer);
   }, [reservationExpiresAt]);
 
+  // Poll order payment status after Stripe payment confirmation
+  useEffect(() => {
+    if (step !== "confirmado" || stripePaymentConfirmed !== "processing") return;
+    if (!orderNumber || !paymentToken) return;
+
+    const POLL_INTERVAL = 2500;
+    const TIMEOUT_MS = 30000;
+    let stopped = false;
+    const startedAt = Date.now();
+
+    async function poll() {
+      if (stopped) return;
+      try {
+        const order = await publicStoreApi.getOrder(slug, orderNumber!, paymentToken!);
+        if (order.paymentStatus === "paid") {
+          setStripePaymentConfirmed("confirmed");
+          return;
+        }
+      } catch {
+        // ignore fetch errors, keep trying
+      }
+      if (Date.now() - startedAt >= TIMEOUT_MS) {
+        setStripePaymentConfirmed("timeout");
+        return;
+      }
+      setTimeout(poll, POLL_INTERVAL);
+    }
+
+    poll();
+    return () => { stopped = true; };
+  }, [step, stripePaymentConfirmed, orderNumber, paymentToken, slug]);
+
   if (items.length === 0 && step !== "confirmado") {
     return (
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
@@ -576,6 +611,25 @@ export default function VitrineCheckout({
           Você receberá uma confirmação no e-mail <strong>{form.customerEmail}</strong>.
           Nossa equipe entrará em contato em breve.
         </p>
+
+        {stripePaymentConfirmed === "processing" && (
+          <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl px-5 py-3 mb-6">
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            <span className="text-sm font-medium">Processando pagamento...</span>
+          </div>
+        )}
+        {stripePaymentConfirmed === "confirmed" && (
+          <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 rounded-xl px-5 py-3 mb-6">
+            <CheckCircle className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium">Pagamento confirmado!</span>
+          </div>
+        )}
+        {stripePaymentConfirmed === "timeout" && (
+          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-5 py-3 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span className="text-sm">Seu pagamento está sendo processado. Você receberá uma confirmação por e-mail em breve.</span>
+          </div>
+        )}
         {expiryCountdown !== null && !reservationExpired && (
           <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-5 py-3 mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -993,7 +1047,10 @@ export default function VitrineCheckout({
                           }}
                           set={set}
                           stripeState={stripeState}
-                          onStripeSuccess={() => setStep("confirmado")}
+                          onStripeSuccess={() => {
+                            setStripePaymentConfirmed("processing");
+                            setStep("confirmado");
+                          }}
                         />
                       )}
                       {form.paymentMethod === "transfer" && (
