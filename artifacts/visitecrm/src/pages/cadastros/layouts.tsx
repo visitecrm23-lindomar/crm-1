@@ -61,6 +61,8 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { useQueryClient } from "@tanstack/react-query";
+import { useGetCurrentSubscription } from "@workspace/api-client-react";
+import { PlanFeatureWall } from "@/components/plan-limit-wall";
 
 type CellType = LayoutCell["type"];
 
@@ -1311,6 +1313,11 @@ function LayoutCard({
 }
 
 export default function LayoutsPage() {
+  const { data: subData, isError: subError } = useGetCurrentSubscription();
+  const planLoaded = subData !== undefined || subError;
+  const supportedFeatures: string[] = (subData?.plan?.supportedFeatures ?? []) as string[];
+  const seatMapLocked = planLoaded && !supportedFeatures.includes("seatMap");
+
   const { data: layouts = [], isLoading, refetch } = useListLayouts({ query: { queryKey: ["layouts"] } });
   const createLayout = useCreateLayout();
   const updateLayout = useUpdateLayout();
@@ -1424,6 +1431,16 @@ export default function LayoutsPage() {
       floorDimensions,
     };
   }, [editorOpen, editingLayout]);
+
+  if (seatMapLocked) {
+    return (
+      <PlanFeatureWall
+        featureLabel="Layouts de Assentos"
+        requiredPlanLabel="Pro"
+        description="O mapa de assentos personalizável está disponível a partir do plano Pro."
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">

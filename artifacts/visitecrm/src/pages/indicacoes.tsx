@@ -22,6 +22,7 @@ import {
   useDeleteReferralCampaign,
   useUpdateReferralCampaign,
   useTestWhatsAppMessage,
+  useGetCurrentSubscription,
 } from "@workspace/api-client-react";
 import type { Referral, ReferralSettings, ReferralTierConfig, ReferralAnalyticsPeriod, ReferralCampaign } from "@workspace/api-client-react";
 import { REFERRAL_STATUS, ROLES } from "@workspace/permissions";
@@ -96,6 +97,7 @@ import {
   Send,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
+import { PlanFeatureWall } from "@/components/plan-limit-wall";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
   { level: "bronze",  label: "Bronze",   minReferrals: 0,  bonusMultiplier: 1.0 },
@@ -195,6 +197,11 @@ async function fetchReversalGaps(
 }
 
 export default function Indicacoes() {
+  const { data: subData, isError: subError } = useGetCurrentSubscription();
+  const planLoaded = subData !== undefined || subError;
+  const supportedFeatures: string[] = (subData?.plan?.supportedFeatures ?? []) as string[];
+  const referralsLocked = planLoaded && !supportedFeatures.includes("referrals");
+
   const { toast } = useToast();
   const { data: referralsResponse, refetch } = useListReferrals();
   const referrals = ((referralsResponse as { data?: EnrichedReferral[] } | undefined)?.data ?? (Array.isArray(referralsResponse) ? referralsResponse as EnrichedReferral[] : [])) as EnrichedReferral[];
@@ -996,6 +1003,15 @@ export default function Indicacoes() {
     });
 
     pdf.save(`indicacoes-${dateStr}.pdf`);
+  }
+
+  if (referralsLocked) {
+    return (
+      <PlanFeatureWall
+        featureLabel="Programa de Indicações"
+        requiredPlanLabel="Pro"
+      />
+    );
   }
 
   return (

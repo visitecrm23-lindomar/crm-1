@@ -60,6 +60,37 @@ export function PlanLimitWall({ resource, current, limit, planId }: PlanLimitWal
   );
 }
 
+interface PlanFeatureWallProps {
+  featureLabel: string;
+  requiredPlanLabel?: string;
+  description?: string;
+}
+
+export function PlanFeatureWall({ featureLabel, requiredPlanLabel, description }: PlanFeatureWallProps) {
+  const [, navigate] = useLocation();
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-5 py-20 text-center px-4">
+      <div className="rounded-full bg-muted p-4">
+        <Lock className="w-8 h-8 text-muted-foreground" />
+      </div>
+      <div className="space-y-1.5 max-w-sm">
+        <h2 className="text-lg font-semibold">{featureLabel} não disponível</h2>
+        <p className="text-sm text-muted-foreground">
+          {description ??
+            (requiredPlanLabel
+              ? `Esta funcionalidade está disponível a partir do plano ${requiredPlanLabel}.`
+              : "Esta funcionalidade não está incluída no seu plano atual.")}
+        </p>
+      </div>
+      <Button onClick={() => navigate("/configuracoes?tab=plan")} className="gap-2">
+        <TrendingUp className="w-4 h-4" />
+        Ver planos
+      </Button>
+    </div>
+  );
+}
+
 export function usePlanLimitError(error: unknown): {
   isLimitError: boolean;
   resource?: string;
