@@ -136,8 +136,8 @@ export function TripList() {
           </Button>
         )}
         <div className="flex border rounded-md overflow-hidden ml-auto">
-          <Button variant={viewMode === "grid" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("grid")}><LayoutGrid className="w-4 h-4" /></Button>
-          <Button variant={viewMode === "list" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" onClick={() => setViewMode("list")}><List className="w-4 h-4" /></Button>
+          <Button variant={viewMode === "grid" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" data-testid="view-grid" onClick={() => setViewMode("grid")}><LayoutGrid className="w-4 h-4" /></Button>
+          <Button variant={viewMode === "list" ? "default" : "ghost"} size="icon" className="rounded-none h-9 w-9" data-testid="view-list" onClick={() => setViewMode("list")}><List className="w-4 h-4" /></Button>
         </div>
       </div>
 

@@ -176,10 +176,8 @@ async function renderInListMode(seatMapEnabled: boolean | undefined) {
   mockGetTenant.mockReturnValue(makeTenantData(seatMapEnabled));
   const handle = await renderComponent(createElement(TripList));
 
-  // Switch to list view: find the two rounded-none toggle buttons; [1] is list mode
-  const toggleButtons = Array.from(handle.container.querySelectorAll<HTMLButtonElement>("button"))
-    .filter(b => b.className?.includes("rounded-none"));
-  const listToggle = toggleButtons[1];
+  // Switch to list view using the stable data-testid attribute
+  const listToggle = handle.container.querySelector<HTMLButtonElement>("[data-testid='view-list']");
   if (!listToggle) throw new Error("List-mode toggle button not found");
 
   await flushAct(() => {
