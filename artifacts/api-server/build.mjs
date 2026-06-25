@@ -42,6 +42,13 @@ async function buildAll() {
     external: [
       "*.node",
       "sharp",
+      // uploadthing must be external so that our globalThis.fetch patch (applied
+      // at bundle init time) runs BEFORE uploadthing loads and captures fetch by
+      // value.  If bundled, uploadthing initialises inside the esbuild bundle
+      // before our patch code runs — making any fetch/undici patch ineffective.
+      "uploadthing",
+      "@uploadthing/shared",
+      "@uploadthing/mime-types",
       // http-proxy-middleware@3 has transitive deps (entities, cheerio) that use
       // explicit .js ESM imports in ways esbuild cannot resolve — externalize
       // the whole package and load it from node_modules at runtime via symlink.

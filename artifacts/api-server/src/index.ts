@@ -6,6 +6,11 @@
 import dns from "node:dns";
 dns.setDefaultResultOrder("ipv4first");
 
+// Patch globalThis.fetch for UploadThing CDN uploads — must be the first
+// module imported so the patch is in place before any uploadthing module
+// (express or server) is first required. See lib/fetch-patch.ts for details.
+import "./lib/fetch-patch";
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "@workspace/db";

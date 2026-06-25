@@ -1,6 +1,15 @@
-import { createUploadthing, createRouteHandler, type FileRouter } from "uploadthing/express";
+import type { FileRouter } from "uploadthing/express";
 import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
+
+// Dynamic require: uploadthing is external in esbuild (see build.mjs), so the
+// require() below executes at runtime — after patchGlobalFetch() in lib/uploadthing.ts
+// has already run and globalThis.fetch is the patched version.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createUploadthing, createRouteHandler } = require("uploadthing/express") as {
+  createUploadthing: typeof import("uploadthing/express").createUploadthing;
+  createRouteHandler: typeof import("uploadthing/express").createRouteHandler;
+};
 
 const f = createUploadthing();
 

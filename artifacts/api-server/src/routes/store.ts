@@ -16,7 +16,6 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, asc, count, ilike, or, sql, ne } from "drizzle-orm";
 import { z } from "zod/v4";
-import { UTApi } from "uploadthing/server";
 import { randomBytes, createHash } from "crypto";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";

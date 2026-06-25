@@ -1,104 +1,30 @@
-import { UTApi } from "uploadthing/server";
+import type { UTApi as UTApiType } from "uploadthing/server";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 /**
- * PATCHED VERSION: uploadthing@7.7.4 (pinned — do NOT remove the ^ pin in package.json)
+ * UploadThing API wrapper.
  *
- * Work-around for two bugs in UploadThing SDK v7.x / Effect-Platform HTTP client
- * that cause PUT requests to UploadThing's ingest CDN to fail with
- * "Failed to verify URL: Invalid signature" in production.
+ * uploadthing@7.7.4 is pinned (exact, no ^). The SDK's Effect-Platform
+ * FetchHttpClient adds a spurious `Range: bytes=0-` header and double-encodes
+ * URL params on CDN PUT requests, causing "Invalid signature" 400 errors.
  *
- * Root causes identified from production logs (confirmed on uploadthing@7.7.4):
- *
- * Bug 1 — Spurious `Range: bytes=0-` header
- *   Effect-Platform adds this header to all PUT requests. UploadThing's CDN HMAC
- *   verifies the exact set of signed headers; any extra unsigned header breaks the
- *   signature check.
- *
- * Bug 2 — Double-encoded query parameters
- *   Effect-Platform percent-encodes already-encoded sequences in the presigned URL:
- *   `image%2Fpng` → `image%252Fpng`, `Visite%20Cariri` → `Visite%2520Cariri`.
- *   The CDN decodes once, receiving `image%2Fpng` instead of `image/png`. Since the
- *   HMAC was computed over the decoded value, the check fails.
- *
- * WHY undici setGlobalDispatcher + compose (not globalThis.fetch patch):
- *   Effect-Platform's HttpClient uses undici directly — it does NOT go through
- *   globalThis.fetch. Patching globalThis.fetch has no effect on Effect's requests.
- *   undici's compose interceptor wraps the global agent and intercepts ALL undici
- *   traffic (including Effect Platform's) at the dispatch level, before bytes hit wire.
+ * Fix lives in two places:
+ *  1. lib/fetch-patch.ts — patches globalThis.fetch before ANY uploadthing module
+ *     loads (imported first in index.ts). MUST stay as the first import.
+ *  2. build.mjs — "uploadthing" is in the external list so it is loaded via
+ *     Node's require() at runtime (after the patch), not bundled inside esbuild.
  *
  * BEFORE UPGRADING uploadthing:
- *   Check whether Effect-Platform's HTTP client still adds the Range header and
- *   double-encodes params on CDN PUT requests. If fixed upstream, remove this patch
- *   and the exact-version pin in package.json.
- *   Relevant upstream: https://github.com/pingdotgg/uploadthing/issues
+ *   Verify that Effect-Platform's FetchHttpClient no longer adds Range header or
+ *   double-encodes params. If fixed: remove fetch-patch.ts, remove the external
+ *   entry in build.mjs, and remove the exact-version pin in package.json.
  */
-function patchUndiciForUploadThingCDN(): void {
-  // Dynamically required to avoid TS lib conflicts — undici v8 types live at
-  // ./types/index.d.ts and are re-exported from the package root; we use
-  // runtime require + cast to avoid import-resolution fights with different
-  // undici versions that may be present in the monorepo.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {
-    Agent,
-    setGlobalDispatcher,
-  } = require("undici") as {
-    Agent: new () => {
-      compose: (interceptor: (dispatch: (opts: Record<string, unknown>, handler: unknown) => boolean) => (opts: Record<string, unknown>, handler: unknown) => boolean) => { dispatch: (opts: Record<string, unknown>, handler: unknown) => boolean };
-    };
-    setGlobalDispatcher: (d: unknown) => void;
-  };
 
-  const agent = new Agent();
-
-  const wrapped = agent.compose(
-    (dispatch) =>
-      (opts, handler) => {
-        const origin =
-          typeof opts["origin"] === "string"
-            ? opts["origin"]
-            : opts["origin"] instanceof URL
-            ? (opts["origin"] as URL).href
-            : "";
-
-        if (origin.includes(".ingest.uploadthing.com") && opts["method"] === "PUT") {
-          // Fix 1: Un-double-encode query params in the path.
-          // Effect-Platform encodes % → %25 so %2F becomes %252F.
-          // One substitution pass restores %25XX → %XX.
-          if (typeof opts["path"] === "string") {
-            opts["path"] = (opts["path"] as string).replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
-          }
-
-          // Fix 2: Strip the spurious `Range: bytes=0-` header.
-          // Effect-Platform adds it unconditionally; UploadThing CDN rejects it.
-          const headers = opts["headers"];
-          if (Array.isArray(headers)) {
-            const filtered: unknown[] = [];
-            for (let i = 0; i < headers.length; i += 2) {
-              const key = headers[i];
-              if (typeof key !== "string" || key.toLowerCase() !== "range") {
-                filtered.push(headers[i], headers[i + 1]);
-              }
-            }
-            opts["headers"] = filtered;
-          } else if (headers && typeof headers === "object") {
-            const filtered: Record<string, unknown> = {};
-            for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {
-              if (k.toLowerCase() !== "range") filtered[k] = v;
-            }
-            opts["headers"] = filtered;
-          }
-        }
-
-        return dispatch(opts, handler);
-      },
-  );
-
-  setGlobalDispatcher(wrapped);
-}
-
-patchUndiciForUploadThingCDN();
+// Dynamic require: uploadthing is external in esbuild (see build.mjs), loaded
+// at runtime after lib/fetch-patch.ts has already patched globalThis.fetch.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { UTApi } = require("uploadthing/server") as { UTApi: typeof UTApiType };
 
 export const utapi = new UTApi();
 
