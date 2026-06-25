@@ -32,16 +32,27 @@ export async function loadReservationContext(args: {
     isDefaultWeb: pipelineStagesTable.isDefaultWeb,
     name: pipelineStagesTable.name,
     order: pipelineStagesTable.order,
+    pipelineId: pipelineStagesTable.pipelineId,
     pipelineIsDefault: pipelinesTable.isDefault,
   })
     .from(pipelineStagesTable)
     .innerJoin(pipelinesTable, eq(pipelineStagesTable.pipelineId, pipelinesTable.id))
     .where(eq(pipelineStagesTable.tenantId, tenantId))
-    .orderBy(asc(pipelineStagesTable.order));
+    // Order by pipeline age first so the fallback consistently picks the oldest pipeline.
+    .orderBy(asc(pipelinesTable.createdAt), asc(pipelineStagesTable.order));
 
-  // Prefer stages that belong to the default pipeline; fall back to any pipeline.
+  // Prefer stages that belong to the default pipeline.
+  // Fallback: use the oldest pipeline (first by createdAt, already sorted above).
   const defaultStages = stages.filter((s) => s.pipelineIsDefault);
-  const sourceStages = defaultStages.length > 0 ? defaultStages : stages;
+  let sourceStages: typeof stages;
+  if (defaultStages.length > 0) {
+    sourceStages = defaultStages;
+  } else {
+    const firstPipelineId = stages[0]?.pipelineId;
+    sourceStages = firstPipelineId
+      ? stages.filter((s) => s.pipelineId === firstPipelineId)
+      : stages;
+  }
   const vitrine =
     sourceStages.find((s) => s.isDefaultWeb) ??
     sourceStages.find((s) => s.name === "Vitrine") ??
