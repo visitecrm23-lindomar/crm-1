@@ -21,7 +21,7 @@ import { runPipelineTripEndedCron } from "./services/pipeline-automation";
 import { calculateScoresForAllTenants } from "./lib/client-scores";
 import { runCampaignAutomationCron } from "./lib/campaign-automation";
 import { runGemeoAlertsCron, runGemeoOpportunitiesCron } from "./lib/gemeo-cron";
-import { getRedisConnection, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
+import { getRedisConnection, waitForEvictionPolicyCheck, fetchUpstashDailyStats, getRedisWarningThresholdPct, maybeSendDailyLimitAlert } from "./lib/redis";
 import { getReminderQueue, closeQueues } from "./queues/index";
 import { startEmailWorker, stopEmailWorker } from "./workers/email.worker";
 import { startReminderWorker, stopReminderWorker, retryFailedBookingEmails, retryFailedExpiryWarningEmails } from "./workers/reminder.worker";
@@ -288,6 +288,17 @@ applyMigrations()
       const redisConn = getRedisConnection();
       if (redisConn) {
         try {
+          // Await the eviction-policy check before initialising BullMQ workers.
+          // This ensures our CONFIG SET (or the structured warning log) completes
+          // before BullMQ runs its own internal eviction check, eliminating the
+          // race condition that would otherwise cause the BullMQ console.warn to
+          // fire even when the policy was successfully corrected.
+          // A 5 s timeout prevents this from blocking startup indefinitely on
+          // slow / rate-limited Redis instances.
+          await Promise.race([
+            waitForEvictionPolicyCheck(),
+            new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+          ]);
           startEmailWorker();
           startReminderWorker();
           startPdfWorker();

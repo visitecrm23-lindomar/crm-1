@@ -11,7 +11,16 @@ export let isQueueEnabled = false;
 // ─── Eviction policy ──────────────────────────────────────────────────────────
 // Tracked per process so we only attempt the CONFIG SET once at startup (not on
 // every reconnect) and only log the actionable warning once.
+//
+// _evictionPolicyPromise resolves when the check/set attempt has completed so
+// that callers (e.g. the server startup in index.ts) can await it before
+// initialising BullMQ workers, eliminating the race between our CONFIG SET and
+// BullMQ's own internal eviction check.
 let _evictionPolicyChecked = false;
+let _evictionPolicyResolve: (() => void) | null = null;
+// eslint-disable-next-line prefer-const
+let _evictionPolicyPromise: Promise<void> = Promise.resolve(); // replaced when connection is created
+let _evictionPolicySafe: boolean | null = null; // null = not checked yet
 
 // ─── Transient error tracking ─────────────────────────────────────────────────
 // We count consecutive transient Redis errors in-memory so the system-health
@@ -285,6 +294,7 @@ async function maybeFixEvictionPolicy(conn: Redis): Promise<void> {
 
   try {
     await conn.config("SET", "maxmemory-policy", "noeviction");
+    _evictionPolicySafe = true;
     logger.info("[redis] maxmemory-policy set to noeviction — BullMQ job safety ensured");
     return;
   } catch {
@@ -297,8 +307,10 @@ async function maybeFixEvictionPolicy(conn: Redis): Promise<void> {
     // ioredis returns ["maxmemory-policy", "<value>"]
     const currentPolicy = configResult[1] ?? "unknown";
     if (currentPolicy === "noeviction") {
+      _evictionPolicySafe = true;
       logger.info("[redis] maxmemory-policy is already noeviction — no action needed");
     } else {
+      _evictionPolicySafe = false;
       logger.warn(
         { currentPolicy },
         "[redis] maxmemory-policy is not 'noeviction' — BullMQ jobs may be silently lost under memory pressure. " +
@@ -307,11 +319,37 @@ async function maybeFixEvictionPolicy(conn: Redis): Promise<void> {
       );
     }
   } catch {
+    _evictionPolicySafe = false;
     logger.warn(
       "[redis] Cannot read maxmemory-policy (CONFIG GET not allowed by provider). " +
       "If using Upstash, set Eviction Policy = No Eviction in the Upstash dashboard to prevent silent BullMQ job loss.",
     );
+  } finally {
+    // Resolve any callers awaiting the eviction policy check (e.g. server startup).
+    _evictionPolicyResolve?.();
+    _evictionPolicyResolve = null;
   }
+}
+
+/**
+ * Returns a promise that resolves once the startup eviction-policy check has
+ * completed (either a successful CONFIG SET, a successful CONFIG GET read, or
+ * a provider that forbids both).  Awaiting this in the server startup before
+ * initialising BullMQ workers eliminates the race between our CONFIG SET and
+ * BullMQ's own internal eviction-policy check.
+ *
+ * Resolves immediately when Redis is not configured (REDIS_URL not set).
+ */
+export function waitForEvictionPolicyCheck(): Promise<void> {
+  return _evictionPolicyPromise;
+}
+
+/**
+ * Returns whether the Redis eviction policy is safe for BullMQ (noeviction).
+ * null = check not yet complete.
+ */
+export function isEvictionPolicySafe(): boolean | null {
+  return _evictionPolicySafe;
 }
 
 export function getRedisConnection(): Redis | null {
@@ -332,6 +370,14 @@ export function getRedisConnection(): Redis | null {
   const useTls = url.startsWith("rediss://") || knownTlsHosts.some((h) => parsedHost.endsWith(h));
 
   if (!_connection) {
+    // Create a new promise for this connection's eviction policy check.
+    // Any caller that awaits waitForEvictionPolicyCheck() will block until
+    // maybeFixEvictionPolicy resolves it (or until closeRedisConnection resolves it).
+    _evictionPolicyPromise = new Promise((resolve) => {
+      _evictionPolicyResolve = resolve;
+    });
+    _evictionPolicySafe = null;
+
     try {
       _connection = new Redis(url, {
         maxRetriesPerRequest: null,
@@ -397,14 +443,62 @@ export function getRedisConnection(): Redis | null {
   return _connection;
 }
 
-export async function closeRedisConnection(): Promise<void> {
-  if (_connection) {
-    await _connection.quit().catch(() => {});
-    _connection = null;
-    isQueueEnabled = false;
-    // Allow the eviction policy check to run again on next connection.
-    _evictionPolicyChecked = false;
+let _producerConnection: Redis | null = null;
+
+/**
+ * Returns a dedicated ioredis connection for BullMQ Queue producers (not workers).
+ * Configured with enableOfflineQueue: false so that queue.add() calls fail
+ * immediately and explicitly when Redis is unavailable — rather than silently
+ * queuing commands that may never be delivered.  Callers must handle the thrown
+ * error and fall back (e.g. direct email send) instead of relying on transparent
+ * command queuing.
+ *
+ * Note: BullMQ duplicates this connection internally with maxRetriesPerRequest:null
+ * (required for Workers).  The duplicate inherits enableOfflineQueue: false, so
+ * Queue producers will still fail-fast.
+ */
+export function getBullMQQueueConnection(): Redis | null {
+  const conn = getRedisConnection();
+  if (!conn) return null;
+
+  if (!_producerConnection) {
+    _producerConnection = conn.duplicate({
+      // Fail immediately when Redis is disconnected instead of queuing commands.
+      // This converts silent job loss into an explicit error the caller can handle.
+      enableOfflineQueue: false,
+      // Finite retry limit for producers: 3 attempts before failing explicitly.
+      // BullMQ will override this to null on its own internal duplicate for Workers,
+      // but it signals intent here and applies to any direct commands on this connection.
+      maxRetriesPerRequest: 3,
+    });
+
+    _producerConnection.on("error", (err: Error) => {
+      if (isTransientRedisError(err)) {
+        logger.warn({ err }, "[redis-producer] Transient error");
+      } else {
+        logger.error({ err }, "[redis-producer] Error");
+      }
+    });
   }
+
+  return _producerConnection;
+}
+
+export async function closeRedisConnection(): Promise<void> {
+  // Resolve any pending eviction-policy waiters before tearing down.
+  _evictionPolicyResolve?.();
+  _evictionPolicyResolve = null;
+  _evictionPolicyPromise = Promise.resolve();
+  _evictionPolicyChecked = false;
+  _evictionPolicySafe = null;
+
+  await Promise.all([
+    _producerConnection?.quit().catch(() => {}),
+    _connection?.quit().catch(() => {}),
+  ]);
+  _producerConnection = null;
+  _connection = null;
+  isQueueEnabled = false;
 }
 
 // ─── Workers-enabled flag ─────────────────────────────────────────────────────

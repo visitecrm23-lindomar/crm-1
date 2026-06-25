@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { getRedisConnection } from "../lib/redis";
+import { getBullMQQueueConnection } from "../lib/redis";
 import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
@@ -156,7 +156,7 @@ let _pdfQueue: Queue<PdfJobData> | null = null;
 let _commissionSyncQueue: Queue<CommissionSyncJobData> | null = null;
 
 export function getEmailQueue(): Queue<ReservationEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_emailQueue) {
@@ -174,7 +174,7 @@ export function getEmailQueue(): Queue<ReservationEmailJobData> | null {
 }
 
 export function getCancellationEmailQueue(): Queue<CancellationEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_cancellationEmailQueue) {
@@ -192,7 +192,7 @@ export function getCancellationEmailQueue(): Queue<CancellationEmailJobData> | n
 }
 
 export function getBirthdayEmailQueue(): Queue<BirthdayEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_birthdayEmailQueue) {
@@ -210,7 +210,7 @@ export function getBirthdayEmailQueue(): Queue<BirthdayEmailJobData> | null {
 }
 
 export function getNewBookingNotificationEmailQueue(): Queue<NewBookingNotificationEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_newBookingNotificationEmailQueue) {
@@ -228,7 +228,7 @@ export function getNewBookingNotificationEmailQueue(): Queue<NewBookingNotificat
 }
 
 export function getReferralEmailQueue(): Queue<ReferralEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_referralEmailQueue) {
@@ -246,7 +246,7 @@ export function getReferralEmailQueue(): Queue<ReferralEmailJobData> | null {
 }
 
 export function getReminderQueue(): Queue<ReminderJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_reminderQueue) {
@@ -264,7 +264,7 @@ export function getReminderQueue(): Queue<ReminderJobData> | null {
 }
 
 export function getPdfQueue(): Queue<PdfJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_pdfQueue) {
@@ -282,7 +282,7 @@ export function getPdfQueue(): Queue<PdfJobData> | null {
 }
 
 export function getCommissionSyncQueue(): Queue<CommissionSyncJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_commissionSyncQueue) {
@@ -302,7 +302,7 @@ export function getCommissionSyncQueue(): Queue<CommissionSyncJobData> | null {
 let _calendarSyncQueue: Queue<CalendarSyncJobData> | null = null;
 
 export function getCalendarSyncQueue(): Queue<CalendarSyncJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_calendarSyncQueue) {
@@ -325,7 +325,7 @@ export function getCalendarSyncQueue(): Queue<CalendarSyncJobData> | null {
 let _campaignEmailQueue: Queue<CampaignEmailJobData> | null = null;
 
 export function getCampaignEmailQueue(): Queue<CampaignEmailJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
   if (!_campaignEmailQueue) {
     _campaignEmailQueue = new Queue<CampaignEmailJobData>(QUEUES.EMAIL, {
@@ -344,7 +344,7 @@ export function getCampaignEmailQueue(): Queue<CampaignEmailJobData> | null {
 let _whatsAppQueue: Queue<WhatsAppNotificationJobData> | null = null;
 
 export function getWhatsAppQueue(): Queue<WhatsAppNotificationJobData> | null {
-  const conn = getRedisConnection();
+  const conn = getBullMQQueueConnection();
   if (!conn) return null;
 
   if (!_whatsAppQueue) {
