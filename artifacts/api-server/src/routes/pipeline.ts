@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
-import { eq, and, asc, desc, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, asc, desc, inArray } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser, ADMIN_ROLES } from '../lib/tenant';
 import { z } from "zod";
@@ -499,11 +499,11 @@ router.get("/pipelines", async (req, res, next: NextFunction): Promise<void> => 
     // Determine which pipelines have at least one deal (active or historical)
     const stagesWithDeals = await db.select({ pipelineId: pipelineStagesTable.pipelineId })
       .from(pipelineStagesTable)
-      .innerJoin(dealsTable, eq(dealsTable.stageId, pipelineStagesTable.id))
-      .where(and(
-        eq(pipelineStagesTable.tenantId, me.tenantId),
-        isNotNull(dealsTable.id),
-      ));
+      .innerJoin(dealsTable, and(
+        eq(dealsTable.stageId, pipelineStagesTable.id),
+        eq(dealsTable.tenantId, me.tenantId),
+      ))
+      .where(eq(pipelineStagesTable.tenantId, me.tenantId));
     const pipelinesWithDeals = new Set(stagesWithDeals.map(r => r.pipelineId));
 
     res.json(pipelines.map((p) => ({
