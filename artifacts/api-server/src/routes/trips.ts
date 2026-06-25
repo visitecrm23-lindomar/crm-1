@@ -30,6 +30,21 @@ import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
 
+async function getTenantSupportedFeatures(tenantId: string): Promise<string[]> {
+  const [tenantRow] = await db
+    .select({ planId: tenantsTable.planId })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+  const tenantPlanId = tenantRow?.planId ?? "starter";
+  const [planRow] = await db
+    .select({ supportedFeatures: plansTable.supportedFeatures })
+    .from(plansTable)
+    .where(or(eq(plansTable.id, tenantPlanId), eq(plansTable.slug, tenantPlanId)))
+    .limit(1);
+  return (planRow?.supportedFeatures ?? []) as string[];
+}
+
 function generateSeatMapFromLayout(
   cells: LayoutCell[],
   numberingType: string,
@@ -678,6 +693,11 @@ router.get("/trips/:id/seat-map", async (req, res, next: NextFunction): Promise<
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const features = await getTenantSupportedFeatures(me.tenantId);
+    if (!hasSeatMapFeature(features)) {
+      next(new ForbiddenError("Mapa de assentos não está disponível no seu plano atual", "FEATURE_NOT_IN_PLAN"));
+      return;
+    }
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
@@ -751,6 +771,11 @@ router.post("/trips/:id/regenerate-seat-map", async (req, res, next: NextFunctio
     const me = await requireAuth(req, res);
     if (!me) return;
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
+    const features = await getTenantSupportedFeatures(me.tenantId);
+    if (!hasSeatMapFeature(features)) {
+      next(new ForbiddenError("Mapa de assentos não está disponível no seu plano atual", "FEATURE_NOT_IN_PLAN"));
+      return;
+    }
 
     const [trip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
