@@ -7,6 +7,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table/kit";
+import { TextStyle, Color } from "@tiptap/extension-text-style";
+import Highlight from "@tiptap/extension-highlight";
 import {
   Bold,
   Italic,
@@ -33,6 +35,8 @@ import {
   Trash2,
   Plus,
   Minus,
+  Baseline,
+  Highlighter,
 } from "lucide-react";
 
 const BTN_BASE =
@@ -70,6 +74,155 @@ function Divider() {
   return <span className="w-px h-5 bg-border mx-0.5 shrink-0" />;
 }
 
+const HIGHLIGHT_COLORS = [
+  { label: "Amarelo", value: "#fef08a" },
+  { label: "Verde", value: "#bbf7d0" },
+  { label: "Azul", value: "#bfdbfe" },
+  { label: "Rosa", value: "#fbcfe8" },
+  { label: "Laranja", value: "#fed7aa" },
+];
+
+function ColorPickerBtn({
+  editor,
+}: {
+  editor: ReturnType<typeof useEditor>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const currentColor: string = (editor?.getAttributes("textStyle").color as string) ?? "#000000";
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  if (!editor) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title="Cor do texto"
+        onClick={() => setOpen((v) => !v)}
+        className={`${BTN_BASE} ${BTN_IDLE} flex-col gap-0 px-1`}
+        style={{ position: "relative" }}
+      >
+        <Baseline className="w-3.5 h-3.5" />
+        <span
+          className="absolute bottom-0.5 left-1 right-1 h-1 rounded-full"
+          style={{ background: currentColor }}
+        />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-background border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px]">
+          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1">
+            Cor do texto
+          </label>
+          <div className="flex items-center gap-1.5 px-1">
+            <input
+              type="color"
+              title="Escolher cor"
+              value={currentColor}
+              onChange={(e) => {
+                editor.chain().focus().setColor(e.target.value).run();
+              }}
+              className="w-6 h-6 rounded cursor-pointer border border-border bg-transparent p-0"
+            />
+            <span className="text-xs text-muted-foreground">Personalizada</span>
+          </div>
+          <div className="w-full h-px bg-border my-0.5" />
+          <button
+            type="button"
+            onClick={() => {
+              editor.chain().focus().unsetColor().run();
+              setOpen(false);
+            }}
+            className="text-xs text-left px-1 py-0.5 rounded hover:bg-muted text-muted-foreground"
+          >
+            Remover cor
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HighlightPickerBtn({
+  editor,
+}: {
+  editor: ReturnType<typeof useEditor>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  if (!editor) return null;
+
+  const isActive = editor.isActive("highlight");
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        title="Realce"
+        onClick={() => setOpen((v) => !v)}
+        className={`${BTN_BASE} ${isActive ? BTN_ACTIVE : BTN_IDLE}`}
+      >
+        <Highlighter className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 bg-background border border-border rounded-md shadow-lg p-2 flex flex-col gap-1.5 min-w-[140px]">
+          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1">
+            Cor de realce
+          </label>
+          <div className="flex items-center gap-1 px-1">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                title={c.label}
+                style={{ background: c.value }}
+                onClick={() => {
+                  editor.chain().focus().setHighlight({ color: c.value }).run();
+                  setOpen(false);
+                }}
+                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
+              />
+            ))}
+          </div>
+          <div className="w-full h-px bg-border my-0.5" />
+          <button
+            type="button"
+            onClick={() => {
+              editor.chain().focus().unsetHighlight().run();
+              setOpen(false);
+            }}
+            className="text-xs text-left px-1 py-0.5 rounded hover:bg-muted text-muted-foreground"
+          >
+            Remover realce
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type DialogMode = "none" | "link" | "image";
 
 export function TiptapEditor({
@@ -95,6 +248,9 @@ export function TiptapEditor({
       Image.configure({ inline: false }),
       Placeholder.configure({ placeholder: "Descreva a viagem, inclua itinerário, o que está incluso, dicas..." }),
       TableKit,
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -211,6 +367,12 @@ export function TiptapEditor({
         <ToolBtn icon={Underline} title="Sublinhado (Ctrl+U)" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} />
         <ToolBtn icon={Strikethrough} title="Tachado" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} />
         <ToolBtn icon={Code2} title="Código inline" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} />
+
+        <Divider />
+
+        {/* Text color & highlight */}
+        <ColorPickerBtn editor={editor} />
+        <HighlightPickerBtn editor={editor} />
 
         <Divider />
 
