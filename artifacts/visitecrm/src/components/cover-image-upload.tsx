@@ -141,7 +141,7 @@ export function CoverImageUpload({
           disabled={disabled}
           className="text-sm h-8"
         />
-        <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim() || disabled} className="shrink-0">
+        <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim() || urlPreviewError || disabled} className="shrink-0">
           Confirmar
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={cancelUrl} disabled={disabled} className="shrink-0 px-2">
@@ -232,9 +232,19 @@ export function CoverImageUpload({
                       }}
                       className="text-sm h-8"
                     />
-                    <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim()} className="shrink-0">Confirmar</Button>
+                    <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim() || urlPreviewError} className="shrink-0">Confirmar</Button>
                     <Button type="button" size="sm" variant="ghost" onClick={cancelUrl} className="shrink-0 px-2"><X className="w-4 h-4" /></Button>
                   </div>
+                  {urlInput.trim() && !urlPreviewError && (
+                    <div className="rounded overflow-hidden h-16 bg-muted">
+                      <img
+                        src={urlInput.trim()}
+                        alt="Preview"
+                        className="w-full h-full object-contain"
+                        onError={() => setUrlPreviewError(true)}
+                      />
+                    </div>
+                  )}
                   {urlPreviewError && (
                     <div className="flex items-center gap-1.5 text-xs text-destructive">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
