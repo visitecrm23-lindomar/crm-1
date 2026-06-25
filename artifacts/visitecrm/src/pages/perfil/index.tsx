@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, type ReactElement } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactElement } from "react";
+import { toPng } from "html-to-image";
 import { useLocation, useSearch } from "wouter";
 import { clientPortalApi, type ClientPortalProfile, type ClientLoyalty, type ClientReferral, type FavoritesResponse, type ClientPortalReservation, type ClientLoyaltyTransaction, type ClientAchievementsResponse, type ClientMemoriesResponse, type DreamDestinationItem, type ClubBenefit, type ClubRankingResponse } from "@/lib/clientPortalApi";
 import QRCode from "qrcode";
@@ -325,6 +326,8 @@ function ClienteCard({
 }) {
   const { toast } = useToast();
   const [codeCopied, setCodeCopied] = useState(false);
+  const [cardDownloading, setCardDownloading] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const displayName = profile.client?.name ?? profile.user?.name ?? "Viajante";
   const cpf = profile.client?.cpf ?? null;
   const hasLoyalty = !!profile.loyalty;
@@ -343,6 +346,31 @@ function ClienteCard({
     setTimeout(() => setCodeCopied(false), 2000);
   }
 
+  const handleDownloadCard = useCallback(async () => {
+    if (!cardRef.current) return;
+    setCardDownloading(true);
+    try {
+      const dataUrl = await toPng(cardRef.current, { pixelRatio: 2, cacheBust: true });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      const safeName = displayName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+      a.download = `cartao_viajante_${safeName}.png`;
+      a.click();
+    } catch {
+      toast({ title: "Erro ao gerar imagem", description: "Tente novamente.", variant: "destructive" });
+    } finally {
+      setCardDownloading(false);
+    }
+  }, [displayName, toast]);
+
+  const handleShareCard = useCallback(async () => {
+    const profileUrl = window.location.href;
+    const agencyName = profile.tenant?.name ?? "VisiteCRM";
+    const message = `Olá! Sou membro ${tierLabel ? `(nível ${tierLabel}) ` : ""}da ${agencyName}. Acesse meu perfil de viajante: ${profileUrl}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  }, [profile.tenant?.name, tierLabel]);
+
   const maskedNumber = cpf
     ? `•••• •••• ••• ${cpf.replace(/\D/g, "").slice(-3)}`
     : "•••• •••• •••• ••••";
@@ -351,8 +379,9 @@ function ClienteCard({
   const tierIcon = tierLevel ? CARD_TIER_ICONS[tierLevel] : null;
 
   return (
-    <div className="flex justify-center">
+    <div className="flex flex-col items-center gap-2">
       <div
+        ref={cardRef}
         className={`relative w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl text-white select-none${tierGradient ? ` bg-gradient-to-br ${tierGradient}` : ""}`}
         style={!tierGradient ? { background: `linear-gradient(135deg, ${primaryColor}ee, ${primaryColor}88)` } : undefined}
         aria-label="Cartão de viajante"
@@ -433,7 +462,7 @@ function ClienteCard({
       {customerCode && (
         <button
           onClick={copyCustomerCode}
-          className="mt-2 mx-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors group"
+          className="mx-auto flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors group"
           title="Copiar código de cliente"
         >
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cód. cliente</span>
@@ -443,6 +472,31 @@ function ClienteCard({
             : <Copy className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />}
         </button>
       )}
+      <div className="flex gap-2 mt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={handleDownloadCard}
+          disabled={cardDownloading}
+        >
+          {cardDownloading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Download className="w-3.5 h-3.5" />
+          )}
+          {cardDownloading ? "Gerando..." : "Baixar cartão"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={handleShareCard}
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          Compartilhar
+        </Button>
+      </div>
     </div>
   );
 }
