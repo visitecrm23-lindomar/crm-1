@@ -141,6 +141,13 @@
       "when": 1801800000000,
       "tag": "0019_fix_referral_code_status",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1801900000000,
+      "tag": "0020_catch_all_baseline_columns",
+      "breakpoints": true
     }
   ]
 }
