@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { DEAL_STATUS } from "@workspace/permissions";
+import { DEAL_STATUS, ROLES } from "@workspace/permissions";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -1165,7 +1165,7 @@ export default function Pipeline() {
   const [bulkMigrateOpen, setBulkMigrateOpen] = useState(false);
 
   const { data: me } = useGetMe();
-  const isAdmin = me?.role === "admin" || me?.role === "manager";
+  const isAdmin = me?.role === ROLES.SUPER_ADMIN || me?.role === ROLES.AGENCY_ADMIN;
 
   const { data: pipelines, refetch: refetchPipelines } = useQuery<PipelineInfo[]>({
     queryKey: ["pipelines"],
