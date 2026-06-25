@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const UPLOAD_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api/upload";
 
@@ -20,8 +20,11 @@ interface UploadOptions {
 
 export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   async function startUpload(file: File) {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsUploading(true);
     callbacks.onBegin?.();
     try {
@@ -34,6 +37,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
         method: "POST",
         credentials: "include",
         body: form,
+        signal: controller.signal,
       });
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}));
@@ -42,20 +46,31 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       const data = await resp.json() as { url: string; key: string; name: string };
       callbacks.onComplete?.(data);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      abortControllerRef.current = null;
     }
   }
 
-  return { startUpload, isUploading };
+  function cancelUpload() {
+    abortControllerRef.current?.abort();
+  }
+
+  return { startUpload, isUploading, cancelUpload };
 }
 
 export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsUploading(true);
     callbacks.onBegin?.();
     try {
@@ -70,6 +85,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
         method: "POST",
         credentials: "include",
         body: form,
+        signal: controller.signal,
       });
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}));
@@ -78,19 +94,30 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       const data = await resp.json() as Array<{ url: string; key: string; name: string }>;
       callbacks.onComplete?.(data);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      abortControllerRef.current = null;
     }
   }
 
-  return { startUpload, isUploading };
+  function cancelUpload() {
+    abortControllerRef.current?.abort();
+  }
+
+  return { startUpload, isUploading, cancelUpload };
 }
 
 export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   async function startUpload(file: File) {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsUploading(true);
     callbacks.onBegin?.();
     try {
@@ -100,6 +127,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
         method: "POST",
         credentials: "include",
         body: form,
+        signal: controller.signal,
       });
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}));
@@ -108,11 +136,19 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
       const data = await resp.json() as { url: string; key: string; name: string; size?: number; mimeType?: string };
       callbacks.onComplete?.(data);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      abortControllerRef.current = null;
     }
   }
 
-  return { startUpload, isUploading };
+  function cancelUpload() {
+    abortControllerRef.current?.abort();
+  }
+
+  return { startUpload, isUploading, cancelUpload };
 }

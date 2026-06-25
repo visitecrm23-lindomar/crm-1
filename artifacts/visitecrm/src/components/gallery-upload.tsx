@@ -28,7 +28,7 @@ export function GalleryUpload({
   const canAdd = value.length < maxImages;
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading } = useUploadImages(
+  const { startUpload, isUploading, cancelUpload } = useUploadImages(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (results) => {
@@ -108,25 +108,39 @@ export function GalleryUpload({
           {value.length}/{maxImages} imagens
         </span>
         {canAdd && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isUploading}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                Enviando...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-1" />
-                Adicionar Imagens
-              </>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || isUploading}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-1" />
+                  Adicionar Imagens
+                </>
+              )}
+            </Button>
+            {isUploading && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={cancelUpload}
+                className="text-muted-foreground hover:text-destructive px-2"
+                title="Cancelar envio"
+              >
+                <X className="w-4 h-4" />
+              </Button>
             )}
-          </Button>
+          </div>
         )}
       </div>
 
@@ -193,8 +207,16 @@ export function GalleryUpload({
             </div>
           ))}
           {isUploading && (
-            <div className="rounded-lg aspect-video bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+            <div className="rounded-lg aspect-video bg-muted flex flex-col items-center justify-center gap-1 border-2 border-dashed border-muted-foreground/30">
               <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+              <button
+                type="button"
+                onClick={cancelUpload}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-0.5"
+              >
+                <X className="w-3 h-3" />
+                Cancelar
+              </button>
             </div>
           )}
         </div>

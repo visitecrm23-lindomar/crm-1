@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy, X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -289,7 +289,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  const { startUpload, isUploading } = useUploadDocument({
+  const { startUpload, isUploading, cancelUpload } = useUploadDocument({
     onComplete: async (result) => {
       try {
         const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
@@ -372,10 +372,17 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
         <p className="text-sm font-medium text-muted-foreground">
           {loadingDocs ? "Carregando…" : `${docs.length} documento(s)`}
         </p>
-        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
-          {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-          {isUploading ? "Enviando..." : "Enviar Documento"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
+            {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+            {isUploading ? "Enviando..." : "Enviar Documento"}
+          </Button>
+          {isUploading && (
+            <Button type="button" size="sm" variant="ghost" onClick={cancelUpload} className="text-muted-foreground hover:text-destructive px-2" title="Cancelar envio">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
         <input
           ref={inputRef}
           type="file"

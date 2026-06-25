@@ -33,7 +33,7 @@ export function CoverImageUpload({
 
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading } = useUploadImage(
+  const { startUpload, isUploading, cancelUpload } = useUploadImage(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (result) => {
@@ -113,74 +113,108 @@ export function CoverImageUpload({
               (e.target as HTMLImageElement).style.display = "none";
             }}
           />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={disabled || isUploading}
-            >
-              {isUploading ? (
-                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4 mr-1" />
-              )}
-              Trocar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={handleRemove}
-              disabled={disabled || isUploading}
-            >
-              <X className="w-4 h-4 mr-1" />
-              Remover
-            </Button>
+          <div
+            className={[
+              "absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center gap-2",
+              isUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            ].join(" ")}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="w-5 h-5 text-white animate-spin" />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={cancelUpload}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={disabled}
+                >
+                  <Upload className="w-4 h-4 mr-1" />
+                  Trocar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleRemove}
+                  disabled={disabled}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Remover
+                </Button>
+              </>
+            )}
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          disabled={disabled || isUploading}
-          className={[
-            "w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-            previewClassName,
-            isDragging
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
-          ].join(" ")}
-        >
-          {isUploading ? (
-            <>
-              <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-              <span className="text-sm text-muted-foreground">Enviando...</span>
-            </>
-          ) : isDragging ? (
-            <>
-              <Upload className="w-8 h-8 text-primary" />
-              <span className="text-sm font-medium text-primary">
-                Solte para enviar
-              </span>
-            </>
-          ) : (
-            <>
-              <ImageIcon className="w-8 h-8 text-muted-foreground" />
-              <span className="text-sm font-medium text-muted-foreground">
-                {labelText}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. {fileSizeMB} MB
-              </span>
-            </>
+        <>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            disabled={disabled || isUploading}
+            className={[
+              "w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              previewClassName,
+              isDragging
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
+            ].join(" ")}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                <span className="text-sm text-muted-foreground">Enviando...</span>
+              </>
+            ) : isDragging ? (
+              <>
+                <Upload className="w-8 h-8 text-primary" />
+                <span className="text-sm font-medium text-primary">
+                  Solte para enviar
+                </span>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
+                  {labelText}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  PNG, JPG, WEBP · máx. {fileSizeMB} MB
+                </span>
+              </>
+            )}
+          </button>
+          {isUploading && (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={cancelUpload}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Cancelar envio
+              </Button>
+            </div>
           )}
-        </button>
+        </>
       )}
     </div>
   );
