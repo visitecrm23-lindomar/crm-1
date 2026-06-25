@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { act, createElement } from "react";
+import { act, createElement, type ReactElement } from "react";
 import { renderComponent, cleanupRoots } from "./eventSourceHarness.js";
 
 // ---------------------------------------------------------------------------
@@ -249,5 +249,48 @@ describe("FeaturesTab — locked feature enforcement", () => {
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
     expect(container.textContent).toContain("Disponível no plano Pro");
+  });
+});
+
+describe("FeaturesTab — toggle error handling", () => {
+  it("shows a destructive toast when saving a feature toggle fails", async () => {
+    mockMutateAsync.mockRejectedValue(new Error("server error"));
+    mockGetTenant.mockReturnValue(makeTenantData(true));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "destructive" }),
+    );
+    expect(mockToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes a 'Ver plano' action in the toast when a 403 is returned", async () => {
+    const error403 = { response: { status: 403 } };
+    mockMutateAsync.mockRejectedValue(error403);
+    mockGetTenant.mockReturnValue(makeTenantData(true));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "destructive", action: expect.anything() }),
+    );
+    const toastArgs = mockToast.mock.calls[0][0] as { action: ReactElement };
+    const { container: actionContainer } = await renderComponent(toastArgs.action);
+    expect(actionContainer.textContent).toContain("Ver plano");
   });
 });
