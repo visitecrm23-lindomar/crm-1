@@ -642,7 +642,7 @@ export default function LojaConfiguracoes() {
                 <Label>Logo da Loja</Label>
                 <p className="text-xs text-muted-foreground">Recomendado: fundo transparente (PNG) · máx. 2 MB</p>
                 <CoverImageUpload
-                  endpoint="storeLogo"
+                  fileSizeMB="2"
                   value={form.logo ?? ""}
                   onChange={(url) => set("logo", url)}
                   onUploadingChange={handleUploadingChange}
@@ -656,7 +656,6 @@ export default function LojaConfiguracoes() {
                 <Label>Banner Principal</Label>
                 <p className="text-xs text-muted-foreground">Exibido na página inicial da sua vitrine · máx. 4 MB</p>
                 <CoverImageUpload
-                  endpoint="storeBanner"
                   value={form.bannerHome ?? ""}
                   onChange={(url) => set("bannerHome", url)}
                   onUploadingChange={handleUploadingChange}

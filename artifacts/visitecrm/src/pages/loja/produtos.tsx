@@ -522,7 +522,6 @@ function ProductForm({
                         </div>
                       )}
                       <CoverImageUpload
-                        endpoint="storeProductImage"
                         value={url}
                         onChange={(newUrl) => {
                           const updated = [...(form.images ?? [])];
@@ -565,7 +564,6 @@ function ProductForm({
                   );
                 })}
                 <CoverImageUpload
-                  endpoint="storeProductImage"
                   value=""
                   onChange={(newUrl) => {
                     if (newUrl) {
@@ -593,7 +591,6 @@ function ProductForm({
                 {(form.gallery ?? []).map((url, i) => (
                   <div key={url + i} className="relative rounded-md">
                     <CoverImageUpload
-                      endpoint="storeProductImage"
                       value={url}
                       onChange={(newUrl) => {
                         const updated = [...(form.gallery ?? [])];
@@ -611,7 +608,6 @@ function ProductForm({
                   </div>
                 ))}
                 <CoverImageUpload
-                  endpoint="storeProductImage"
                   value=""
                   onChange={(newUrl) => {
                     if (newUrl) {

@@ -432,7 +432,6 @@ export default function Hospedagens() {
               <div className="col-span-2 space-y-2">
                 <Label>Galeria de fotos</Label>
                 <GalleryUpload
-                  endpoint="accommodationGallery"
                   maxImages={10}
                   fileSizeMB="8"
                   value={galleryUrls}

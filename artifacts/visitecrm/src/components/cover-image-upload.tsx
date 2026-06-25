@@ -5,7 +5,7 @@ import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { useUploadImage } from "@/hooks/use-upload";
 
 interface CoverImageUploadProps {
-  endpoint?: string;
+  fileSizeMB?: string;
   value: string;
   onChange: (url: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
@@ -17,7 +17,7 @@ interface CoverImageUploadProps {
 }
 
 export function CoverImageUpload({
-  endpoint,
+  fileSizeMB = "8",
   value,
   onChange,
   onUploadingChange,
@@ -76,8 +76,6 @@ export function CoverImageUpload({
   const handleRemove = () => onChange("");
 
   const labelText = emptyLabel ?? placeholder ?? "Clique ou arraste a imagem aqui";
-
-  const isSmallEndpoint = endpoint === "storeLogo" || endpoint === "agencyLogo";
 
   return (
     <div className="space-y-3">
@@ -163,7 +161,7 @@ export function CoverImageUpload({
                 {labelText}
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. {isSmallEndpoint ? "2 MB" : "8 MB"}
+                PNG, JPG, WEBP · máx. {fileSizeMB} MB
               </span>
             </>
           )}

@@ -340,7 +340,7 @@ function AgencyProfileTab() {
       <div className="space-y-1">
         <Label>Logo</Label>
         <CoverImageUpload
-          endpoint="agencyLogo"
+          fileSizeMB="2"
           value={form.logoUrl ?? ""}
           onChange={(url) => setForm((f) => ({ ...f, logoUrl: url }))}
           onUploadingChange={handleUploadingChange}
@@ -2451,7 +2451,7 @@ function CustomizationTab() {
           Exibido no painel administrativo do sistema.
         </p>
         <CoverImageUpload
-          endpoint="agencyLogo"
+          fileSizeMB="2"
           value={logoUrl}
           onChange={setLogoUrl}
           onUploadingChange={handleUploadingChange}
@@ -2491,7 +2491,7 @@ function CustomizationTab() {
             Exibido na vitrine pública, nos vouchers emitidos e no QR code de confirmação de pedidos.
           </p>
           <CoverImageUpload
-            endpoint="storeLogo"
+            fileSizeMB="2"
             value={storeLogo}
             onChange={setStoreLogo}
             onUploadingChange={(uploading) => setStoreLogoUploading(uploading)}

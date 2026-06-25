@@ -9,7 +9,6 @@ interface GalleryUploadProps {
   onChange: (urls: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
-  endpoint?: string;
   maxImages?: number;
   fileSizeMB?: string;
 }
@@ -19,7 +18,6 @@ export function GalleryUpload({
   onChange,
   onUploadingChange,
   disabled,
-  endpoint: _endpoint,
   maxImages = 3,
   fileSizeMB = "8",
 }: GalleryUploadProps) {
