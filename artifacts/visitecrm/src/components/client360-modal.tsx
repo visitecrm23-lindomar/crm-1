@@ -289,7 +289,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload } = useUploadDocument({
+  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog } = useUploadDocument({
     onComplete: async (result) => {
       try {
         const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
@@ -442,6 +442,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
           ))}
         </div>
       )}
+      {guardDialog}
     </div>
   );
 }

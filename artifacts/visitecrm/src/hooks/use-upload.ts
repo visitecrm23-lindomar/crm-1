@@ -124,7 +124,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  useUploadGuard(isUploading);
+  const { guardDialog } = useUploadGuard(isUploading);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
@@ -166,7 +166,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
 }
 
 export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: UploadOptions = {}) {
@@ -175,7 +175,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  useUploadGuard(isUploading);
+  const { guardDialog } = useUploadGuard(isUploading);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
@@ -220,7 +220,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
 }
 
 export function useUploadDocument(callbacks: UploadCallbacks = {}) {
@@ -229,7 +229,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  useUploadGuard(isUploading);
+  const { guardDialog } = useUploadGuard(isUploading);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
@@ -268,5 +268,5 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
 }

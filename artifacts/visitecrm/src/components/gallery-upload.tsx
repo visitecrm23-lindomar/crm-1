@@ -28,7 +28,7 @@ export function GalleryUpload({
   const canAdd = value.length < maxImages;
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload } = useUploadImages(
+  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog } = useUploadImages(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (results) => {
@@ -235,6 +235,7 @@ export function GalleryUpload({
           )}
         </div>
       )}
+      {guardDialog}
     </div>
   );
 }

@@ -33,7 +33,7 @@ export function CoverImageUpload({
 
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload } = useUploadImage(
+  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog } = useUploadImage(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (result) => {
@@ -237,6 +237,7 @@ export function CoverImageUpload({
           )}
         </>
       )}
+      {guardDialog}
     </div>
   );
 }
