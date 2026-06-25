@@ -26,7 +26,7 @@ END $$;
 -- referral_settings ───────────────────────────────────────────────────────────
 ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "whatsapp_reversed_message" text;
 ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "discount_expiration_days" integer NOT NULL DEFAULT 30;
-ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "min_purchase_amount" numeric(10, 2) DEFAULT 0;
+ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "min_purchase_amount" numeric(10, 2) NOT NULL DEFAULT 0;
 ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "max_referrals_per_user" integer NOT NULL DEFAULT 0;
 ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "grace_period_days" integer NOT NULL DEFAULT 30;
 ALTER TABLE "referral_settings" ADD COLUMN IF NOT EXISTS "bonus_validity_days" integer NOT NULL DEFAULT 30;
