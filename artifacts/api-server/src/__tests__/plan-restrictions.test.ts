@@ -4,6 +4,8 @@
  * Verifies that the plan-tier check in the tenant PATCH handler:
  *   - Blocks a Starter-plan tenant from enabling referralsEnabled (403)
  *   - Allows a Pro/Enterprise-plan tenant to enable referralsEnabled (200)
+ *   - Blocks a Starter-plan tenant from enabling seatMapEnabled (403)
+ *   - Allows a Pro/Enterprise-plan tenant to enable seatMapEnabled (200)
  *   - Allows any plan to set couponsEnabled (no restriction)
  *   - Allows superadmin to bypass the plan check entirely
  *
@@ -252,6 +254,85 @@ describe("Enterprise plan — plan-restricted features are allowed", () => {
     const res = await request(buildApp())
       .patch(`/api/tenants/${TENANT_ID}`)
       .send({ referralsEnabled: true });
+
+    expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: seatMapEnabled is restricted to Pro+ (minTier=1)
+// ---------------------------------------------------------------------------
+
+describe("Starter plan — seatMapEnabled is blocked (minTier=1)", () => {
+  it("PATCH /tenants/:id with seatMapEnabled=true returns 403 for a Starter-plan tenant", async () => {
+    asAgencyAdmin();
+
+    // Call 1: select existing tenant (planId = plan-starter)
+    // Call 2: select plan row (slug = "starter")
+    // Plan check fails (seatMap minTier=1 > starter tier=0) → 403
+    mockLimit
+      .mockResolvedValueOnce([EXISTING_TENANT])
+      .mockResolvedValueOnce([PLAN_STARTER]);
+
+    const res = await request(buildApp())
+      .patch(`/api/tenants/${TENANT_ID}`)
+      .send({ seatMapEnabled: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("PLAN_UPGRADE_REQUIRED");
+    expect(typeof res.body.error).toBe("string");
+    expect(res.body.error.length).toBeGreaterThan(0);
+  });
+
+  it("PATCH error body mentions a plan upgrade when seatMapEnabled is blocked", async () => {
+    asAgencyAdmin();
+
+    mockLimit
+      .mockResolvedValueOnce([EXISTING_TENANT])
+      .mockResolvedValueOnce([PLAN_STARTER]);
+
+    const res = await request(buildApp())
+      .patch(`/api/tenants/${TENANT_ID}`)
+      .send({ seatMapEnabled: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("PLAN_UPGRADE_REQUIRED");
+    expect(res.body.error.toLowerCase()).toMatch(/plano|upgrade/i);
+  });
+});
+
+describe("Pro plan — seatMapEnabled is allowed (minTier=1)", () => {
+  it("PATCH /tenants/:id with seatMapEnabled=true returns 200 for a Pro-plan tenant", async () => {
+    asAgencyAdmin();
+
+    // Call 1: select existing tenant (planId = plan-pro)
+    // Call 2: select plan row (slug = "pro") — passes tier check
+    // Call 3: final tenant select
+    mockLimit
+      .mockResolvedValueOnce([{ ...EXISTING_TENANT, planId: "plan-pro" }])
+      .mockResolvedValueOnce([PLAN_PRO])
+      .mockResolvedValueOnce([UPDATED_TENANT]);
+
+    const res = await request(buildApp())
+      .patch(`/api/tenants/${TENANT_ID}`)
+      .send({ seatMapEnabled: true });
+
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("Enterprise plan — seatMapEnabled is allowed (minTier=1)", () => {
+  it("PATCH /tenants/:id with seatMapEnabled=true returns 200 for an Enterprise-plan tenant", async () => {
+    asAgencyAdmin();
+
+    mockLimit
+      .mockResolvedValueOnce([{ ...EXISTING_TENANT, planId: "plan-enterprise" }])
+      .mockResolvedValueOnce([PLAN_ENTERPRISE])
+      .mockResolvedValueOnce([UPDATED_TENANT]);
+
+    const res = await request(buildApp())
+      .patch(`/api/tenants/${TENANT_ID}`)
+      .send({ seatMapEnabled: true });
 
     expect(res.status).toBe(200);
   });

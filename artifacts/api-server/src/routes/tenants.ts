@@ -35,6 +35,7 @@ const UpdateTenantBody = z.object({
   birthdayMessagesEnabled: z.boolean().nullable().optional(),
   couponsEnabled: z.boolean().nullable().optional(),
   referralsEnabled: z.boolean().nullable().optional(),
+  seatMapEnabled: z.boolean().nullable().optional(),
 });
 
 router.get("/admin/stats", async (req, res, next: NextFunction): Promise<void> => {
@@ -153,7 +154,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
-    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, suspensionReason, ...rest } = parsed.data;
+    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, seatMapEnabled, suspensionReason, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
@@ -185,6 +186,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
       const featuresToCheck: Array<{ key: string; effectiveValue: boolean }> = [
         { key: "couponsEnabled", effectiveValue: couponsEnabled !== undefined ? (couponsEnabled ?? true) : false },
         { key: "referralsEnabled", effectiveValue: referralsEnabled !== undefined ? (referralsEnabled ?? true) : false },
+        { key: "seatMap", effectiveValue: seatMapEnabled !== undefined ? (seatMapEnabled ?? true) : false },
       ];
       for (const { key, effectiveValue } of featuresToCheck) {
         if (effectiveValue === true && !canEnableFeature(key, planSlug)) {
@@ -199,6 +201,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     if (birthdayMessagesEnabled !== undefined) settingsUpdates.birthdayMessagesEnabled = birthdayMessagesEnabled ?? true;
     if (couponsEnabled !== undefined) settingsUpdates.couponsEnabled = couponsEnabled ?? true;
     if (referralsEnabled !== undefined) settingsUpdates.referralsEnabled = referralsEnabled ?? true;
+    if (seatMapEnabled !== undefined) settingsUpdates.seatMapEnabled = seatMapEnabled ?? true;
     if (Object.keys(settingsUpdates).length > 0) {
       const currentSettings = (existing?.settings ?? {}) as Record<string, unknown>;
       updateData.settings = { ...currentSettings, ...settingsUpdates };
