@@ -15,6 +15,7 @@ vi.mock("../hooks/UploadGuardDialog.js", () => ({
 }));
 
 import { useUploadGuard } from "../hooks/use-upload-guard.js";
+import { useUploadImage } from "../hooks/use-upload.js";
 
 // ─── Test types / helpers ─────────────────────────────────────────────────────
 
@@ -462,6 +463,85 @@ describe("useUploadGuard — onConfirmLeave (upload abort on confirm)", () => {
     expect(onConfirmLeave).not.toHaveBeenCalled();
     expect(location.pathname).toBe("/"); // navigation stayed blocked
     expect(getDialogProps().open).toBe(false);
+  });
+});
+
+// ─── Integration: useUploadImage + guard confirm aborts XHR ─────────────────
+
+describe("useUploadImage — guard dialog confirm aborts the XHR and fires onCancel", () => {
+  it("calls xhr.abort() and onCancel when the guard confirm button is pressed", async () => {
+    const onCancel = vi.fn();
+    const onComplete = vi.fn();
+
+    // Build a mock XHR that stays pending until abort() is invoked.
+    // The abort() implementation simulates real browser behaviour: it fires
+    // the xhr.onabort handler synchronously, which makes xhrUpload()'s Promise
+    // reject with AbortError → the catch block in startUpload calls onCancel.
+    const xhrMock = {
+      open: vi.fn(),
+      send: vi.fn(), // never resolves — XHR stays in-flight
+      abort: vi.fn(),
+      withCredentials: false,
+      upload: { onprogress: null as unknown },
+      onload: null as unknown,
+      onerror: null as unknown,
+      onabort: null as unknown,
+    };
+    xhrMock.abort.mockImplementation(() => {
+      (xhrMock.onabort as (() => void) | null)?.();
+    });
+
+    const OriginalXHR = globalThis.XMLHttpRequest;
+    globalThis.XMLHttpRequest = vi.fn().mockReturnValue(xhrMock) as unknown as typeof XMLHttpRequest;
+
+    try {
+      let hookResult: ReturnType<typeof useUploadImage> | null = null;
+
+      function UploadTestComponent() {
+        hookResult = useUploadImage({ onCancel, onComplete });
+        return null;
+      }
+
+      const container = document.createElement("div");
+      const root = createRoot(container);
+      activeRoots.push(root);
+
+      await act(async () => { root.render(createElement(UploadTestComponent)); });
+
+      // Start an upload but don't await it — the XHR stays pending forever.
+      // void + Promise.resolve() lets the synchronous portion (setIsUploading,
+      // XHR creation, open, wiring, send) finish before act() exits.
+      await act(async () => {
+        void hookResult!.startUpload(new File(["data"], "photo.jpg", { type: "image/jpeg" }));
+        await Promise.resolve();
+      });
+
+      // XHR must have been created and the request sent.
+      expect(xhrMock.send).toHaveBeenCalledOnce();
+
+      // Trigger a guarded navigation — guard intercepts and opens the dialog.
+      await act(async () => { history.pushState(null, "", "/leaving"); });
+
+      const getDialogProps = () =>
+        (hookResult!.guardDialog as ReactElement<GuardDialogProps>).props;
+      expect(getDialogProps().open).toBe(true);
+
+      // Confirm leaving — fires onConfirmLeave (= cancelUpload) before navigation.
+      await act(async () => { getDialogProps().onConfirm(); });
+
+      // cancelUpload() must have aborted the in-flight XHR.
+      expect(xhrMock.abort).toHaveBeenCalledOnce();
+
+      // Flush microtasks: the AbortError propagates through the async chain and
+      // the catch block in startUpload calls callbacks.onCancel().
+      await act(async () => {});
+      expect(onCancel).toHaveBeenCalledOnce();
+
+      // The navigation also completed.
+      expect(location.pathname).toBe("/leaving");
+    } finally {
+      globalThis.XMLHttpRequest = OriginalXHR;
+    }
   });
 });
 
