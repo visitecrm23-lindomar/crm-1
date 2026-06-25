@@ -111,8 +111,8 @@ function removeHistoryGuard(): void {
   // Remove the own properties we installed so the original prototype methods are
   // exposed again. Using `delete` avoids accumulating .bind() wrappers if the
   // guard is installed and removed multiple times in the same session.
-  delete (history as Record<string, unknown>).pushState;
-  delete (history as Record<string, unknown>).replaceState;
+  delete (history as unknown as Record<string, unknown>).pushState;
+  delete (history as unknown as Record<string, unknown>).replaceState;
   savedPushState = null;
   savedReplaceState = null;
 
