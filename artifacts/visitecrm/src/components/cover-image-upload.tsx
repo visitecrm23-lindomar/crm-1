@@ -31,19 +31,34 @@ export function CoverImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const { startUpload, isUploading } = useUploadImage({
-    onBegin: () => onUploadingChange?.(true),
-    onComplete: (result) => {
-      onUploadingChange?.(false);
-      onChange(result.url);
-    },
-    onError: (err) => {
-      onUploadingChange?.(false);
-      toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
-    },
-  });
+  const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const upload = (file: File) => startUpload(file);
+  const { startUpload, isUploading } = useUploadImage(
+    {
+      onBegin: () => onUploadingChange?.(true),
+      onComplete: (result) => {
+        onUploadingChange?.(false);
+        onChange(result.url);
+      },
+      onError: (err) => {
+        onUploadingChange?.(false);
+        toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
+      },
+    },
+    { maxSizeMB }
+  );
+
+  const upload = (file: File) => {
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      toast({
+        title: `Arquivo muito grande`,
+        description: `Máximo permitido: ${fileSizeMB} MB. Arquivo enviado: ${(file.size / 1024 / 1024).toFixed(1)} MB.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    startUpload(file);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

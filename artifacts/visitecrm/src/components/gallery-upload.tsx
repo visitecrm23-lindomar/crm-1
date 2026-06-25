@@ -26,23 +26,38 @@ export function GalleryUpload({
   const [isDragging, setIsDragging] = useState(false);
 
   const canAdd = value.length < maxImages;
+  const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading } = useUploadImages({
-    onBegin: () => onUploadingChange?.(true),
-    onComplete: (results) => {
-      onUploadingChange?.(false);
-      const newUrls = results.map((r) => r.url);
-      onChange([...value, ...newUrls].slice(0, maxImages));
+  const { startUpload, isUploading } = useUploadImages(
+    {
+      onBegin: () => onUploadingChange?.(true),
+      onComplete: (results) => {
+        onUploadingChange?.(false);
+        const newUrls = results.map((r) => r.url);
+        onChange([...value, ...newUrls].slice(0, maxImages));
+      },
+      onError: (err) => {
+        onUploadingChange?.(false);
+        toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
+      },
     },
-    onError: (err) => {
-      onUploadingChange?.(false);
-      toast({ title: `Erro no upload: ${err.message}`, variant: "destructive" });
-    },
-  });
+    { maxSizeMB }
+  );
 
   const upload = (files: File[]) => {
     const toUpload = files.slice(0, maxImages - value.length);
     if (!toUpload.length) return;
+
+    const oversized = toUpload.find((f) => f.size > maxSizeMB * 1024 * 1024);
+    if (oversized) {
+      toast({
+        title: `Arquivo muito grande`,
+        description: `"${oversized.name}" excede o limite de ${fileSizeMB} MB.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     startUpload(toUpload);
   };
 

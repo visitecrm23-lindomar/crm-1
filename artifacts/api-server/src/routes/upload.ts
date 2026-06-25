@@ -45,6 +45,14 @@ router.post("/image", imageUpload.single("file"), async (req, res) => {
     return;
   }
 
+  const maxSizeMB = req.body?.maxSizeMB ? parseFloat(req.body.maxSizeMB as string) : null;
+  if (maxSizeMB && !isNaN(maxSizeMB) && req.file.size > maxSizeMB * 1024 * 1024) {
+    res.status(413).json({
+      error: `Arquivo muito grande. Máximo permitido: ${maxSizeMB} MB (recebido: ${(req.file.size / 1024 / 1024).toFixed(1)} MB)`,
+    });
+    return;
+  }
+
   req.log?.info(
     { size: req.file.size, mime: req.file.mimetype, name: req.file.originalname },
     "[upload] received image, uploading to UploadThing"
@@ -74,6 +82,17 @@ router.post("/images", imageUpload.array("files", 10), async (req, res) => {
   if (!files || files.length === 0) {
     res.status(400).json({ error: "Nenhum arquivo enviado" });
     return;
+  }
+
+  const maxSizeMB = req.body?.maxSizeMB ? parseFloat(req.body.maxSizeMB as string) : null;
+  if (maxSizeMB && !isNaN(maxSizeMB)) {
+    const oversized = files.find((f) => f.size > maxSizeMB * 1024 * 1024);
+    if (oversized) {
+      res.status(413).json({
+        error: `Arquivo "${oversized.originalname}" muito grande. Máximo: ${maxSizeMB} MB`,
+      });
+      return;
+    }
   }
 
   const uploadFiles = files.map(

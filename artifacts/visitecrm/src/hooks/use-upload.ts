@@ -14,7 +14,11 @@ interface MultiUploadCallbacks {
   onError?: (error: Error) => void;
 }
 
-export function useUploadImage(callbacks: UploadCallbacks = {}) {
+interface UploadOptions {
+  maxSizeMB?: number;
+}
+
+export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
 
   async function startUpload(file: File) {
@@ -23,6 +27,9 @@ export function useUploadImage(callbacks: UploadCallbacks = {}) {
     try {
       const form = new FormData();
       form.append("file", file);
+      if (options.maxSizeMB) {
+        form.append("maxSizeMB", String(options.maxSizeMB));
+      }
       const resp = await fetch(`${UPLOAD_BASE}/image`, {
         method: "POST",
         credentials: "include",
@@ -44,7 +51,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}) {
   return { startUpload, isUploading };
 }
 
-export function useUploadImages(callbacks: MultiUploadCallbacks = {}) {
+export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
 
   async function startUpload(files: File[]) {
@@ -55,6 +62,9 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}) {
       const form = new FormData();
       for (const file of files) {
         form.append("files", file);
+      }
+      if (options.maxSizeMB) {
+        form.append("maxSizeMB", String(options.maxSizeMB));
       }
       const resp = await fetch(`${UPLOAD_BASE}/images`, {
         method: "POST",
