@@ -315,6 +315,9 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
     onError: () => {
       toast({ title: "Erro ao enviar documento", variant: "destructive" });
     },
+    onCancel: () => {
+      toast({ title: "Envio cancelado. O arquivo não foi salvo." });
+    },
   });
 
   useEffect(() => {

@@ -144,9 +144,14 @@ function removeHistoryGuard(): void {
  *
  * Multiple simultaneous instances are safe: the history patch is reference-counted.
  */
-export function useUploadGuard(isUploading: boolean): { guardDialog: ReactNode } {
+export function useUploadGuard(
+  isUploading: boolean,
+  onConfirmLeave?: () => void,
+): { guardDialog: ReactNode } {
   const [pendingNav, setPendingNav] = useState<PendingNav | null>(null);
   const wasUploadingRef = useRef(false);
+  const onConfirmLeaveRef = useRef(onConfirmLeave);
+  useEffect(() => { onConfirmLeaveRef.current = onConfirmLeave; });
 
   const showDialog = useCallback((pending: PendingNav) => {
     setPendingNav(pending);
@@ -190,6 +195,7 @@ export function useUploadGuard(isUploading: boolean): { guardDialog: ReactNode }
   const handleConfirm = () => {
     const nav = pendingNav;
     setPendingNav(null);
+    onConfirmLeaveRef.current?.();
     nav?.onConfirm();
   };
 

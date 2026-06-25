@@ -124,7 +124,13 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  const { guardDialog } = useUploadGuard(isUploading);
+
+  function cancelUpload() {
+    cancelledRef.current = true;
+    xhrRef.current?.abort();
+  }
+
+  const { guardDialog } = useUploadGuard(isUploading, cancelUpload);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
@@ -161,11 +167,6 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
     }
   }
 
-  function cancelUpload() {
-    cancelledRef.current = true;
-    xhrRef.current?.abort();
-  }
-
   return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
 }
 
@@ -175,7 +176,13 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  const { guardDialog } = useUploadGuard(isUploading);
+
+  function cancelUpload() {
+    cancelledRef.current = true;
+    xhrRef.current?.abort();
+  }
+
+  const { guardDialog } = useUploadGuard(isUploading, cancelUpload);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
@@ -215,11 +222,6 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
     }
   }
 
-  function cancelUpload() {
-    cancelledRef.current = true;
-    xhrRef.current?.abort();
-  }
-
   return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
 }
 
@@ -229,7 +231,13 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
-  const { guardDialog } = useUploadGuard(isUploading);
+
+  function cancelUpload() {
+    cancelledRef.current = true;
+    xhrRef.current?.abort();
+  }
+
+  const { guardDialog } = useUploadGuard(isUploading, cancelUpload);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
@@ -261,11 +269,6 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
       setUploadProgress(0);
       xhrRef.current = null;
     }
-  }
-
-  function cancelUpload() {
-    cancelledRef.current = true;
-    xhrRef.current?.abort();
   }
 
   return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload, guardDialog };
