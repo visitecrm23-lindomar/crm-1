@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useGetMe, useGetTenant } from "@workspace/api-client-react";
 import type { Trip } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -271,17 +270,10 @@ export function PublishToStoreDialog({ trip, open, onClose }: { trip: Trip; open
   );
 }
 
-export function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding }: { trip: Trip; isVendedor?: boolean; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void }) {
+export function TripCard({ trip, isVendedor, seatMapEnabled = true, onDelete, onDuplicate, onBoarding }: { trip: Trip; isVendedor?: boolean; seatMapEnabled?: boolean; onDelete: () => void; onDuplicate: () => void; onBoarding: () => void }) {
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
   const [publishOpen, setPublishOpen] = useState(false);
-  const { data: me } = useGetMe();
-  const tenantId = me?.tenantId ?? null;
-  const { data: tenantData } = useGetTenant(tenantId ?? "", {
-    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
-  });
-  const tenantSettings = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings ?? {}) as Record<string, unknown>;
-  const seatMapEnabled = tenantSettings.seatMapEnabled !== false;
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">

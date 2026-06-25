@@ -155,7 +155,7 @@ export function TripList() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} isVendedor={isVendedor} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} />
+            <TripCard key={trip.id} trip={trip} isVendedor={isVendedor} seatMapEnabled={seatMapEnabled} onDelete={() => setDeletingId(trip.id)} onDuplicate={() => handleDuplicate(trip)} onBoarding={() => setBoardingTrip({ id: trip.id, name: trip.name })} />
           ))}
         </div>
       ) : (
