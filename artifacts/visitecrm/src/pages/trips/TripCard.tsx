@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useGetMe, useGetTenant } from "@workspace/api-client-react";
 import type { Trip } from "@workspace/api-client-react";
 import { storeApi } from "@/lib/storeApi";
 import { Button } from "@/components/ui/button";
@@ -274,6 +275,13 @@ export function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding }
   const pct = trip.totalCapacity > 0 ? Math.round((trip.reservedSeats + trip.confirmedSeats) / trip.totalCapacity * 100) : 0;
   const statusInfo = STATUS_MAP[trip.status] ?? { label: trip.status, color: "bg-gray-100 text-gray-600" };
   const [publishOpen, setPublishOpen] = useState(false);
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: tenantData } = useGetTenant(tenantId ?? "", {
+    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
+  });
+  const tenantSettings = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings ?? {}) as Record<string, unknown>;
+  const seatMapEnabled = tenantSettings.seatMapEnabled !== false;
   return (
     <div className="bg-card border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative h-36 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
@@ -316,9 +324,11 @@ export function TripCard({ trip, isVendedor, onDelete, onDuplicate, onBoarding }
           <Button variant="outline" size="sm" className="text-xs text-green-700 border-green-200 hover:bg-green-50" onClick={onBoarding} title="Painel de Embarque">
             <ClipboardList className="w-3 h-3 mr-1" />Embarque
           </Button>
-          <Link href={`/trips/${trip.id}/seat-map`}>
-            <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
-          </Link>
+          {seatMapEnabled && (
+            <Link href={`/trips/${trip.id}/seat-map`}>
+              <Button variant="outline" size="sm" className="text-xs"><Bus className="w-3 h-3 mr-1" />Mapa</Button>
+            </Link>
+          )}
           {!isVendedor && (
             <Link href={`/trips/${trip.id}/edit`}>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" title="Editar"><Edit className="w-4 h-4" /></Button>

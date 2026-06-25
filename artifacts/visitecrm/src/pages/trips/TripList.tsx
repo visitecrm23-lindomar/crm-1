@@ -18,6 +18,7 @@ import { TripCountdown, OccupancyBar } from "./TripCountdown";
 import { BoardingPanelModal } from "./BoardingPanelModal";
 import { TripCard, PublishToStoreDialog } from "./TripCard";
 import { useTrips } from "@/hooks/useTrips";
+import { useGetMe, useGetTenant } from "@workspace/api-client-react";
 
 export function TripList() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -31,6 +32,13 @@ export function TripList() {
     typeFilter, setTypeFilter, dateFilter, setDateFilter,
     page, setPage, deleteTrip, handleDuplicate, handleDelete,
   } = useTrips();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: tenantData } = useGetTenant(tenantId ?? "", {
+    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
+  });
+  const tenantSettings = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings ?? {}) as Record<string, unknown>;
+  const seatMapEnabled = tenantSettings.seatMapEnabled !== false;
 
   const onDelete = async (id: string) => {
     await handleDelete(id);
@@ -175,7 +183,7 @@ export function TripList() {
                 <Link href={`/trips/${trip.id}/passengers-overview`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Visão Geral"><Eye className="w-4 h-4" /></Button></Link>
                 <Link href={`/trips/${trip.id}/passengers`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Passageiros"><Users className="w-4 h-4" /></Button></Link>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-green-700" onClick={() => setBoardingTrip({ id: trip.id, name: trip.name })} title="Painel de Embarque"><ClipboardList className="w-4 h-4" /></Button>
-                <Link href={`/trips/${trip.id}/seat-map`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Mapa de Assentos"><Bus className="w-4 h-4" /></Button></Link>
+                {seatMapEnabled && <Link href={`/trips/${trip.id}/seat-map`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Mapa de Assentos"><Bus className="w-4 h-4" /></Button></Link>}
                 {!isVendedor && <Link href={`/trips/${trip.id}/edit`}><Button size="icon" variant="ghost" className="h-8 w-8" title="Editar"><Edit className="w-4 h-4" /></Button></Link>}
                 {!isVendedor && <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDuplicate(trip)} title="Duplicar"><Copy className="w-4 h-4" /></Button>}
                 {!isVendedor && <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => setDeletingId(trip.id)} title="Excluir"><Trash2 className="w-4 h-4" /></Button>}

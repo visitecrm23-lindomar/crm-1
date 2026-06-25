@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useListTrips, useGetTrip, useListReservations, useUpdateReservation, useGetMe } from "@workspace/api-client-react";
+import { useListTrips, useGetTrip, useListReservations, useUpdateReservation, useGetMe, useGetTenant } from "@workspace/api-client-react";
 import { RESERVATION_STATUS, TRIP_STATUS, hasPermission, RESOURCES, ACTIONS, type ReservationStatus } from "@workspace/permissions";
 import { Client360Modal } from "@/components/client360-modal";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,12 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
   const { data: reservations, refetch: refetchReservations } = useListReservations({ tripId, limit: 200 });
   const updateReservation = useUpdateReservation();
   const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: tenantData } = useGetTenant(tenantId ?? "", {
+    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
+  });
+  const tenantSettings = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings ?? {}) as Record<string, unknown>;
+  const seatMapEnabled = tenantSettings.seatMapEnabled !== false;
   const canViewFinancial = me ? hasPermission(me.role, RESOURCES.FINANCIAL, ACTIONS.VIEW) : false;
   const { data: financialReport, isLoading: loadingReport } = useQuery<TripFinancialReport>({
     queryKey: ["trip-financial-report", tripId],
@@ -253,7 +259,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           </Select>
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><List className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
-          <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>
+          {seatMapEnabled && <Link href={`/trips/${tripId}/seat-map`}><Button variant="outline"><Bus className="w-4 h-4 mr-2" />Mapa de Assentos</Button></Link>}
           <Link href={`/trips/${tripId}/checkin-panel`}><Button variant="outline" className="border-green-300 text-green-700 hover:bg-green-50"><ClipboardCheck className="w-4 h-4 mr-2" />Check-in ao Vivo</Button></Link>
           {trip && trip.status !== TRIP_STATUS.CANCELLED && trip.status !== TRIP_STATUS.DRAFT && (
             <Link href={`/trips/${tripId}/boarding-control`}><Button className="bg-blue-700 hover:bg-blue-800 text-white gap-2"><Bus className="w-4 h-4" />Central de Embarque</Button></Link>
