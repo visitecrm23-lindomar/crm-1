@@ -20,18 +20,7 @@ export async function moveDealToStage({
   forwardOnly: boolean;
 }): Promise<void> {
   try {
-    const [targetStage] = await db
-      .select({ id: pipelineStagesTable.id, order: pipelineStagesTable.order })
-      .from(pipelineStagesTable)
-      .where(
-        and(
-          eq(pipelineStagesTable.tenantId, tenantId),
-          eq(pipelineStagesTable.name, targetStageName),
-        ),
-      )
-      .limit(1);
-    if (!targetStage) return;
-
+    // Step 1: Find the deal first so we know which pipeline it belongs to.
     let deal: { id: string; stageId: string } | undefined;
 
     if (dealId) {
@@ -63,15 +52,44 @@ export async function moveDealToStage({
 
     if (!deal) return;
 
-    if (forwardOnly) {
-      const [currentStage] = await db
-        .select({ order: pipelineStagesTable.order })
-        .from(pipelineStagesTable)
-        .where(eq(pipelineStagesTable.id, deal.stageId))
-        .limit(1);
-      if (currentStage && currentStage.order >= targetStage.order) return;
+    // Step 2: Look up the deal's current stage to obtain its pipelineId and order.
+    // Both are needed: pipelineId scopes the target-stage search to the same
+    // pipeline; order is used for the forwardOnly guard.
+    const [currentStageRow] = await db
+      .select({ order: pipelineStagesTable.order, pipelineId: pipelineStagesTable.pipelineId })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.id, deal.stageId))
+      .limit(1);
+
+    if (!currentStageRow) return;
+
+    // Step 3: Find the target stage by name, scoped to the deal's own pipeline.
+    // If the name doesn't exist in this pipeline we log a warning and do nothing —
+    // we never move a deal to a stage that belongs to a different pipeline.
+    const [targetStage] = await db
+      .select({ id: pipelineStagesTable.id, order: pipelineStagesTable.order })
+      .from(pipelineStagesTable)
+      .where(
+        and(
+          eq(pipelineStagesTable.pipelineId, currentStageRow.pipelineId),
+          eq(pipelineStagesTable.tenantId, tenantId),
+          eq(pipelineStagesTable.name, targetStageName),
+        ),
+      )
+      .limit(1);
+
+    if (!targetStage) {
+      logger.warn(
+        { tenantId, targetStageName, pipelineId: currentStageRow.pipelineId, dealId: deal.id },
+        "[pipeline-automation] Target stage not found in deal's pipeline — skipping move",
+      );
+      return;
     }
 
+    // Step 4: Forward-only guard — never move a deal backwards.
+    if (forwardOnly && currentStageRow.order >= targetStage.order) return;
+
+    // Step 5: Advance the deal.
     await db
       .update(dealsTable)
       .set({ stageId: targetStage.id })
