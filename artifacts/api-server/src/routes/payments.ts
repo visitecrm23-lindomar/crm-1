@@ -18,6 +18,7 @@ import { enqueueNewBookingNotificationEmail } from "../queues/email-helpers";
 import { ROLES, RESERVATION_STATUS, COMMISSION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, hasPermission, RESOURCES, ACTIONS, type PaymentStatus, type PaymentType, type ExpenseStatus } from "@workspace/permissions";
 import { parsePaymentStatus, parsePaymentType, parseExpenseStatus } from "../lib/status-validators";
 import { moveDealToStage } from "../services/pipeline-automation";
+import { sendPushNotification } from "../lib/push-notifications";
 
 const router = Router();
 
@@ -533,6 +534,27 @@ router.post("/payments", async (req, res, next: NextFunction): Promise<void> => 
       enqueueNewBookingNotificationEmail(parsed.data.reservationId, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on payment creation"));
     }
+    if (explicitStatus === PAYMENT_STATUS.PAID && parsed.data.type === PAYMENT_TYPE.RECEIVABLE && effectiveClientId) {
+      (async () => {
+        try {
+          const [client] = await db.select({ expoPushToken: clientsTable.expoPushToken })
+            .from(clientsTable)
+            .where(and(eq(clientsTable.id, effectiveClientId), eq(clientsTable.tenantId, me.tenantId)))
+            .limit(1);
+          if (client?.expoPushToken) {
+            const amountFormatted = formatBRL(Number(parsed.data.amount));
+            await sendPushNotification({
+              to: client.expoPushToken,
+              title: "Pagamento recebido ✅",
+              body: `Seu pagamento de ${amountFormatted} foi confirmado.`,
+              data: { type: "payment_received", reservationId: parsed.data.reservationId ?? undefined },
+            });
+          }
+        } catch (err) {
+          req.log.error({ err }, "Error sending push notification on payment creation");
+        }
+      })();
+    }
   } catch (err) {
     req.log.error({ err }, "Error creating payment");
     next(err);
@@ -636,6 +658,27 @@ router.patch("/payments/:id", async (req, res, next: NextFunction): Promise<void
     if (payment.reservationId && payment.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE) {
       enqueueNewBookingNotificationEmail(payment.reservationId, me.tenantId)
         .catch((err) => req.log.error({ err }, "Error enqueueing agency new-booking notification on payment update"));
+    }
+    if (updates.status === PAYMENT_STATUS.PAID && payment.type === PAYMENT_TYPE.RECEIVABLE && payment.clientId) {
+      (async () => {
+        try {
+          const [client] = await db.select({ expoPushToken: clientsTable.expoPushToken })
+            .from(clientsTable)
+            .where(and(eq(clientsTable.id, payment.clientId!), eq(clientsTable.tenantId, me.tenantId)))
+            .limit(1);
+          if (client?.expoPushToken) {
+            const amountFormatted = formatBRL(Number(payment.amount));
+            await sendPushNotification({
+              to: client.expoPushToken,
+              title: "Pagamento recebido ✅",
+              body: `Seu pagamento de ${amountFormatted} foi confirmado.`,
+              data: { type: "payment_received", reservationId: payment.reservationId ?? undefined },
+            });
+          }
+        } catch (err) {
+          req.log.error({ err }, "Error sending push notification on payment update");
+        }
+      })();
     }
   } catch (err) {
     req.log.error({ err }, "Error updating payment");

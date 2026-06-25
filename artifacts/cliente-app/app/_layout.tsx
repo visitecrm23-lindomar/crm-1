@@ -25,6 +25,16 @@ import type { ClientPortalProfile } from "@/lib/types";
 
 SplashScreen.preventAutoHideAsync();
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -88,6 +98,18 @@ function AuthGate() {
   const segments = useSegments();
   const [roleStatus, setRoleStatus] = useState<"idle" | "loading" | "ok" | "denied">("idle");
   const checkedRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as
+        | { type?: string; reservationId?: string }
+        | undefined;
+      if (data?.reservationId || data?.type) {
+        router.navigate("/(tabs)/reservas");
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;

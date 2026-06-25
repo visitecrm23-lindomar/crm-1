@@ -179,6 +179,52 @@ async function processBoardingReminders(): Promise<void> {
 }
 
 // ────────────────────────────────────────────────────────────
+// D-3 Departure push reminder (push-only, no email)
+// ────────────────────────────────────────────────────────────
+
+async function processDeparturePushReminders(): Promise<void> {
+  const { start: d3Start, end: d3End } = brazilDayWindow(3);
+
+  const rows = await db
+    .select({
+      reservationId: reservationsTable.id,
+      clientExpoPushToken: clientsTable.expoPushToken,
+      tripName: tripsTable.name,
+      tripDestination: tripsTable.destination,
+      departureDate: tripsTable.departureDate,
+    })
+    .from(reservationsTable)
+    .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
+    .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
+    .where(
+      and(
+        eq(reservationsTable.status, RESERVATION_STATUS.CONFIRMED),
+        isNotNull(clientsTable.expoPushToken),
+        gte(tripsTable.departureDate, d3Start),
+        lt(tripsTable.departureDate, d3End),
+      ),
+    );
+
+  logger.info({ count: rows.length }, "[reminder:departure-push] Found reservations for D-3 departure push");
+
+  for (const row of rows) {
+    if (!row.clientExpoPushToken) continue;
+    const depDate = row.departureDate ? formatDateBRServer(row.departureDate) : "em 3 dias";
+    try {
+      await sendPushNotification({
+        to: row.clientExpoPushToken,
+        title: "✈️ Sua viagem parte em 3 dias!",
+        body: `Prepare-se! Sua viagem para ${row.tripDestination ?? row.tripName} parte em ${depDate}.`,
+        data: { type: "departure_reminder", reservationId: row.reservationId },
+      });
+      logger.info({ reservationId: row.reservationId }, "[reminder:departure-push] Sent D-3 departure push");
+    } catch (err) {
+      logger.error({ err, reservationId: row.reservationId }, "[reminder:departure-push] Failed to send D-3 departure push");
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────
 // D-3 Payment reminder
 // ────────────────────────────────────────────────────────────
 
@@ -1509,6 +1555,7 @@ export function startReminderWorker(): Worker<ReminderJobData> | null {
 
       if (job.data.type === "boarding_reminder") {
         await processBoardingReminders();
+        await processDeparturePushReminders();
       } else if (job.data.type === "payment_reminder") {
         await processPaymentReminders();
       } else if (job.data.type === "expired_reservations_cleanup") {
