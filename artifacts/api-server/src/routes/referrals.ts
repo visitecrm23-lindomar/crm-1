@@ -853,6 +853,7 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
       roiRevenueRow_,
       currentMonthRow_,
       prevMonthRow_,
+      trackingFunnelRow_,
     ] = await Promise.all([
       // Weekly series for selected period (existing behaviour)
       db.select({
@@ -956,6 +957,16 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
           sql`${referralsTable.createdAt} >= ${prevMonthStart}`,
           sql`${referralsTable.createdAt} < ${currentMonthStart}`,
         )),
+
+      // Tracking-based funnel: unique visitors and conversions from referral_tracking for the period
+      db.select({
+        uniqueVisitors: sql<number>`COUNT(DISTINCT ${referralTrackingTable.cookieId})`,
+        converted: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.converted} = true THEN ${referralTrackingTable.cookieId} END)`,
+      }).from(referralTrackingTable)
+        .where(and(
+          eq(referralTrackingTable.tenantId, me.tenantId),
+          sql`${referralTrackingTable.createdAt} >= ${since}`,
+        )),
     ]);
 
     const [funnelRow] = funnelRow_;
@@ -965,6 +976,7 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
     const [roiRevenueRow] = roiRevenueRow_;
     const [currentMonthRow] = currentMonthRow_;
     const [prevMonthRow] = prevMonthRow_;
+    const [trackingFunnelRow] = trackingFunnelRow_;
 
     const created = Number(funnelRow?.created ?? 0);
     const converted = Number(funnelRow?.converted ?? 0);
@@ -986,6 +998,10 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
         visited: Number(funnelRow?.visited ?? 0),
         converted,
         bonusPaid: Number(funnelRow?.bonusPaid ?? 0),
+      },
+      trackingFunnel: {
+        uniqueVisitors: Number(trackingFunnelRow?.uniqueVisitors ?? 0),
+        converted: Number(trackingFunnelRow?.converted ?? 0),
       },
       channels: channelRows.map(r => ({
         source: r.source,

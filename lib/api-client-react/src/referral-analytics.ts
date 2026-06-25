@@ -43,10 +43,16 @@ export interface ReferralAnalyticsMonthStats {
   bonusPaidAmount: number;
 }
 
+export interface ReferralAnalyticsTrackingFunnel {
+  uniqueVisitors: number;
+  converted: number;
+}
+
 export interface ReferralAnalyticsData {
   series: ReferralAnalyticsSeries[];
   monthly: ReferralAnalyticsMonthly[];
   funnel: ReferralAnalyticsFunnel;
+  trackingFunnel: ReferralAnalyticsTrackingFunnel;
   channels: ReferralAnalyticsChannel[];
   roi: ReferralAnalyticsROI;
   currentMonth: ReferralAnalyticsMonthStats;

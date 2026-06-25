@@ -95,6 +95,7 @@ import {
   Flame,
   Pencil,
   Send,
+  MousePointerClick,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
 import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
@@ -1397,6 +1398,45 @@ export default function Indicacoes() {
         </Card>
       )}
 
+      {/* Tracking Funnel: visits → conversions from referral_tracking */}
+      {analyticsData && analyticsData.trackingFunnel.uniqueVisitors > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MousePointerClick className="w-4 h-4 text-primary" />
+              Visitas à landing page
+            </CardTitle>
+            <CardDescription>Visitantes únicos que clicaram no link de indicação</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {[
+                { label: "Clicaram no link", count: analyticsData.trackingFunnel.uniqueVisitors, color: "#6366F1" },
+                { label: "Converteram", count: analyticsData.trackingFunnel.converted, color: "#10B981" },
+              ].map((step) => {
+                const pct = analyticsData.trackingFunnel.uniqueVisitors > 0
+                  ? Math.round((step.count / analyticsData.trackingFunnel.uniqueVisitors) * 100)
+                  : 0;
+                return (
+                  <div key={step.label} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-32 shrink-0">{step.label}</span>
+                    <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
+                      <div
+                        className="h-5 rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                        style={{ width: `${Math.max(pct, 3)}%`, backgroundColor: step.color }}
+                      >
+                        <span className="text-[10px] font-semibold text-white">{step.count}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium w-10 text-right">{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Top Referrers Ranking */}
       {ranked.length > 0 && (
           <Card>
@@ -2185,7 +2225,7 @@ export default function Indicacoes() {
                   );
                 })()}
                 <div>
-                  <p className="text-muted-foreground">Visitas</p>
+                  <p className="text-muted-foreground">Visitas à landing page</p>
                   <p>{selectedReferral.visitsCount ?? 0}</p>
                 </div>
                 <div>
