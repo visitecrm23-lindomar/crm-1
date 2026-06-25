@@ -1,3 +1,7 @@
+export function makeMe(role = "admin") {
+  return { data: { tenantId: "tenant-1", role } };
+}
+
 export function makeTenantData(seatMapEnabled: boolean | undefined) {
   const settings: Record<string, unknown> =
     seatMapEnabled === undefined ? {} : { seatMapEnabled };

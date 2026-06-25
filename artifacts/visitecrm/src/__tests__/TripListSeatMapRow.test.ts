@@ -151,7 +151,7 @@ vi.mock("../pages/trips/TripCard.js", () => ({
 }));
 
 import { TripList } from "../pages/trips/TripList.js";
-import { makeTenantData } from "./tenantFixtures.js";
+import { makeTenantData, makeMe } from "./tenantFixtures.js";
 
 async function renderInListMode(seatMapEnabled: boolean | undefined) {
   mockGetTenant.mockReturnValue(makeTenantData(seatMapEnabled));
@@ -170,7 +170,7 @@ async function renderInListMode(seatMapEnabled: boolean | undefined) {
 
 // ---------------------------------------------------------------------------
 beforeEach(() => {
-  mockGetMe.mockReturnValue({ data: { tenantId: "tenant-1", role: "admin" } });
+  mockGetMe.mockReturnValue(makeMe());
   mockGetTenant.mockReturnValue(makeTenantData(false));
 });
 

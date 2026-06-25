@@ -135,10 +135,10 @@ vi.mock("../pages/trips/PassengersOverviewFinancialDialog.js", () => ({
 }));
 
 import { PassengersOverview } from "../pages/trips/PassengersOverview.js";
-import { makeTenantData } from "./tenantFixtures.js";
+import { makeTenantData, makeMe } from "./tenantFixtures.js";
 
 beforeEach(() => {
-  mockGetMe.mockReturnValue({ data: { tenantId: "tenant-1", role: "admin" } });
+  mockGetMe.mockReturnValue(makeMe());
   mockGetTenant.mockReturnValue(makeTenantData(false));
 });
 
