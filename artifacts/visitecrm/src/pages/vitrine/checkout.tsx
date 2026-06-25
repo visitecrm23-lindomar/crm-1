@@ -376,10 +376,12 @@ export default function VitrineCheckout({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Track checkout page visit for referral analytics funnel
+  // Track checkout page visit for referral analytics funnel (once per session per code)
   useEffect(() => {
     const savedCode = localStorage.getItem("referral_code");
     if (!savedCode) return;
+    const sessionKey = `referral_checkout_tracked_${savedCode}`;
+    if (sessionStorage.getItem(sessionKey)) return;
     const existingCookieId = localStorage.getItem("referral_server_cookie_id") ?? undefined;
     publicStoreApi.trackReferral(slug, {
       code: savedCode,
@@ -387,6 +389,7 @@ export default function VitrineCheckout({
       landingPage: window.location.href,
     }).then((res) => {
       if (res.cookieId) localStorage.setItem("referral_server_cookie_id", res.cookieId);
+      sessionStorage.setItem(sessionKey, "1");
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
