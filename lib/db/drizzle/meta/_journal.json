@@ -148,6 +148,13 @@
       "when": 1801900000000,
       "tag": "0020_catch_all_baseline_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1802000000000,
+      "tag": "0021_production_missing_schema",
+      "breakpoints": true
     }
   ]
 }
