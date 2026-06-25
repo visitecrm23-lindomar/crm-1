@@ -180,6 +180,7 @@ export function FeaturesTab() {
                 <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
               </div>
               <Switch
+                data-testid={`feature-switch-${f.key}`}
                 checked={f.enabled}
                 aria-disabled={locked || updateTenant.isPending}
                 className={locked ? "opacity-50" : ""}

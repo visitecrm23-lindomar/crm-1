@@ -41,14 +41,17 @@ vi.mock("@/components/ui/switch", () => ({
     checked,
     onCheckedChange,
     disabled,
+    "data-testid": testId,
   }: {
     checked: boolean;
     onCheckedChange?: (v: boolean) => void;
     disabled?: boolean;
+    "data-testid"?: string;
   }) =>
     createElement("button", {
       role: "switch",
       "aria-checked": String(checked),
+      "data-testid": testId,
       disabled: disabled ?? false,
       onClick: () => onCheckedChange?.(!checked),
     }),
@@ -122,9 +125,10 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const switches = container.querySelectorAll('[role="switch"]');
-    expect(switches).toHaveLength(3);
-    const seatMapSwitch = switches[2] as HTMLElement;
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(3);
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     expect(seatMapSwitch.getAttribute("aria-checked")).toBe("true");
   });
 
@@ -133,8 +137,9 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const switches = container.querySelectorAll('[role="switch"]');
-    const seatMapSwitch = switches[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     expect(seatMapSwitch.getAttribute("aria-checked")).toBe("false");
   });
 
@@ -143,8 +148,9 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const switches = container.querySelectorAll('[role="switch"]');
-    const seatMapSwitch = switches[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     expect(seatMapSwitch.getAttribute("aria-checked")).toBe("true");
   });
 
@@ -153,7 +159,9 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     await act(async () => {
       seatMapSwitch.click();
     });
@@ -169,7 +177,9 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     await act(async () => {
       seatMapSwitch.click();
     });
@@ -185,7 +195,9 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     await act(async () => {
       seatMapSwitch.click();
     });
@@ -203,7 +215,9 @@ describe("FeaturesTab — locked feature enforcement", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     await act(async () => {
       seatMapSwitch.click();
     });
@@ -217,7 +231,9 @@ describe("FeaturesTab — locked feature enforcement", () => {
 
     const { container } = await renderComponent(createElement(FeaturesTab, null));
 
-    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
     await act(async () => {
       seatMapSwitch.click();
     });
