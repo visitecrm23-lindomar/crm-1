@@ -709,7 +709,6 @@
     "referrer_name",
     "referrer_phone",
     "reservation_id",
-    "source",
     "status",
     "tenant_id",
     "updated_at",
