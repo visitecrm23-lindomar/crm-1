@@ -6,9 +6,10 @@ import { useSeatStream } from "@/hooks/useSeatStream";
 import {
   useListTrips, useGetTrip, useGetTripSeatMap, getGetTripSeatMapQueryKey,
   useListReservations, useListClients, useCreateReservation, useCreateClient,
-  useRegenerateTripSeatMap,
+  useRegenerateTripSeatMap, useGetCurrentSubscription,
 } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
+import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
 import { getSeatColor, getCellIcon } from "@/components/SeatMapPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [exportStatusFilter, setExportStatusFilter] = useState("");
   const regenerateSeatMap = useRegenerateTripSeatMap();
 
+  const { data: subData } = useGetCurrentSubscription();
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const queryClient = useQueryClient();
@@ -203,6 +205,18 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
       setIsRenumbering(false);
     }
   };
+
+  const seatMapLocked = subData !== undefined &&
+    !(subData.plan?.supportedFeatures ?? []).includes("seatMap");
+
+  if (seatMapLocked) {
+    return (
+      <PlanFeatureWall
+        featureLabel="Mapa de assentos"
+        canUpgrade={canUpgradeForFeature(subData, "seatMap")}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
