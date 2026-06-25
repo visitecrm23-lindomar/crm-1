@@ -382,6 +382,7 @@ export interface PublicStore {
   maintenanceMessage?: string | null;
   couponsEnabled?: boolean;
   referralsEnabled?: boolean;
+  seatMapEnabled?: boolean;
   minInstallments?: number;
   maxInstallments?: number;
   installmentFee?: string;

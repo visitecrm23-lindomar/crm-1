@@ -26,7 +26,7 @@ export default function ReservationWizard({
   store: PublicStore;
 }) {
   const state = useWizardState({ slug, productSlug, store });
-  const visibleSteps = state.product?.showSeatMap === false
+  const visibleSteps = (state.product?.showSeatMap === false || store.seatMapEnabled === false)
     ? STEPS.filter(s => s.key !== "assento")
     : STEPS;
   const {

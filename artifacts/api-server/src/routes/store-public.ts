@@ -93,6 +93,7 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
     const tenantSettings = (tenant?.settings ?? {}) as Record<string, unknown>;
     const couponsEnabled = tenantSettings.couponsEnabled !== false;
     const referralsEnabled = tenantSettings.referralsEnabled !== false;
+    const seatMapEnabled = tenantSettings.seatMapEnabled !== false;
 
     const publicData = {
       id: store.id,
@@ -147,6 +148,7 @@ router.get("/public/store/:slug", async (req, res, next: NextFunction): Promise<
       maintenanceMessage: store.maintenanceMessage,
       couponsEnabled,
       referralsEnabled,
+      seatMapEnabled,
     };
     await db.update(storesTable).set({ totalVisits: store.totalVisits + 1 })
       .where(eq(storesTable.id, store.id));

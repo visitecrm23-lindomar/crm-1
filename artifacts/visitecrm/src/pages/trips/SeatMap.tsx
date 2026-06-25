@@ -6,7 +6,7 @@ import { useSeatStream } from "@/hooks/useSeatStream";
 import {
   useListTrips, useGetTrip, useGetTripSeatMap, getGetTripSeatMapQueryKey,
   useListReservations, useListClients, useCreateReservation, useCreateClient,
-  useRegenerateTripSeatMap, useGetCurrentSubscription,
+  useRegenerateTripSeatMap, useGetCurrentSubscription, useGetMe, useGetTenant,
 } from "@workspace/api-client-react";
 import type { Seat } from "@workspace/api-client-react";
 import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
@@ -41,6 +41,12 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const regenerateSeatMap = useRegenerateTripSeatMap();
 
   const { data: subData } = useGetCurrentSubscription();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: tenantData } = useGetTenant(tenantId ?? "", {
+    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
+  });
+  const tenantSettings = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings ?? {}) as Record<string, unknown>;
   const { data: allTripsData } = useListTrips({ limit: 100 });
   const { data: trip } = useGetTrip(tripId, { query: { queryKey: ["/api/trips", tripId] } });
   const queryClient = useQueryClient();
@@ -215,6 +221,21 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
         featureLabel="Mapa de assentos"
         canUpgrade={canUpgradeForFeature(subData, "seatMap")}
       />
+    );
+  }
+
+  if (tenantSettings.seatMapEnabled === false) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+        <AlertCircle className="w-12 h-12 text-muted-foreground" />
+        <h2 className="text-xl font-semibold">Mapa de assentos desabilitado</h2>
+        <p className="text-muted-foreground max-w-sm">
+          O mapa de assentos está desabilitado nas configurações da agência.
+        </p>
+        <Link href="/configuracoes">
+          <Button variant="outline">Ir para Configurações</Button>
+        </Link>
+      </div>
     );
   }
 
