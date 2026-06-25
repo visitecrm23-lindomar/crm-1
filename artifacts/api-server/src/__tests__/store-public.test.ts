@@ -478,12 +478,10 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "20.00", totalAmount: "130.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([fixedCoupon])           // coupon lookup
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
+      .mockResolvedValueOnce([fixedCoupon])     // coupon lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -512,12 +510,10 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([percentCoupon])         // coupon lookup
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
+      .mockResolvedValueOnce([percentCoupon])   // coupon lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -622,13 +618,11 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([blockedReferrer])       // referrer lookup
-      .mockResolvedValueOnce([refSettings])           // referral settings
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])        // product fetch (no tripId)
+      .mockResolvedValueOnce([blockedReferrer])     // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])         // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])          // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -658,13 +652,11 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([selfReferrer])          // referrer lookup
-      .mockResolvedValueOnce([refSettings])           // referral settings
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])       // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])     // product fetch (no tripId)
+      .mockResolvedValueOnce([selfReferrer])     // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])      // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])       // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -695,14 +687,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const priorOrder = { id: "order-prior-001" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([referrer])              // referrer lookup
-      .mockResolvedValueOnce([refSettings])           // referral settings
-      .mockResolvedValueOnce([priorOrder])            // prior completed order check
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
+      .mockResolvedValueOnce([referrer])        // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])     // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([priorOrder])      // prior completed order check (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])      // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -732,18 +722,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
-    // Task #17 deferral: the referral CONVERSION (crediting the referrer) is no
-    // longer recorded at checkout — only the discount is applied to the total and
-    // the referral intent is persisted on the order (pending_referral). So the
-    // former "inside recordReferralConversion tx" select slots are gone.
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId)
-      .mockResolvedValueOnce([referrer])              // referrer lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([refSettings])           // referral settings (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside persist-order tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([discountedOrder])       // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])        // product fetch (no tripId)
+      .mockResolvedValueOnce([referrer])            // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])         // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder])     // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -759,12 +743,10 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])           // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])          // product fetch (no tripId, no inventory)
-      .mockResolvedValueOnce([{ id: "admin-001" }])  // admin user (inside tx)
-      .mockResolvedValueOnce([])                      // upsertCheckoutClient – no existing client (inside tx)
-      .mockResolvedValueOnce([FAKE_ORDER])            // post-tx order re-fetch
-      .mockResolvedValue([]);                         // items fetch (and any extra selects)
+      .mockResolvedValueOnce([FAKE_STORE])    // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])  // product fetch (no tripId, no inventory)
+      .mockResolvedValueOnce([FAKE_ORDER])    // post-tx order re-fetch
+      .mockResolvedValue([]);
 
     const res = await request(buildApp())
       .post("/api/public/store/minha-loja/orders")
