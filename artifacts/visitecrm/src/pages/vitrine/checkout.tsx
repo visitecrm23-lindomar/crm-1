@@ -376,6 +376,21 @@ export default function VitrineCheckout({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track checkout page visit for referral analytics funnel
+  useEffect(() => {
+    const savedCode = localStorage.getItem("referral_code");
+    if (!savedCode) return;
+    const existingCookieId = localStorage.getItem("referral_server_cookie_id") ?? undefined;
+    publicStoreApi.trackReferral(slug, {
+      code: savedCode,
+      serverCookieId: existingCookieId,
+      landingPage: window.location.href,
+    }).then((res) => {
+      if (res.cookieId) localStorage.setItem("referral_server_cookie_id", res.cookieId);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function set(field: string, value: string) {
     setFormState((p) => ({ ...p, [field]: value }));
   }

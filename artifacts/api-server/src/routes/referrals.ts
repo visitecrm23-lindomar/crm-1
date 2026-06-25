@@ -958,9 +958,13 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
           sql`${referralsTable.createdAt} < ${currentMonthStart}`,
         )),
 
-      // Tracking-based funnel: unique visitors and conversions from referral_tracking for the period
+      // Tracking-based funnel: unique visitors, checkout starts, and conversions from referral_tracking for the period
       db.select({
         uniqueVisitors: sql<number>`COUNT(DISTINCT ${referralTrackingTable.cookieId})`,
+        checkoutStarts: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.pagesVisited} IS NOT NULL AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(${referralTrackingTable.pagesVisited}::jsonb) AS elem
+          WHERE elem LIKE '%/checkout%'
+        ) THEN ${referralTrackingTable.cookieId} END)`,
         converted: sql<number>`COUNT(DISTINCT CASE WHEN ${referralTrackingTable.converted} = true THEN ${referralTrackingTable.cookieId} END)`,
       }).from(referralTrackingTable)
         .where(and(
@@ -1001,6 +1005,7 @@ router.get("/referrals/analytics", async (req, res, next: NextFunction): Promise
       },
       trackingFunnel: {
         uniqueVisitors: Number(trackingFunnelRow?.uniqueVisitors ?? 0),
+        checkoutStarts: Number(trackingFunnelRow?.checkoutStarts ?? 0),
         converted: Number(trackingFunnelRow?.converted ?? 0),
       },
       channels: channelRows.map(r => ({

@@ -1412,6 +1412,7 @@ export default function Indicacoes() {
             <div className="space-y-2">
               {[
                 { label: "Clicaram no link", count: analyticsData.trackingFunnel.uniqueVisitors, color: "#6366F1" },
+                { label: "Chegaram ao checkout", count: analyticsData.trackingFunnel.checkoutStarts, color: "#8B5CF6" },
                 { label: "Converteram", count: analyticsData.trackingFunnel.converted, color: "#10B981" },
               ].map((step) => {
                 const pct = analyticsData.trackingFunnel.uniqueVisitors > 0

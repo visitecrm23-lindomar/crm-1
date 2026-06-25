@@ -45,6 +45,7 @@ export interface ReferralAnalyticsMonthStats {
 
 export interface ReferralAnalyticsTrackingFunnel {
   uniqueVisitors: number;
+  checkoutStarts: number;
   converted: number;
 }
 
