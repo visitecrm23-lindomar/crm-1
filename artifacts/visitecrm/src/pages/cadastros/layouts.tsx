@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/tabs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetCurrentSubscription } from "@workspace/api-client-react";
-import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
+import { PlanFeatureWall, canUpgradeForFeature, getRequiredPlanLabel } from "@/components/plan-limit-wall";
 
 type CellType = LayoutCell["type"];
 
@@ -1433,11 +1433,13 @@ export default function LayoutsPage() {
   }, [editorOpen, editingLayout]);
 
   if (seatMapLocked) {
+    const seatMapRequiredPlan = getRequiredPlanLabel(subData, "seatMap") ?? "Pro";
     return (
       <PlanFeatureWall
         featureLabel="Layouts de Assentos"
-        requiredPlanLabel="Pro"
-        description="O mapa de assentos personalizável está disponível a partir do plano Pro."
+        currentPlanLabel={subData?.plan?.name}
+        requiredPlanLabel={seatMapRequiredPlan}
+        description={`O mapa de assentos personalizável está disponível a partir do plano ${seatMapRequiredPlan}.`}
         canUpgrade={seatMapCanUpgrade}
       />
     );

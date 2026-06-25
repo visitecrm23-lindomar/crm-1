@@ -64,6 +64,7 @@ export function PlanLimitWall({ resource, current, limit, planId }: PlanLimitWal
 interface PlanFeatureWallProps {
   featureLabel: string;
   requiredPlanLabel?: string;
+  currentPlanLabel?: string;
   description?: string;
   canUpgrade?: boolean;
 }
@@ -71,6 +72,7 @@ interface PlanFeatureWallProps {
 export function PlanFeatureWall({
   featureLabel,
   requiredPlanLabel,
+  currentPlanLabel,
   description,
   canUpgrade = true,
 }: PlanFeatureWallProps) {
@@ -89,6 +91,13 @@ export function PlanFeatureWall({
               ? `Esta funcionalidade está disponível a partir do plano ${requiredPlanLabel}.`
               : "Esta funcionalidade não está incluída no seu plano atual.")}
         </p>
+        {(currentPlanLabel || requiredPlanLabel) && (
+          <p className="text-xs text-muted-foreground/80 mt-1">
+            {currentPlanLabel && <span>Seu plano: <strong>{currentPlanLabel}</strong></span>}
+            {currentPlanLabel && requiredPlanLabel && <span className="mx-1.5">•</span>}
+            {requiredPlanLabel && <span>Disponível no: <strong>{requiredPlanLabel}</strong></span>}
+          </p>
+        )}
       </div>
       {canUpgrade && (
         <Button onClick={() => navigate("/configuracoes?tab=plan")} className="gap-2">
@@ -98,6 +107,22 @@ export function PlanFeatureWall({
       )}
     </div>
   );
+}
+
+/**
+ * Returns the name of the lowest plan with a higher sortOrder than the current
+ * plan that also supports `featureKey`. Falls back to undefined if not found.
+ */
+export function getRequiredPlanLabel(
+  subData: CurrentSubscriptionResponse | undefined,
+  featureKey: string,
+): string | undefined {
+  if (!subData) return undefined;
+  const currentSortOrder = subData.plan?.sortOrder ?? 0;
+  const candidates = subData.plans
+    .filter(p => p.sortOrder > currentSortOrder && p.supportedFeatures.includes(featureKey))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return candidates[0]?.name;
 }
 
 /**

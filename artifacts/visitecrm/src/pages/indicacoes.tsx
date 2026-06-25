@@ -98,7 +98,7 @@ import {
   MousePointerClick,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
-import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
+import { PlanFeatureWall, canUpgradeForFeature, getRequiredPlanLabel } from "@/components/plan-limit-wall";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
   { level: "bronze",  label: "Bronze",   minReferrals: 0,  bonusMultiplier: 1.0 },
@@ -1010,7 +1010,8 @@ export default function Indicacoes() {
     return (
       <PlanFeatureWall
         featureLabel="Programa de Indicações"
-        requiredPlanLabel="Pro"
+        currentPlanLabel={subData?.plan?.name}
+        requiredPlanLabel={getRequiredPlanLabel(subData, "referrals") ?? "Pro"}
         canUpgrade={referralsCanUpgrade}
       />
     );
