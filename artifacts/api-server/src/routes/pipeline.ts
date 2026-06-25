@@ -13,7 +13,7 @@ const router = Router();
 
 const CreateDealBody = z.object({
   clientId: z.string().optional(),
-  stageId: z.string(),
+  stageId: z.string().optional(),
   title: z.string(),
   description: z.string().optional(),
   value: z.number().optional(),
@@ -328,17 +328,49 @@ router.post("/deals", async (req, res, next: NextFunction): Promise<void> => {
       if (!client) { next(new ValidationError("Client not found or not in tenant", "CLIENT_NOT_FOUND")); return; }
     }
 
-    const [stage] = await db.select().from(pipelineStagesTable)
-      .where(and(eq(pipelineStagesTable.id, parsed.data.stageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
-      .limit(1);
-    if (!stage) { next(new ValidationError("Stage not found or not in tenant", "STAGE_NOT_FOUND")); return; }
+    // Resolve stageId: explicit > default-pipeline isDefaultWeb > default-pipeline order=1 > any stage.
+    let resolvedStageId = parsed.data.stageId;
+    if (!resolvedStageId) {
+      const [defaultPipeline] = await db.select({ id: pipelinesTable.id })
+        .from(pipelinesTable)
+        .where(and(eq(pipelinesTable.tenantId, me.tenantId), eq(pipelinesTable.isDefault, true)))
+        .limit(1);
+      const pipelineId = defaultPipeline?.id;
+      if (pipelineId) {
+        const stagesInDefault = await db.select({ id: pipelineStagesTable.id, isDefaultWeb: pipelineStagesTable.isDefaultWeb })
+          .from(pipelineStagesTable)
+          .where(and(eq(pipelineStagesTable.pipelineId, pipelineId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+          .orderBy(asc(pipelineStagesTable.order));
+        const chosen = stagesInDefault.find((s) => s.isDefaultWeb) ?? stagesInDefault[0];
+        resolvedStageId = chosen?.id;
+      }
+      if (!resolvedStageId) {
+        // Fallback: first stage of any pipeline ordered by creation date then stage order.
+        const [anyStage] = await db.select({ id: pipelineStagesTable.id })
+          .from(pipelineStagesTable)
+          .innerJoin(pipelinesTable, eq(pipelineStagesTable.pipelineId, pipelinesTable.id))
+          .where(eq(pipelineStagesTable.tenantId, me.tenantId))
+          .orderBy(asc(pipelinesTable.createdAt), asc(pipelineStagesTable.order))
+          .limit(1);
+        resolvedStageId = anyStage?.id;
+      }
+      if (!resolvedStageId) {
+        next(new ValidationError("Nenhum estágio encontrado. Configure um pipeline para esta agência.", "STAGE_NOT_FOUND"));
+        return;
+      }
+    } else {
+      const [stage] = await db.select().from(pipelineStagesTable)
+        .where(and(eq(pipelineStagesTable.id, resolvedStageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (!stage) { next(new ValidationError("Stage not found or not in tenant", "STAGE_NOT_FOUND")); return; }
+    }
 
     const id = generateId();
     await db.insert(dealsTable).values({
       id,
       tenantId: me.tenantId,
       clientId: parsed.data.clientId ?? null,
-      stageId: parsed.data.stageId,
+      stageId: resolvedStageId,
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       value: String(parsed.data.value ?? 0),
