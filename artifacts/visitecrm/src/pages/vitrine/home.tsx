@@ -266,11 +266,22 @@ export default function VitrineHome({
       {/* Hero */}
       <section className="relative overflow-hidden">
         {store.bannerUrl ? (
-          <img
-            src={store.bannerUrl}
-            alt={store.name}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
+          <>
+            {/* Desktop banner (≥640 px) — always rendered */}
+            <img
+              src={store.bannerUrl}
+              alt={store.name}
+              className={`absolute inset-0 h-full w-full object-cover${store.bannerMobileUrl ? " hidden sm:block" : ""}`}
+            />
+            {/* Mobile banner (<640 px) — only when a separate one is configured */}
+            {store.bannerMobileUrl && (
+              <img
+                src={store.bannerMobileUrl}
+                alt={store.name}
+                className="absolute inset-0 h-full w-full object-cover sm:hidden"
+              />
+            )}
+          </>
         ) : (
           <div
             className="absolute inset-0"

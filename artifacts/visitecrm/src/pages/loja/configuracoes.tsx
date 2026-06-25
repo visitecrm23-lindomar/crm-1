@@ -665,6 +665,22 @@ export default function LojaConfiguracoes() {
                   emptyLabel="Clique ou arraste o banner aqui"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Banner Mobile</Label>
+                <p className="text-xs text-muted-foreground">
+                  Versão otimizada para smartphones (&lt;640 px) · máx. 4 MB.{" "}
+                  Se não definido, o banner principal é usado em todos os dispositivos.
+                </p>
+                <CoverImageUpload
+                  value={form.bannerMobile ?? ""}
+                  onChange={(url) => set("bannerMobile", url)}
+                  onUploadingChange={handleUploadingChange}
+                  disabled={saving}
+                  previewClassName="h-40"
+                  objectFit="cover"
+                  emptyLabel="Clique ou arraste o banner mobile aqui"
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

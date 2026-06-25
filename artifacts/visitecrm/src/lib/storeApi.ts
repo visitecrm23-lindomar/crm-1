@@ -144,6 +144,8 @@ export const publicStoreApi = {
     return {
       ...raw,
       logoUrl: (raw.logoUrl ?? raw.logo) as string | null,
+      bannerUrl: (raw.bannerUrl ?? raw.bannerHome) as string | null,
+      bannerMobileUrl: (raw.bannerMobileUrl ?? raw.bannerMobile) as string | null,
       contactEmail: (raw.contactEmail ?? raw.email) as string | null,
       contactPhone: (raw.contactPhone ?? raw.phone) as string | null,
       contactWhatsapp: (raw.contactWhatsapp ?? raw.whatsapp) as string | null,
@@ -356,6 +358,7 @@ export interface PublicStore {
   description?: string | null;
   logoUrl?: string | null;
   bannerUrl?: string | null;
+  bannerMobileUrl?: string | null;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
