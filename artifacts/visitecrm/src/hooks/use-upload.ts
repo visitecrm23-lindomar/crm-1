@@ -29,6 +29,12 @@ class UploadHttpError extends Error {
   }
 }
 
+function makeAbortError(): Error {
+  const err = new Error("Upload cancelado");
+  err.name = "AbortError";
+  return err;
+}
+
 function isRetryable(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (err.name === "AbortError") return false;
@@ -39,7 +45,8 @@ function isRetryable(err: unknown): boolean {
 async function withRetry<T>(
   fn: () => Promise<T>,
   onRetrying: (attempt: number) => void,
-  resetProgress: () => void
+  resetProgress: () => void,
+  isCancelled: () => boolean
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -47,6 +54,7 @@ async function withRetry<T>(
       resetProgress();
       onRetrying(attempt);
       await new Promise<void>((res) => setTimeout(res, attempt * 1000));
+      if (isCancelled()) throw makeAbortError();
     }
     try {
       return await fn();
@@ -102,9 +110,7 @@ function xhrUpload<T>(
 
     xhr.onabort = () => {
       xhrRef.current = null;
-      const err = new Error("Upload cancelado");
-      err.name = "AbortError";
-      reject(err);
+      reject(makeAbortError());
     };
 
     xhr.send(form);
@@ -116,8 +122,10 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
   const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelledRef = useRef(false);
 
   async function startUpload(file: File) {
+    cancelledRef.current = false;
     setIsUploading(true);
     setIsRetrying(false);
     setUploadProgress(0);
@@ -133,7 +141,8 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
           `${UPLOAD_BASE}/image`, form, setUploadProgress, xhrRef
         ),
         () => setIsRetrying(true),
-        () => setUploadProgress(0)
+        () => setUploadProgress(0),
+        () => cancelledRef.current
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -151,6 +160,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
   }
 
   function cancelUpload() {
+    cancelledRef.current = true;
     xhrRef.current?.abort();
   }
 
@@ -162,9 +172,11 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
   const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelledRef = useRef(false);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
+    cancelledRef.current = false;
     setIsUploading(true);
     setIsRetrying(false);
     setUploadProgress(0);
@@ -182,7 +194,8 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
           `${UPLOAD_BASE}/images`, form, setUploadProgress, xhrRef
         ),
         () => setIsRetrying(true),
-        () => setUploadProgress(0)
+        () => setUploadProgress(0),
+        () => cancelledRef.current
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -200,6 +213,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
   }
 
   function cancelUpload() {
+    cancelledRef.current = true;
     xhrRef.current?.abort();
   }
 
@@ -211,8 +225,10 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelledRef = useRef(false);
 
   async function startUpload(file: File) {
+    cancelledRef.current = false;
     setIsUploading(true);
     setIsRetrying(false);
     setUploadProgress(0);
@@ -225,7 +241,8 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
           `${UPLOAD_BASE}/document`, form, setUploadProgress, xhrRef
         ),
         () => setIsRetrying(true),
-        () => setUploadProgress(0)
+        () => setUploadProgress(0),
+        () => cancelledRef.current
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -243,6 +260,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   }
 
   function cancelUpload() {
+    cancelledRef.current = true;
     xhrRef.current?.abort();
   }
 
