@@ -296,6 +296,7 @@ export default function LojaConfiguracoes() {
   const [store, setStore] = useState<StoreSettings | null>(null);
   const [form, setForm] = useState<Partial<StoreSettings>>({});
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
 
   const generateQr = useCallback(async (slug: string) => {
     const fullUrl = `${window.location.origin}/loja/${slug}`;
@@ -572,68 +573,6 @@ export default function LojaConfiguracoes() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Pré-visualização</CardTitle>
-              <CardDescription>Como as cores ficam na sua vitrine — atualiza em tempo real.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-xl border overflow-hidden shadow-sm select-none">
-                <div className="h-10 flex items-center px-4 gap-3" style={{ background: (form as Record<string, string>)["primaryColor"] ?? "#3B82F6" }}>
-                  {form.logo ? (
-                    <img src={form.logo} alt="logo" className="h-6 w-6 rounded object-contain bg-white/20" />
-                  ) : (
-                    <div className="w-6 h-6 bg-white/20 rounded shrink-0" />
-                  )}
-                  <span className="text-white text-sm font-semibold truncate">{form.name ?? "Minha Loja"}</span>
-                  <div className="ml-auto flex gap-2">
-                    <div className="w-12 h-2 rounded-full bg-white/30" />
-                    <div className="w-12 h-2 rounded-full bg-white/30" />
-                    <div className="w-12 h-2 rounded-full bg-white/30" />
-                  </div>
-                </div>
-                <div
-                  className="h-28 flex flex-col items-start justify-end p-4"
-                  style={{ background: `linear-gradient(135deg, ${(form as Record<string, string>)["primaryColor"] ?? "#3B82F6"}, ${(form as Record<string, string>)["secondaryColor"] ?? "#10B981"})` }}
-                >
-                  <div className="h-3 w-40 rounded-full bg-white/80 mb-1.5" />
-                  <div className="h-2 w-56 rounded-full bg-white/50 mb-3" />
-                  <div className="flex gap-2">
-                    <div
-                      className="h-7 px-4 rounded-full flex items-center text-xs font-semibold bg-white"
-                      style={{ color: (form as Record<string, string>)["primaryColor"] ?? "#3B82F6" }}
-                    >
-                      Explorar Pacotes
-                    </div>
-                    <div className="h-7 px-4 rounded-full flex items-center text-xs font-semibold border-2 border-white text-white">
-                      Contato
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4 grid grid-cols-2 gap-3 bg-gray-50">
-                  {[
-                    (form as Record<string, string>)["primaryColor"] ?? "#3B82F6",
-                    (form as Record<string, string>)["secondaryColor"] ?? "#10B981",
-                  ].map((color, i) => (
-                    <div key={i} className="rounded-xl bg-white border overflow-hidden shadow-sm">
-                      <div className="h-16" style={{ background: color + "33" }} />
-                      <div className="p-2.5 space-y-1.5">
-                        <div className="h-2 w-20 rounded-full bg-gray-200" />
-                        <div className="flex items-center justify-between">
-                          <div
-                            className="h-2 w-12 rounded-full"
-                            style={{ background: ((form as Record<string, string>)["accentColor"] ?? "#F59E0B") + "80" }}
-                          />
-                          <div className="h-5 w-14 rounded-full" style={{ background: color }} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Imagens</CardTitle>
               <CardDescription>Envie o logo e o banner da sua loja (PNG, JPG, WEBP).</CardDescription>
             </CardHeader>
@@ -683,6 +622,132 @@ export default function LojaConfiguracoes() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ── PREVIEW ── */}
+          {(() => {
+            const primaryColor = (form as Record<string, string>)["primaryColor"] ?? "#3B82F6";
+            const secondaryColor = (form as Record<string, string>)["secondaryColor"] ?? "#10B981";
+            const accentColor = (form as Record<string, string>)["accentColor"] ?? "#F59E0B";
+            const activeBanner = previewMode === "mobile"
+              ? (form.bannerMobile || form.bannerHome || "")
+              : (form.bannerHome || "");
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <CardTitle>Pré-visualização da Vitrine</CardTitle>
+                      <CardDescription className="mt-1">Hero da sua loja — atualiza em tempo real conforme você edita.</CardDescription>
+                    </div>
+                    <div className="flex rounded-lg border overflow-hidden shrink-0 text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("desktop")}
+                        className={`px-3 py-1.5 transition-colors ${previewMode === "desktop" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                      >
+                        Desktop
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("mobile")}
+                        className={`px-3 py-1.5 transition-colors border-l ${previewMode === "mobile" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+                      >
+                        Mobile
+                      </button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className={`transition-all duration-300 ${previewMode === "mobile" ? "max-w-[320px]" : "max-w-full"} mx-auto`}>
+                    <div className="rounded-xl border overflow-hidden shadow-sm select-none">
+                      {/* Navbar */}
+                      <div className="h-10 flex items-center px-4 gap-3" style={{ background: primaryColor }}>
+                        {form.logo ? (
+                          <img src={form.logo} alt="logo" className="h-6 w-auto max-w-[80px] rounded object-contain bg-white/10 p-0.5" />
+                        ) : (
+                          <div className="w-6 h-6 bg-white/20 rounded shrink-0" />
+                        )}
+                        <span className="text-white text-sm font-semibold truncate">{form.name ?? "Minha Loja"}</span>
+                        {previewMode === "desktop" && (
+                          <div className="ml-auto flex gap-2">
+                            <div className="w-12 h-2 rounded-full bg-white/30" />
+                            <div className="w-12 h-2 rounded-full bg-white/30" />
+                            <div className="w-12 h-2 rounded-full bg-white/30" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Hero */}
+                      <div className="relative overflow-hidden flex flex-col items-center justify-end text-center p-4" style={{ height: previewMode === "mobile" ? "140px" : "160px" }}>
+                        {activeBanner ? (
+                          <img
+                            key={activeBanner}
+                            src={activeBanner}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="absolute inset-0"
+                            style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+                          />
+                        )}
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            background: activeBanner
+                              ? "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.60) 100%)"
+                              : "linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.20) 100%)",
+                          }}
+                        />
+                        <div className="relative z-10 flex flex-col items-center gap-1.5">
+                          {form.logo && (
+                            <img
+                              src={form.logo}
+                              alt="logo"
+                              className="h-10 w-auto max-w-[120px] rounded-xl bg-white/95 p-1.5 shadow mb-1 object-contain"
+                            />
+                          )}
+                          <div className="h-3 w-36 rounded-full bg-white/80" />
+                          <div className="h-2 w-48 rounded-full bg-white/50" />
+                          <div className="flex gap-2 mt-2">
+                            <div
+                              className="h-6 px-3 rounded-full flex items-center text-xs font-semibold bg-white"
+                              style={{ color: primaryColor }}
+                            >
+                              Explorar
+                            </div>
+                            <div className="h-6 px-3 rounded-full flex items-center text-xs font-semibold border-2 border-white text-white">
+                              Contato
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Product cards */}
+                      <div className="p-3 grid grid-cols-2 gap-2 bg-gray-50">
+                        {[primaryColor, secondaryColor].map((color, i) => (
+                          <div key={i} className="rounded-xl bg-white border overflow-hidden shadow-sm">
+                            <div className="h-12" style={{ background: color + "33" }} />
+                            <div className="p-2 space-y-1.5">
+                              <div className="h-2 w-16 rounded-full bg-gray-200" />
+                              <div className="flex items-center justify-between">
+                                <div className="h-2 w-10 rounded-full" style={{ background: accentColor + "80" }} />
+                                <div className="h-4 w-12 rounded-full" style={{ background: color }} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {!activeBanner && (
+                      <p className="text-center text-xs text-muted-foreground mt-2">
+                        Adicione um banner acima para ver o hero com imagem.
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
         </TabsContent>
 
         {/* ── CONTATO ── */}
