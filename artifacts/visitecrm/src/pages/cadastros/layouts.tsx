@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/tabs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetCurrentSubscription } from "@workspace/api-client-react";
-import { PlanFeatureWall } from "@/components/plan-limit-wall";
+import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
 
 type CellType = LayoutCell["type"];
 
@@ -1315,7 +1315,8 @@ function LayoutCard({
 export default function LayoutsPage() {
   const { data: subData } = useGetCurrentSubscription();
   const seatMapLocked = subData !== undefined &&
-    !((subData?.plan?.supportedFeatures ?? []) as string[]).includes("seatMap");
+    !(subData.plan?.supportedFeatures ?? []).includes("seatMap");
+  const seatMapCanUpgrade = canUpgradeForFeature(subData, "seatMap");
 
   const { data: layouts = [], isLoading, refetch } = useListLayouts({ query: { queryKey: ["layouts"] } });
   const createLayout = useCreateLayout();
@@ -1437,6 +1438,7 @@ export default function LayoutsPage() {
         featureLabel="Layouts de Assentos"
         requiredPlanLabel="Pro"
         description="O mapa de assentos personalizável está disponível a partir do plano Pro."
+        canUpgrade={seatMapCanUpgrade}
       />
     );
   }

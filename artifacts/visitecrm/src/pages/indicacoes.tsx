@@ -97,7 +97,7 @@ import {
   Send,
 } from "lucide-react";
 import { ReferralAnalyticsCharts } from "@/components/referral-analytics-charts";
-import { PlanFeatureWall } from "@/components/plan-limit-wall";
+import { PlanFeatureWall, canUpgradeForFeature } from "@/components/plan-limit-wall";
 
 const DEFAULT_TIERS: ReferralTierConfig[] = [
   { level: "bronze",  label: "Bronze",   minReferrals: 0,  bonusMultiplier: 1.0 },
@@ -199,7 +199,8 @@ async function fetchReversalGaps(
 export default function Indicacoes() {
   const { data: subData } = useGetCurrentSubscription();
   const referralsLocked = subData !== undefined &&
-    !((subData?.plan?.supportedFeatures ?? []) as string[]).includes("referrals");
+    !(subData.plan?.supportedFeatures ?? []).includes("referrals");
+  const referralsCanUpgrade = canUpgradeForFeature(subData, "referrals");
 
   const { toast } = useToast();
   const { data: referralsResponse, refetch } = useListReferrals();
@@ -1009,6 +1010,7 @@ export default function Indicacoes() {
       <PlanFeatureWall
         featureLabel="Programa de Indicações"
         requiredPlanLabel="Pro"
+        canUpgrade={referralsCanUpgrade}
       />
     );
   }

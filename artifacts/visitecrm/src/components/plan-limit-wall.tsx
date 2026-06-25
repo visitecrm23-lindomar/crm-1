@@ -2,6 +2,7 @@ import { useLocation } from "wouter";
 import { Lock, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { CurrentSubscriptionResponse } from "@workspace/api-client-react";
 
 interface PlanLimitWallProps {
   resource: "users" | "clients" | "trips";
@@ -64,9 +65,15 @@ interface PlanFeatureWallProps {
   featureLabel: string;
   requiredPlanLabel?: string;
   description?: string;
+  canUpgrade?: boolean;
 }
 
-export function PlanFeatureWall({ featureLabel, requiredPlanLabel, description }: PlanFeatureWallProps) {
+export function PlanFeatureWall({
+  featureLabel,
+  requiredPlanLabel,
+  description,
+  canUpgrade = true,
+}: PlanFeatureWallProps) {
   const [, navigate] = useLocation();
 
   return (
@@ -83,11 +90,29 @@ export function PlanFeatureWall({ featureLabel, requiredPlanLabel, description }
               : "Esta funcionalidade não está incluída no seu plano atual.")}
         </p>
       </div>
-      <Button onClick={() => navigate("/configuracoes?tab=plan")} className="gap-2">
-        <TrendingUp className="w-4 h-4" />
-        Ver planos
-      </Button>
+      {canUpgrade && (
+        <Button onClick={() => navigate("/configuracoes?tab=plan")} className="gap-2">
+          <TrendingUp className="w-4 h-4" />
+          Ver planos
+        </Button>
+      )}
     </div>
+  );
+}
+
+/**
+ * Returns true when there is at least one active plan with a higher
+ * sortOrder than the current plan that also includes `featureKey`.
+ * This means the tenant *can* upgrade to unlock the feature.
+ */
+export function canUpgradeForFeature(
+  subData: CurrentSubscriptionResponse | undefined,
+  featureKey: string,
+): boolean {
+  if (!subData) return false;
+  const currentSortOrder = subData.plan?.sortOrder ?? 0;
+  return subData.plans.some(
+    p => p.sortOrder > currentSortOrder && p.supportedFeatures.includes(featureKey),
   );
 }
 
