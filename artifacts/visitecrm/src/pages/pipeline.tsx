@@ -291,9 +291,8 @@ function AnalyticsPanel({ pipelineId }: { pipelineId: string }) {
 
 interface ClientCardProps {
   deal: Deal;
-  clientsById: Map<string, Client>;
   tripsById: Map<string, string>;
-  onEditClient: (client: Client) => void;
+  onEditClient: (clientId: string) => void;
   onView360: (clientId: string) => void;
   onDelete: (id: string) => void;
   onCreateReservation: (deal: Deal) => void;
@@ -305,8 +304,7 @@ interface ClientCardProps {
   isDragging?: boolean;
 }
 
-function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
-  const clientFromMap = deal.clientId ? clientsById.get(deal.clientId) : undefined;
+function ClientCardContent({ deal, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage, isDragging }: ClientCardProps) {
   const name = deal.clientName ?? deal.leadName ?? "Lead Desconhecido";
   const whatsapp = deal.clientWhatsapp ?? deal.leadWhatsapp;
   const city = deal.clientCity;
@@ -358,17 +356,10 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
                     <Eye className="w-3.5 h-3.5 mr-2" />
                     Ver 360°
                   </DropdownMenuItem>
-                  {clientFromMap ? (
-                    <DropdownMenuItem onClick={() => onEditClient(clientFromMap)}>
-                      <UserPen className="w-3.5 h-3.5 mr-2" />
-                      Editar Cliente
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem disabled className="text-muted-foreground">
-                      <UserPen className="w-3.5 h-3.5 mr-2" />
-                      Editar Cliente
-                    </DropdownMenuItem>
-                  )}
+                  <DropdownMenuItem onClick={() => onEditClient(deal.clientId!)}>
+                    <UserPen className="w-3.5 h-3.5 mr-2" />
+                    Editar Cliente
+                  </DropdownMenuItem>
                 </>
               ) : (
                 <DropdownMenuItem disabled className="text-muted-foreground">
@@ -451,11 +442,7 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
             </Badge>
           )}
         </div>
-        {(clientFromMap?.totalSpent ?? 0) > 0 && (
-          <p className="text-xs text-green-600 font-medium mt-1">
-            Pago: {formatCurrency(clientFromMap?.totalSpent ?? 0)}
-          </p>
-        )}
+
         {isLostStage && deal.lostReason && (
           <div className="mt-2 flex items-center gap-1.5 px-2 py-1 rounded bg-red-50 border border-red-100">
             <XCircle className="w-3 h-3 text-red-500 shrink-0" />
@@ -487,11 +474,11 @@ function ClientCardContent({ deal, clientsById, tripsById, onEditClient, onView3
   );
 }
 
-function DraggableCard({ deal, clientsById, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage }: Omit<ClientCardProps, "isDragging">) {
+function DraggableCard({ deal, tripsById, onEditClient, onView360, onDelete, onCreateReservation, onViewReservation, onMarkLost, onSetTravelReason, isFinalStage, isLostStage }: Omit<ClientCardProps, "isDragging">) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <ClientCardContent deal={deal} clientsById={clientsById} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} onMarkLost={onMarkLost} onSetTravelReason={onSetTravelReason} isFinalStage={isFinalStage} isLostStage={isLostStage} isDragging={isDragging} />
+      <ClientCardContent deal={deal} tripsById={tripsById} onEditClient={onEditClient} onView360={onView360} onDelete={onDelete} onCreateReservation={onCreateReservation} onViewReservation={onViewReservation} onMarkLost={onMarkLost} onSetTravelReason={onSetTravelReason} isFinalStage={isFinalStage} isLostStage={isLostStage} isDragging={isDragging} />
     </div>
   );
 }
@@ -1161,9 +1148,24 @@ export default function Pipeline() {
     refetchStages();
   };
 
-  const handleEditClient = (client: Client) => {
-    setEditingClient(client);
-    setIsModalOpen(true);
+  const handleEditClient = async (clientId: string) => {
+    const cached = clientsById.get(clientId);
+    if (cached) {
+      setEditingClient(cached);
+      setIsModalOpen(true);
+      return;
+    }
+    // Client not in the local map (map capped at 500 records) — fetch on demand
+    try {
+      const resp = await fetch(`${API_BASE}/api/clients/${clientId}`, { credentials: "include" });
+      if (resp.ok) {
+        const client = await resp.json() as Client;
+        setEditingClient(client);
+        setIsModalOpen(true);
+      }
+    } catch {
+      // silently ignore network errors
+    }
   };
 
   const openNew = (stageId?: string) => {
@@ -1460,7 +1462,6 @@ export default function Pipeline() {
                       <DraggableCard
                         key={deal.id}
                         deal={deal}
-                        clientsById={clientsById}
                         tripsById={tripsById}
                         onEditClient={handleEditClient}
                         onView360={setClient360Id}
@@ -1498,7 +1499,6 @@ export default function Pipeline() {
               <div className="w-64 opacity-90 shadow-2xl rotate-1">
                 <ClientCardContent
                   deal={activeDragDeal}
-                  clientsById={clientsById}
                   tripsById={tripsById}
                   onEditClient={() => {}}
                   onView360={() => {}}
