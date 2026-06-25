@@ -13,7 +13,8 @@
     "push": "drizzle-kit push --config ./drizzle.config.ts",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
     "check": "drizzle-kit check --config ./drizzle.config.ts",
-    "validate-coverage": "node scripts/validate-coverage.mjs"
+    "validate-coverage": "node scripts/validate-coverage.mjs",
+    "validate-tables": "node scripts/validate-tables.mjs"
   },
   "dependencies": {
     "@workspace/permissions": "workspace:*",

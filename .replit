@@ -155,12 +155,12 @@ isValidation = true
 name = "schema-drift"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/db check && pnpm --filter @workspace/db validate-coverage"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/db check && pnpm --filter @workspace/db validate-coverage && pnpm --filter @workspace/db validate-tables"
 
   [agent]
 stack = "BEST_EFFORT_FALLBACK"
