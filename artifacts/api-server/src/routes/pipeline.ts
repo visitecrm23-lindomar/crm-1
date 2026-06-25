@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
 import { pipelinesTable, pipelineStagesTable, dealsTable, clientsTable, reservationsTable } from "@workspace/db";
-import { eq, and, asc, desc, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, isNotNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth, getTenantUser, ADMIN_ROLES } from '../lib/tenant';
 import { z } from "zod";
@@ -495,9 +495,21 @@ router.get("/pipelines", async (req, res, next: NextFunction): Promise<void> => 
     await ensureDefaultPipeline(me.tenantId);
     const pipelines = await db.select().from(pipelinesTable)
       .where(eq(pipelinesTable.tenantId, me.tenantId));
+
+    // Determine which pipelines have at least one deal (active or historical)
+    const stagesWithDeals = await db.select({ pipelineId: pipelineStagesTable.pipelineId })
+      .from(pipelineStagesTable)
+      .innerJoin(dealsTable, eq(dealsTable.stageId, pipelineStagesTable.id))
+      .where(and(
+        eq(pipelineStagesTable.tenantId, me.tenantId),
+        isNotNull(dealsTable.id),
+      ));
+    const pipelinesWithDeals = new Set(stagesWithDeals.map(r => r.pipelineId));
+
     res.json(pipelines.map((p) => ({
       id: p.id, name: p.name, description: p.description,
       isDefault: p.isDefault, isActive: p.isActive, tenantId: p.tenantId,
+      hasDeals: pipelinesWithDeals.has(p.id),
       createdAt: p.createdAt.toISOString(),
     })));
   } catch (err) {

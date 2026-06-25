@@ -3162,7 +3162,7 @@ const PIPELINE_PRESET_COLORS = [
   "#F59E0B","#EF4444","#8B5CF6","#EC4899","#6B7280",
 ];
 
-type PipelineCfg = { id: string; name: string; isDefault: boolean; createdAt: string };
+type PipelineCfg = { id: string; name: string; isDefault: boolean; hasDeals: boolean; createdAt: string };
 type StageCfg = { id: string; name: string; color: string; position: number; pipelineId: string };
 
 function PipelineSettingsTab() {
@@ -3367,27 +3367,42 @@ function PipelineSettingsTab() {
                         {loadingAction === `default-${p.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className="w-3 h-3" />}
                       </button>
                     )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <button className="p-0.5 text-muted-foreground hover:text-destructive rounded" title="Excluir">
-                          {loadingAction === `delete-${p.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir pipeline "{p.name}"?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Isso excluirá permanentemente todas as etapas deste pipeline. Negócios ativos impedem a exclusão.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deletePipeline(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {p.hasDeals ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="p-0.5 text-muted-foreground/40 cursor-not-allowed rounded inline-flex">
+                              <Trash2 className="w-3 h-3" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs max-w-[200px] text-center">
+                            Mova ou exclua os negócios antes de excluir este pipeline
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button className="p-0.5 text-muted-foreground hover:text-destructive rounded" title="Excluir">
+                            {loadingAction === `delete-${p.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir pipeline "{p.name}"?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Isso excluirá permanentemente todas as etapas deste pipeline.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deletePipeline(p.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </>
               )}
