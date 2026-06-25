@@ -183,7 +183,7 @@ export function ReservationsTable({
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {(r as { storeOrderId?: string | null }).storeOrderId && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Vitrine</span>
+                          <span title={`Pedido online: #${(r as { storeOrderId?: string | null }).storeOrderId}`} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 cursor-default">Loja</span>
                         )}
                         {r.hasAutoRetry && (
                           <Badge className="text-xs bg-purple-50 text-purple-700 border-purple-200" variant="outline">

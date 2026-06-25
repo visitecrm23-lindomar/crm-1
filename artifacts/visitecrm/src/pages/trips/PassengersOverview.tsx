@@ -513,8 +513,8 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
                       <div className="flex items-center gap-1.5">
                         <button className="hover:underline text-left" onClick={() => setClient360Id(r.client.id)}>{r.client.name}</button>
                         {r.storeOrderId && (
-                          <span title="Reserva originada de pedido online" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200 text-xs font-medium">
-                            <ShoppingBag className="w-3 h-3" />Online
+                          <span title={`Pedido online: #${r.storeOrderId}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200 text-xs font-medium cursor-default">
+                            <ShoppingBag className="w-3 h-3" />Loja
                           </span>
                         )}
                       </div>
