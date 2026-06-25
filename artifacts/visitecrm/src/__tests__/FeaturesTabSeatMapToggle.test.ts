@@ -96,6 +96,10 @@ function planWithAll() {
   return { data: { plan: { supportedFeatures: ["referrals", "coupons", "seatMap"] } } };
 }
 
+function planWithNone() {
+  return { data: { plan: { supportedFeatures: [] } } };
+}
+
 beforeEach(() => {
   mockGetMe.mockReturnValue({ data: { tenantId: "tenant-1", role: "admin" } });
   mockGetCurrentSubscription.mockReturnValue(planWithAll());
@@ -189,5 +193,45 @@ describe("FeaturesTab — seatMapEnabled toggle", () => {
     expect(mockInvalidateQueries).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: ["tenant", "tenant-1"] }),
     );
+  });
+});
+
+describe("FeaturesTab — locked feature enforcement", () => {
+  it("does not call updateTenant when clicking a locked switch", async () => {
+    mockGetCurrentSubscription.mockReturnValue(planWithNone());
+    mockGetTenant.mockReturnValue(makeTenantData(true));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows the upgrade modal when a locked switch is clicked", async () => {
+    mockGetCurrentSubscription.mockReturnValue(planWithNone());
+    mockGetTenant.mockReturnValue(makeTenantData(true));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelectorAll('[role="switch"]')[2] as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(container.textContent).toContain("Funcionalidade bloqueada");
+    expect(container.textContent).toContain("Mapa de Assentos Personalizável");
+  });
+
+  it("shows the plan badge next to a locked feature", async () => {
+    mockGetCurrentSubscription.mockReturnValue(planWithNone());
+    mockGetTenant.mockReturnValue(makeTenantData(true));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    expect(container.textContent).toContain("Disponível no plano Pro");
   });
 });
