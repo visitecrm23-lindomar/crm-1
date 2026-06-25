@@ -197,10 +197,9 @@ async function fetchReversalGaps(
 }
 
 export default function Indicacoes() {
-  const { data: subData, isError: subError } = useGetCurrentSubscription();
-  const planLoaded = subData !== undefined || subError;
-  const supportedFeatures: string[] = (subData?.plan?.supportedFeatures ?? []) as string[];
-  const referralsLocked = planLoaded && !supportedFeatures.includes("referrals");
+  const { data: subData } = useGetCurrentSubscription();
+  const referralsLocked = subData !== undefined &&
+    !((subData?.plan?.supportedFeatures ?? []) as string[]).includes("referrals");
 
   const { toast } = useToast();
   const { data: referralsResponse, refetch } = useListReferrals();

@@ -1313,10 +1313,9 @@ function LayoutCard({
 }
 
 export default function LayoutsPage() {
-  const { data: subData, isError: subError } = useGetCurrentSubscription();
-  const planLoaded = subData !== undefined || subError;
-  const supportedFeatures: string[] = (subData?.plan?.supportedFeatures ?? []) as string[];
-  const seatMapLocked = planLoaded && !supportedFeatures.includes("seatMap");
+  const { data: subData } = useGetCurrentSubscription();
+  const seatMapLocked = subData !== undefined &&
+    !((subData?.plan?.supportedFeatures ?? []) as string[]).includes("seatMap");
 
   const { data: layouts = [], isLoading, refetch } = useListLayouts({ query: { queryKey: ["layouts"] } });
   const createLayout = useCreateLayout();
