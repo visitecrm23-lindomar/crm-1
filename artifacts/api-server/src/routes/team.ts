@@ -58,7 +58,7 @@ router.get("/team/invites", async (req, res, next): Promise<void> => {
 
 const InviteBody = z.object({
   email: z.string().email("E-mail inválido"),
-  role: z.enum([ROLES.SALES, ROLES.AGENCY_MANAGER, ROLES.SUPPORT]).optional().default(ROLES.SALES),
+  role: z.literal(ROLES.SALES).optional().default(ROLES.SALES),
 });
 
 router.post("/team/invite", async (req, res, next): Promise<void> => {
