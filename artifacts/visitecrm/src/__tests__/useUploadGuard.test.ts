@@ -326,6 +326,61 @@ describe("useUploadGuard — popstate interception (capture phase)", () => {
   });
 });
 
+// ─── beforeunload interception ────────────────────────────────────────────────
+
+describe("useUploadGuard — beforeunload interception", () => {
+  // Helper: creates a beforeunload Event whose `returnValue` setter is captured
+  // via an own-property override (jsdom's Event prototype returnValue setter
+  // ignores truthy string values, so we need the override to detect the write).
+  function makeBeforeUnloadEvent() {
+    const event = new Event("beforeunload", { cancelable: true });
+    let _returnValue = "";
+    Object.defineProperty(event, "returnValue", {
+      get: () => _returnValue,
+      set: (v: string) => { _returnValue = v; },
+      configurable: true,
+    });
+    return event as Event & { returnValue: string };
+  }
+
+  it("calls preventDefault and sets returnValue while isUploading=true", async () => {
+    await renderUploadGuard(true);
+
+    const event = makeBeforeUnloadEvent();
+    const preventSpy = vi.spyOn(event, "preventDefault");
+
+    await act(async () => { window.dispatchEvent(event); });
+
+    expect(preventSpy).toHaveBeenCalledOnce();
+    expect(event.returnValue).not.toBe("");
+  });
+
+  it("does NOT intercept beforeunload when isUploading=false", async () => {
+    await renderUploadGuard(false);
+
+    const event = makeBeforeUnloadEvent();
+    const preventSpy = vi.spyOn(event, "preventDefault");
+
+    window.dispatchEvent(event);
+
+    expect(preventSpy).not.toHaveBeenCalled();
+    expect(event.returnValue).toBe("");
+  });
+
+  it("removes the listener after isUploading transitions from true to false", async () => {
+    const { rerender } = await renderUploadGuard(true);
+    await rerender(false);
+
+    const event = makeBeforeUnloadEvent();
+    const preventSpy = vi.spyOn(event, "preventDefault");
+
+    window.dispatchEvent(event);
+
+    expect(preventSpy).not.toHaveBeenCalled();
+    expect(event.returnValue).toBe("");
+  });
+});
+
 // ─── Multi-instance reference counting ───────────────────────────────────────
 
 describe("useUploadGuard — multi-instance reference counting", () => {
