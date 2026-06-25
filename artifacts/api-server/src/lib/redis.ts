@@ -8,6 +8,11 @@ import { generateId } from "./id";
 let _connection: Redis | null = null;
 export let isQueueEnabled = false;
 
+// ─── Eviction policy ──────────────────────────────────────────────────────────
+// Tracked per process so we only attempt the CONFIG SET once at startup (not on
+// every reconnect) and only log the actionable warning once.
+let _evictionPolicyChecked = false;
+
 // ─── Transient error tracking ─────────────────────────────────────────────────
 // We count consecutive transient Redis errors in-memory so the system-health
 // endpoint can surface a meaningful status without a DB write.
@@ -264,6 +269,51 @@ export function isTransientRedisError(err: unknown): boolean {
   );
 }
 
+/**
+ * Attempts to set maxmemory-policy to noeviction so BullMQ jobs are never
+ * silently evicted under memory pressure.  Called once per process startup
+ * (tracked via _evictionPolicyChecked) on the "ready" event.
+ *
+ * - Self-hosted Redis / Upstash dedicated: CONFIG SET succeeds → warning gone.
+ * - Upstash Serverless: CONFIG SET is not permitted → we log a single, clear
+ *   actionable message so the operator can fix it in the dashboard instead of
+ *   seeing BullMQ's raw console.warn on every restart.
+ */
+async function maybeFixEvictionPolicy(conn: Redis): Promise<void> {
+  if (_evictionPolicyChecked) return;
+  _evictionPolicyChecked = true;
+
+  try {
+    await conn.config("SET", "maxmemory-policy", "noeviction");
+    logger.info("[redis] maxmemory-policy set to noeviction — BullMQ job safety ensured");
+    return;
+  } catch {
+    // CONFIG SET not supported by this provider (e.g. Upstash Serverless).
+    // Fall through to read the current policy and log an actionable message.
+  }
+
+  try {
+    const configResult = await conn.config("GET", "maxmemory-policy") as string[];
+    // ioredis returns ["maxmemory-policy", "<value>"]
+    const currentPolicy = configResult[1] ?? "unknown";
+    if (currentPolicy === "noeviction") {
+      logger.info("[redis] maxmemory-policy is already noeviction — no action needed");
+    } else {
+      logger.warn(
+        { currentPolicy },
+        "[redis] maxmemory-policy is not 'noeviction' — BullMQ jobs may be silently lost under memory pressure. " +
+        "Fix: Upstash dashboard → your database → Settings → Eviction Policy → No Eviction. " +
+        "Self-hosted: run `redis-cli CONFIG SET maxmemory-policy noeviction`.",
+      );
+    }
+  } catch {
+    logger.warn(
+      "[redis] Cannot read maxmemory-policy (CONFIG GET not allowed by provider). " +
+      "If using Upstash, set Eviction Policy = No Eviction in the Upstash dashboard to prevent silent BullMQ job loss.",
+    );
+  }
+}
+
 export function getRedisConnection(): Redis | null {
   const raw = process.env["REDIS_URL"]?.trim();
   if (!raw) return null;
@@ -287,6 +337,12 @@ export function getRedisConnection(): Redis | null {
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
         lazyConnect: false,
+        // TCP keep-alive: prevents Upstash / managed Redis providers from closing
+        // idle connections after ~20 s, which causes the frequent reconnection
+        // warnings observed in production logs.
+        keepAlive: 30_000,
+        // Fail fast on initial connect rather than hanging.
+        connectTimeout: 10_000,
         ...(useTls ? { tls: {} } : {}),
         // Exponential back-off reconnection strategy: 500 ms → 1 s → 2 s → … → 30 s cap.
         // Returning a positive number tells ioredis to wait that many ms before the
@@ -315,6 +371,8 @@ export function getRedisConnection(): Redis | null {
 
       _connection.on("ready", () => {
         resetTransientRedisErrors();
+        // Attempt to enforce noeviction policy for BullMQ safety (once per startup).
+        void maybeFixEvictionPolicy(_connection!);
       });
 
       _connection.on("error", (err: Error) => {
@@ -344,6 +402,8 @@ export async function closeRedisConnection(): Promise<void> {
     await _connection.quit().catch(() => {});
     _connection = null;
     isQueueEnabled = false;
+    // Allow the eviction policy check to run again on next connection.
+    _evictionPolicyChecked = false;
   }
 }
 
