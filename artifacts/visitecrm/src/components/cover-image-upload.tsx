@@ -33,7 +33,7 @@ export function CoverImageUpload({
 
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading, cancelUpload } = useUploadImage(
+  const { startUpload, isUploading, uploadProgress, cancelUpload } = useUploadImage(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (result) => {
@@ -116,13 +116,23 @@ export function CoverImageUpload({
           />
           <div
             className={[
-              "absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center gap-2",
+              "absolute inset-0 bg-black/50 transition-opacity flex flex-col items-center justify-center gap-2",
               isUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             ].join(" ")}
           >
             {isUploading ? (
               <>
-                <Loader2 className="w-5 h-5 text-white animate-spin" />
+                <span className="text-white text-sm font-medium">
+                  {uploadProgress > 0 ? `${uploadProgress}%` : "Enviando..."}
+                </span>
+                {uploadProgress > 0 && (
+                  <div className="w-20 bg-white/30 rounded-full h-1">
+                    <div
+                      className="bg-white h-1 rounded-full transition-all duration-200"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
                 <Button
                   type="button"
                   size="sm"
@@ -180,7 +190,17 @@ export function CoverImageUpload({
             {isUploading ? (
               <>
                 <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-                <span className="text-sm text-muted-foreground">Enviando...</span>
+                <span className="text-sm text-muted-foreground">
+                  {uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando..."}
+                </span>
+                {uploadProgress > 0 && (
+                  <div className="w-24 bg-muted-foreground/20 rounded-full h-1.5">
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all duration-200"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
               </>
             ) : isDragging ? (
               <>

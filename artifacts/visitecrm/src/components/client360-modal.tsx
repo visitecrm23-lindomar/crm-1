@@ -289,7 +289,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const hasLocalData = !!localStorage.getItem(`visite-crm-docs-${clientId}`);
 
-  const { startUpload, isUploading, cancelUpload } = useUploadDocument({
+  const { startUpload, isUploading, uploadProgress, cancelUpload } = useUploadDocument({
     onComplete: async (result) => {
       try {
         const resp = await fetch(`${API_BASE_ADMIN}/api/admin/clients/${clientId}/documents`, {
@@ -375,7 +375,7 @@ function ClientDocumentsTab({ clientId }: { clientId: string }) {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={isUploading}>
             {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-            {isUploading ? "Enviando..." : "Enviar Documento"}
+            {isUploading ? (uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando...") : "Enviar Documento"}
           </Button>
           {isUploading && (
             <Button type="button" size="sm" variant="ghost" onClick={cancelUpload} className="text-muted-foreground hover:text-destructive px-2" title="Cancelar envio">

@@ -20,14 +20,67 @@ interface UploadOptions {
   maxSizeMB?: number;
 }
 
+function xhrUpload<T>(
+  url: string,
+  form: FormData,
+  onProgress: (pct: number) => void,
+  xhrRef: React.MutableRefObject<XMLHttpRequest | null>
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhrRef.current = xhr;
+
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      xhrRef.current = null;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as T);
+        } catch {
+          reject(new Error("Resposta inválida do servidor"));
+        }
+      } else {
+        let msg = `HTTP ${xhr.status}`;
+        try {
+          const json = JSON.parse(xhr.responseText) as { error?: string };
+          if (json.error) msg = json.error;
+        } catch { /* ignore */ }
+        reject(new Error(msg));
+      }
+    };
+
+    xhr.onerror = () => {
+      xhrRef.current = null;
+      reject(new Error("Erro de rede"));
+    };
+
+    xhr.onabort = () => {
+      xhrRef.current = null;
+      const err = new Error("Upload cancelado");
+      err.name = "AbortError";
+      reject(err);
+    };
+
+    xhr.send(form);
+  });
+}
+
 export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(file: File) {
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
     setIsUploading(true);
+    setUploadProgress(0);
     callbacks.onBegin?.();
     try {
       const form = new FormData();
@@ -35,17 +88,12 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       if (options.maxSizeMB) {
         form.append("maxSizeMB", String(options.maxSizeMB));
       }
-      const resp = await fetch(`${UPLOAD_BASE}/image`, {
-        method: "POST",
-        credentials: "include",
-        body: form,
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        const json = await resp.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? `HTTP ${resp.status}`);
-      }
-      const data = await resp.json() as { url: string; key: string; name: string };
+      const data = await xhrUpload<{ url: string; key: string; name: string }>(
+        `${UPLOAD_BASE}/image`,
+        form,
+        setUploadProgress,
+        xhrRef
+      );
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -55,26 +103,27 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
-      abortControllerRef.current = null;
+      setUploadProgress(0);
+      xhrRef.current = null;
     }
   }
 
   function cancelUpload() {
-    abortControllerRef.current?.abort();
+    xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, cancelUpload };
+  return { startUpload, isUploading, uploadProgress, cancelUpload };
 }
 
 export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
     setIsUploading(true);
+    setUploadProgress(0);
     callbacks.onBegin?.();
     try {
       const form = new FormData();
@@ -84,17 +133,12 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       if (options.maxSizeMB) {
         form.append("maxSizeMB", String(options.maxSizeMB));
       }
-      const resp = await fetch(`${UPLOAD_BASE}/images`, {
-        method: "POST",
-        credentials: "include",
-        body: form,
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        const json = await resp.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? `HTTP ${resp.status}`);
-      }
-      const data = await resp.json() as Array<{ url: string; key: string; name: string }>;
+      const data = await xhrUpload<Array<{ url: string; key: string; name: string }>>(
+        `${UPLOAD_BASE}/images`,
+        form,
+        setUploadProgress,
+        xhrRef
+      );
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -104,40 +148,36 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
-      abortControllerRef.current = null;
+      setUploadProgress(0);
+      xhrRef.current = null;
     }
   }
 
   function cancelUpload() {
-    abortControllerRef.current?.abort();
+    xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, cancelUpload };
+  return { startUpload, isUploading, uploadProgress, cancelUpload };
 }
 
 export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [isUploading, setIsUploading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(file: File) {
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
     setIsUploading(true);
+    setUploadProgress(0);
     callbacks.onBegin?.();
     try {
       const form = new FormData();
       form.append("file", file);
-      const resp = await fetch(`${UPLOAD_BASE}/document`, {
-        method: "POST",
-        credentials: "include",
-        body: form,
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        const json = await resp.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? `HTTP ${resp.status}`);
-      }
-      const data = await resp.json() as { url: string; key: string; name: string; size?: number; mimeType?: string };
+      const data = await xhrUpload<{ url: string; key: string; name: string; size?: number; mimeType?: string }>(
+        `${UPLOAD_BASE}/document`,
+        form,
+        setUploadProgress,
+        xhrRef
+      );
       callbacks.onComplete?.(data);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -147,13 +187,14 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
-      abortControllerRef.current = null;
+      setUploadProgress(0);
+      xhrRef.current = null;
     }
   }
 
   function cancelUpload() {
-    abortControllerRef.current?.abort();
+    xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, cancelUpload };
+  return { startUpload, isUploading, uploadProgress, cancelUpload };
 }
