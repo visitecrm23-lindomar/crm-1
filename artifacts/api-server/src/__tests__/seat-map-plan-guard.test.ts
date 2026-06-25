@@ -6,7 +6,9 @@
  *     tenant's plan does not include "seatMap" in supportedFeatures
  *   - POST /trips/:id/regenerate-seat-map returns 403 FEATURE_NOT_IN_PLAN
  *     for admin users on a plan without the feature
- *   - Both routes succeed (2xx) when the plan includes "seatMap"
+ *   - GET /trips/:id/seats/stream (SSE) returns 403 FEATURE_NOT_IN_PLAN
+ *     when the plan does not include "seatMap"
+ *   - All three routes succeed (2xx) when the plan includes "seatMap"
  *
  * All DB calls are intercepted via vi.mock so no real database is required.
  */
@@ -20,13 +22,14 @@ import pino from "pino";
 // vi.hoisted: shared mock factories must exist before any vi.mock factory runs
 // ---------------------------------------------------------------------------
 
-const { mockLimit, mockWhere, mockFrom, mockSelect, mockRequireAuth } = vi.hoisted(() => {
+const { mockLimit, mockWhere, mockFrom, mockSelect, mockRequireAuth, mockAddSeatClient } = vi.hoisted(() => {
   const mockLimit = vi.fn();
   const mockWhere: ReturnType<typeof vi.fn> = vi.fn();
   const mockFrom = vi.fn();
   const mockSelect = vi.fn(() => ({ from: mockFrom }));
   const mockRequireAuth = vi.fn();
-  return { mockLimit, mockWhere, mockFrom, mockSelect, mockRequireAuth };
+  const mockAddSeatClient = vi.fn();
+  return { mockLimit, mockWhere, mockFrom, mockSelect, mockRequireAuth, mockAddSeatClient };
 });
 
 // ---------------------------------------------------------------------------
@@ -113,7 +116,7 @@ vi.mock("../lib/tenant.js", () => ({
 }));
 
 vi.mock("../lib/seat-sse.js", () => ({
-  addSeatClient: vi.fn(),
+  addSeatClient: mockAddSeatClient,
   removeSeatClient: vi.fn(),
   emitSeatUpdate: vi.fn(),
 }));
@@ -451,7 +454,7 @@ describe("POST /trips/:id/regenerate-seat-map — seatMap plan guard", () => {
     expect(res.body.code).toBe("FORBIDDEN_ROLE");
   });
 
-  it("returns 200 and updated trip when admin has seatMap feature in plan", async () => {
+  it("returns 200 and formatted trip when admin has seatMap feature in plan", async () => {
     asAgencyAdmin();
 
     // DB call sequence:
@@ -475,5 +478,50 @@ describe("POST /trips/:id/regenerate-seat-map — seatMap plan guard", () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(TRIP_ID);
     expect(res.body.departureDate).toBe(new Date("2026-08-01").toISOString());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /trips/:id/seats/stream — seatMap plan guard
+// ---------------------------------------------------------------------------
+
+describe("GET /trips/:id/seats/stream — seatMap plan guard", () => {
+  it("returns 403 FEATURE_NOT_IN_PLAN when plan has no seatMap feature", async () => {
+    asAgencyAdmin();
+
+    // getTenantSupportedFeatures: 2 .limit() calls → no seatMap
+    mockLimit
+      .mockResolvedValueOnce([{ planId: "plan-starter" }])
+      .mockResolvedValueOnce([{ supportedFeatures: [] }]);
+
+    const res = await request(buildApp())
+      .get(`/api/trips/${TRIP_ID}/seats/stream`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FEATURE_NOT_IN_PLAN");
+  });
+
+  it("returns 200 with text/event-stream content-type when plan includes seatMap", async () => {
+    asAgencyAdmin();
+
+    // DB call sequence:
+    //   mockLimit #1 → tenant row (getTenantSupportedFeatures)
+    //   mockLimit #2 → plan row with seatMap (getTenantSupportedFeatures)
+    //   mockLimit #3 → trip row (only { id } is selected)
+    // addSeatClient mock calls res.end() so supertest can resolve the SSE response.
+    mockLimit
+      .mockResolvedValueOnce([{ planId: "plan-pro" }])
+      .mockResolvedValueOnce([{ supportedFeatures: ["seatMap"] }])
+      .mockResolvedValueOnce([{ id: TRIP_ID }]);
+
+    mockAddSeatClient.mockImplementationOnce((_tripId: string, res: import("express").Response) => {
+      res.end();
+    });
+
+    const res = await request(buildApp())
+      .get(`/api/trips/${TRIP_ID}/seats/stream`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/event-stream/);
   });
 });

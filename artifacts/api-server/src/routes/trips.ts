@@ -920,6 +920,12 @@ router.get("/trips/:id/seats/stream", async (req, res, next: NextFunction): Prom
   const me = await requireAuth(req, res);
   if (!me) return;
 
+  const features = await getTenantSupportedFeatures(me.tenantId);
+  if (!hasSeatMapFeature(features)) {
+    next(new ForbiddenError("Mapa de assentos não está disponível no seu plano atual", "FEATURE_NOT_IN_PLAN"));
+    return;
+  }
+
   const [trip] = await db.select({ id: tripsTable.id })
     .from(tripsTable)
     .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
