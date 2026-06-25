@@ -18,7 +18,7 @@ router.get("/team/members", async (req, res, next): Promise<void> => {
     if (!ALL_STAFF_ROLES.includes(me.role)) {
       next(new ForbiddenError("Acesso negado", "FORBIDDEN_ROLE")); return;
     }
-    const members = await db.select().from(usersTable).where(eq(usersTable.tenantId, me.tenantId));
+    const members = await db.select().from(usersTable).where(and(eq(usersTable.tenantId, me.tenantId), eq(usersTable.role, ROLES.SALES)));
     res.json(members.map(u => ({
       id: u.id,
       clerkId: u.clerkId,

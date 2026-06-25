@@ -2566,7 +2566,7 @@ function TeamTab() {
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"vendedor" | "gerente" | "suporte">("vendedor");
+  const inviteRole = "vendedor" as const;
   const [inviting, setInviting] = useState(false);
   const [limitError, setLimitError] = useState<string | null>(null);
 
@@ -2803,20 +2803,8 @@ function TeamTab() {
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Função</Label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              >
-                <option value="vendedor">Vendedor — visualiza viagens e cria reservas</option>
-                <option value="gerente">Gerente — gerencia viagens, reservas e clientes</option>
-                <option value="suporte">Suporte — visualiza viagens e atende clientes</option>
-              </select>
-            </div>
             <p className="text-xs text-muted-foreground">
-              O convidado deverá criar uma conta no VisiteCRM com este e-mail para ter acesso automático à sua agência.
+              O convidado será adicionado como <span className="font-medium text-foreground">Vendedor</span>. Ele deverá criar uma conta no VisiteCRM com este e-mail para ter acesso automático à sua agência.
             </p>
           </div>
           <DialogFooter>
