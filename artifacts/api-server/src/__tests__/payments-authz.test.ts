@@ -73,6 +73,7 @@ vi.mock("drizzle-orm", () => ({
   desc: vi.fn(() => "desc"),
   asc: vi.fn(() => "asc"),
   ilike: vi.fn(() => "ilike"),
+  count: vi.fn(() => "count"),
   sql: Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
 }));
 
