@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Loader2, Images } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Upload, X, Loader2, Images, Link2, AlertCircle, Check } from "lucide-react";
 import { useUploadImages } from "@/hooks/use-upload";
 
 interface GalleryUploadProps {
@@ -24,6 +25,9 @@ export function GalleryUpload({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlPreviewError, setUrlPreviewError] = useState(false);
 
   const canAdd = value.length < maxImages;
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
@@ -95,6 +99,21 @@ export function GalleryUpload({
   const handleRemove = (idx: number) =>
     onChange(value.filter((_, i) => i !== idx));
 
+  const confirmUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed || urlPreviewError) return;
+    onChange([...value, trimmed].slice(0, maxImages));
+    setUrlInput("");
+    setUrlPreviewError(false);
+    setShowUrlInput(false);
+  };
+
+  const cancelUrl = () => {
+    setUrlInput("");
+    setUrlPreviewError(false);
+    setShowUrlInput(false);
+  };
+
   return (
     <div className="space-y-3">
       <input
@@ -128,10 +147,22 @@ export function GalleryUpload({
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-1" />
-                  Adicionar Imagens
+                  Enviar arquivo
                 </>
               )}
             </Button>
+            {!isUploading && !showUrlInput && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setShowUrlInput(true)}
+                disabled={disabled}
+              >
+                <Link2 className="w-4 h-4 mr-1" />
+                Por URL
+              </Button>
+            )}
             {isUploading && (
               <Button
                 type="button"
@@ -148,7 +179,68 @@ export function GalleryUpload({
         )}
       </div>
 
-      {value.length === 0 && !isUploading && (
+      {/* URL input row */}
+      {showUrlInput && canAdd && (
+        <div className="space-y-2 p-3 border-2 border-dashed border-primary/40 rounded-lg bg-primary/5">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Link2 className="w-3.5 h-3.5" />
+            Colar link da imagem
+          </div>
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              type="url"
+              placeholder="https://exemplo.com/imagem.jpg"
+              value={urlInput}
+              onChange={(e) => { setUrlInput(e.target.value); setUrlPreviewError(false); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); confirmUrl(); }
+                if (e.key === "Escape") cancelUrl();
+              }}
+              disabled={disabled}
+              className="text-sm h-8"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={confirmUrl}
+              disabled={!urlInput.trim() || urlPreviewError || disabled}
+              className="shrink-0"
+            >
+              <Check className="w-4 h-4 mr-1" />
+              Adicionar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={cancelUrl}
+              disabled={disabled}
+              className="shrink-0 px-2"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          {urlInput.trim() && !urlPreviewError && (
+            <div className="rounded overflow-hidden h-20 bg-muted w-32">
+              <img
+                src={urlInput.trim()}
+                alt="Preview"
+                className="w-full h-full object-cover"
+                onError={() => setUrlPreviewError(true)}
+              />
+            </div>
+          )}
+          {urlPreviewError && (
+            <div className="flex items-center gap-1.5 text-xs text-destructive">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              URL inválida ou imagem não pôde ser carregada
+            </div>
+          )}
+        </div>
+      )}
+
+      {value.length === 0 && !isUploading && !showUrlInput && (
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -175,10 +267,10 @@ export function GalleryUpload({
             <>
               <Images className="w-7 h-7 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                Clique ou arraste até {maxImages} imagens aqui
+                Clique para enviar ou arraste até {maxImages} imagens aqui
               </span>
               <span className="text-xs text-muted-foreground">
-                PNG, JPG, WEBP · máx. {fileSizeMB} MB cada
+                PNG, JPG, WEBP · máx. {fileSizeMB} MB cada · ou use "Por URL" acima
               </span>
             </>
           )}

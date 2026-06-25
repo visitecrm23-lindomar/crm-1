@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Upload, X, Loader2, Image as ImageIcon, Link2, AlertCircle } from "lucide-react";
 import { useUploadImage } from "@/hooks/use-upload";
 
 interface CoverImageUploadProps {
@@ -15,6 +16,8 @@ interface CoverImageUploadProps {
   placeholder?: string;
   objectFit?: "contain" | "cover";
 }
+
+type Mode = "upload" | "url";
 
 export function CoverImageUpload({
   fileSizeMB = "8",
@@ -30,6 +33,10 @@ export function CoverImageUpload({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [mode, setMode] = useState<Mode>("upload");
+  const [urlInput, setUrlInput] = useState("");
+  const [urlPreviewError, setUrlPreviewError] = useState(false);
+  const [showUrlOverlay, setShowUrlOverlay] = useState(false);
 
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
@@ -94,7 +101,71 @@ export function CoverImageUpload({
 
   const handleRemove = () => onChange("");
 
+  const confirmUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    onChange(trimmed);
+    setUrlInput("");
+    setUrlPreviewError(false);
+    setShowUrlOverlay(false);
+  };
+
+  const cancelUrl = () => {
+    setUrlInput("");
+    setUrlPreviewError(false);
+    setShowUrlOverlay(false);
+  };
+
   const labelText = emptyLabel ?? placeholder ?? "Clique ou arraste a imagem aqui";
+
+  const urlForm = (
+    <div className="space-y-2 p-3 border-2 border-dashed border-primary/40 rounded-lg bg-primary/5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Link2 className="w-3.5 h-3.5" />
+        Colar link da imagem
+      </div>
+      <div className="flex gap-2">
+        <Input
+          autoFocus
+          type="url"
+          placeholder="https://exemplo.com/imagem.jpg"
+          value={urlInput}
+          onChange={(e) => {
+            setUrlInput(e.target.value);
+            setUrlPreviewError(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); confirmUrl(); }
+            if (e.key === "Escape") cancelUrl();
+          }}
+          disabled={disabled}
+          className="text-sm h-8"
+        />
+        <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim() || disabled} className="shrink-0">
+          Confirmar
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={cancelUrl} disabled={disabled} className="shrink-0 px-2">
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+      {urlInput.trim() && !urlPreviewError && (
+        <div className="rounded overflow-hidden h-24 bg-muted">
+          <img
+            src={urlInput.trim()}
+            alt="Preview"
+            className="w-full h-full object-contain"
+            onError={() => setUrlPreviewError(true)}
+          />
+        </div>
+      )}
+      {urlPreviewError && (
+        <div className="flex items-center gap-1.5 text-xs text-destructive">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          URL inválida ou imagem não pôde ser carregada
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-3">
@@ -120,7 +191,7 @@ export function CoverImageUpload({
           <div
             className={[
               "absolute inset-0 bg-black/50 transition-opacity flex flex-col items-center justify-center gap-2",
-              isUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+              isUploading || showUrlOverlay ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             ].join(" ")}
           >
             {isUploading ? (
@@ -136,28 +207,66 @@ export function CoverImageUpload({
                     />
                   </div>
                 )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={cancelUpload}
-                >
+                <Button type="button" size="sm" variant="secondary" onClick={cancelUpload}>
                   <X className="w-4 h-4 mr-1" />
                   Cancelar
                 </Button>
               </>
+            ) : showUrlOverlay ? (
+              <div className="w-full px-4" onClick={(e) => e.stopPropagation()}>
+                <div className="space-y-2 bg-white/95 rounded-lg p-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Link2 className="w-3.5 h-3.5" />
+                    Colar link da imagem
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      type="url"
+                      placeholder="https://exemplo.com/imagem.jpg"
+                      value={urlInput}
+                      onChange={(e) => { setUrlInput(e.target.value); setUrlPreviewError(false); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); confirmUrl(); }
+                        if (e.key === "Escape") cancelUrl();
+                      }}
+                      className="text-sm h-8"
+                    />
+                    <Button type="button" size="sm" onClick={confirmUrl} disabled={!urlInput.trim()} className="shrink-0">Confirmar</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={cancelUrl} className="shrink-0 px-2"><X className="w-4 h-4" /></Button>
+                  </div>
+                  {urlPreviewError && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      URL inválida ou imagem não pôde ser carregada
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={disabled}
-                >
-                  <Upload className="w-4 h-4 mr-1" />
-                  Trocar
-                </Button>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={disabled}
+                  >
+                    <Upload className="w-4 h-4 mr-1" />
+                    Trocar arquivo
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShowUrlOverlay(true)}
+                    disabled={disabled}
+                  >
+                    <Link2 className="w-4 h-4 mr-1" />
+                    Trocar por URL
+                  </Button>
+                </div>
                 <Button
                   type="button"
                   size="sm"
@@ -168,75 +277,113 @@ export function CoverImageUpload({
                   <X className="w-4 h-4 mr-1" />
                   Remover
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </div>
       ) : (
         <>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            disabled={disabled || isUploading}
-            className={[
-              "w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-              previewClassName,
-              isDragging
-                ? "border-primary bg-primary/5"
-                : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
-            ].join(" ")}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-                <span className="text-sm text-muted-foreground">
-                  {isRetrying ? "Tentando novamente..." : uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando..."}
-                </span>
-                {!isRetrying && uploadProgress > 0 && (
-                  <div className="w-24 bg-muted-foreground/20 rounded-full h-1.5">
-                    <div
-                      className="bg-primary h-1.5 rounded-full transition-all duration-200"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                )}
-              </>
-            ) : isDragging ? (
-              <>
-                <Upload className="w-8 h-8 text-primary" />
-                <span className="text-sm font-medium text-primary">
-                  Solte para enviar
-                </span>
-              </>
-            ) : (
-              <>
-                <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">
-                  {labelText}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  PNG, JPG, WEBP · máx. {fileSizeMB} MB
-                </span>
-              </>
-            )}
-          </button>
-          {isUploading && (
-            <div className="flex justify-center">
-              <Button
+          {/* Mode toggle */}
+          <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
+            <button
+              type="button"
+              onClick={() => setMode("upload")}
+              className={[
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                mode === "upload"
+                  ? "bg-background shadow text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              ].join(" ")}
+              disabled={disabled || isUploading}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Enviar arquivo
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("url")}
+              className={[
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                mode === "url"
+                  ? "bg-background shadow text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              ].join(" ")}
+              disabled={disabled || isUploading}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              Colar URL
+            </button>
+          </div>
+
+          {mode === "url" ? (
+            urlForm
+          ) : (
+            <>
+              <button
                 type="button"
-                size="sm"
-                variant="ghost"
-                onClick={cancelUpload}
-                className="text-muted-foreground hover:text-destructive"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                disabled={disabled || isUploading}
+                className={[
+                  "w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-2 transition-colors",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                  previewClassName,
+                  isDragging
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30",
+                ].join(" ")}
               >
-                <X className="w-4 h-4 mr-1" />
-                Cancelar envio
-              </Button>
-            </div>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+                    <span className="text-sm text-muted-foreground">
+                      {isRetrying ? "Tentando novamente..." : uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando..."}
+                    </span>
+                    {!isRetrying && uploadProgress > 0 && (
+                      <div className="w-24 bg-muted-foreground/20 rounded-full h-1.5">
+                        <div
+                          className="bg-primary h-1.5 rounded-full transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : isDragging ? (
+                  <>
+                    <Upload className="w-8 h-8 text-primary" />
+                    <span className="text-sm font-medium text-primary">
+                      Solte para enviar
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {labelText}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      PNG, JPG, WEBP · máx. {fileSizeMB} MB
+                    </span>
+                  </>
+                )}
+              </button>
+              {isUploading && (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={cancelUpload}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Cancelar envio
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
