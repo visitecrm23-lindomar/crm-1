@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import sanitizeHtml from "sanitize-html";
 import { db } from "@workspace/db";
 import { addSeatClient, removeSeatClient } from "../lib/seat-sse";
 import { tryAddBoardingClient, removeBoardingClient, emitBoardingUpdate } from "../lib/boarding-sse";
@@ -29,6 +30,19 @@ import { parseTripStatus } from "../lib/status-validators";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
+
+function sanitizeTripDescription(html: string | null | undefined): string | null {
+  if (html == null) return null;
+  return sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "h1", "h2", "s", "u"]),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      img: ["src", "alt", "width", "height"],
+      "*": ["class", "style"],
+    },
+    disallowedTagsMode: "discard",
+  });
+}
 
 async function getTenantSupportedFeatures(tenantId: string): Promise<string[]> {
   const [tenantRow] = await db
@@ -345,7 +359,7 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       tenantId: me.tenantId,
       name: parsed.data.name,
       slug,
-      description: parsed.data.description ?? null,
+      description: sanitizeTripDescription(parsed.data.description),
       destination: parsed.data.destination,
       destinationCity: parsed.data.destinationCity,
       destinationState: parsed.data.destinationState,
@@ -432,7 +446,7 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
 
     const updates: Partial<typeof tripsTable.$inferInsert> = {};
     if (parsed.data.name != null) updates.name = parsed.data.name;
-    if (parsed.data.description !== undefined) updates.description = parsed.data.description ?? null;
+    if (parsed.data.description !== undefined) updates.description = sanitizeTripDescription(parsed.data.description);
     if (parsed.data.status != null) updates.status = parseTripStatus(parsed.data.status);
     if (parsed.data.isPublic != null) updates.isPublic = parsed.data.isPublic;
     if (parsed.data.isFeatured != null) updates.isFeatured = parsed.data.isFeatured;
