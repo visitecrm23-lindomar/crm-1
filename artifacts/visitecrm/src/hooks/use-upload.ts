@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useUploadGuard } from "./use-upload-guard";
 
 const UPLOAD_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api/upload";
 
@@ -123,6 +124,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
+  useUploadGuard(isUploading);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
@@ -173,6 +175,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
+  useUploadGuard(isUploading);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
@@ -226,6 +229,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelledRef = useRef(false);
+  useUploadGuard(isUploading);
 
   async function startUpload(file: File) {
     cancelledRef.current = false;
