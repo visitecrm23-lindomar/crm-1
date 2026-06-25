@@ -195,9 +195,9 @@ export async function createReservationsForOrder(
 
     // Row-level lock prevents concurrent paid orders from overselling the same trip.
     const lockResult = await exec.execute(
-      sql`SELECT id, available_seats, type FROM trips WHERE id = ${tripId} AND tenant_id = ${order.tenantId} FOR UPDATE`,
+      sql`SELECT id, available_seats, total_capacity, show_seat_map, type FROM trips WHERE id = ${tripId} AND tenant_id = ${order.tenantId} FOR UPDATE`,
     );
-    const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number; type: string }> }).rows[0];
+    const tripRow = (lockResult as unknown as { rows: Array<{ id: string; available_seats: number; total_capacity: number | null; show_seat_map: boolean; type: string }> }).rows[0];
 
     if (!tripRow) {
       throw new AppError(
@@ -216,14 +216,35 @@ export async function createReservationsForOrder(
       );
     }
 
+    // Auto-assign sequential seat numbers when showSeatMap is disabled.
+    // When the seat-selection step is hidden from the passenger, the system
+    // assigns the next available sequential seats (1, 2, 3...) at confirmation
+    // time instead of leaving the reservation with no seat numbers.
+    let autoAssignedSeats: string[] = [];
+    if (tripRow.show_seat_map === false && tripRow.total_capacity && tripRow.total_capacity > 0) {
+      const existingRows = await exec
+        .select({ seats: reservationsTable.seats })
+        .from(reservationsTable)
+        .where(
+          and(
+            eq(reservationsTable.tripId, tripId),
+            eq(reservationsTable.tenantId, order.tenantId),
+            sql`${reservationsTable.status} != 'cancelled'`,
+          ),
+        );
+      const occupied = new Set(existingRows.flatMap((r) => r.seats));
+      const capacity = tripRow.total_capacity;
+      for (let n = 1; n <= capacity && autoAssignedSeats.length < totalQty; n++) {
+        if (!occupied.has(String(n))) {
+          autoAssignedSeats.push(String(n));
+        }
+      }
+    }
+
     const voucherCode = generateVoucherCode();
     const reservationId = generateId();
     reservationIds.push(reservationId);
 
-    // Seat numbers are NOT auto-assigned at payment time because the shopper's
-    // seat selection is not persisted to the order (no seats column on store_orders).
-    // The agency assigns specific seats in the CRM after the reservation is created.
-    // This avoids inserting seat numbers that may not exist in the trip layout.
     const resTypeCode = tripTypeToCode(tripRow.type ?? "");
     const resSeq = await nextReservationSequence(order.tenantId, resYearMonth, resTypeCode, exec as Tx);
     const reservationNumber = buildReservationNumber(tenantResPrefix, resTypeCode, resYearMonth, resSeq);
@@ -233,7 +254,7 @@ export async function createReservationsForOrder(
       tenantId: order.tenantId,
       tripId,
       clientId: order.clientId ?? null,
-      seats: [],
+      seats: autoAssignedSeats,
       totalValue: totalValue.toFixed(2),
       paidValue: "0",
       balance: totalValue.toFixed(2),
