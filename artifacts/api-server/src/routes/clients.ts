@@ -28,6 +28,14 @@ import { z } from "zod";
 
 const router = Router();
 
+function parseSafeBirthDate(str: string): Date | null {
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  if (year < 1900 || year > 2100) return null;
+  return d;
+}
+
 type ScoreRow = {
   clientId: string;
   purchaseScore: number;
@@ -264,7 +272,7 @@ router.post("/clients", async (req, res, next: NextFunction): Promise<void> => {
       whatsapp: parsed.data.whatsapp,
       phone: parsed.data.phone ?? null,
       rg: parsed.data.rg ?? null,
-      birthDate: parsed.data.birthDate ? new Date(parsed.data.birthDate) : null,
+      birthDate: parsed.data.birthDate ? parseSafeBirthDate(parsed.data.birthDate) : null,
       gender: parsed.data.gender ?? null,
       photoUrl: parsed.data.photoUrl ?? null,
       instagram: parsed.data.instagram ?? null,
@@ -492,7 +500,7 @@ router.patch("/clients/:id", async (req, res, next: NextFunction): Promise<void>
       try { updates.cpf = validateCPF(parsed.data.cpf); } catch { next(new ValidationError("CPF inválido", "VALIDATION_ERROR")); return; }
     }
     if (parsed.data.rg !== undefined) updates.rg = parsed.data.rg ?? null;
-    if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
+    if (parsed.data.birthDate !== undefined) updates.birthDate = parsed.data.birthDate ? parseSafeBirthDate(parsed.data.birthDate) : null;
     if (parsed.data.gender !== undefined) updates.gender = parsed.data.gender ?? null;
     if (parsed.data.instagram !== undefined) updates.instagram = parsed.data.instagram ?? null;
     if (parsed.data.status != null) updates.status = parsed.data.status;

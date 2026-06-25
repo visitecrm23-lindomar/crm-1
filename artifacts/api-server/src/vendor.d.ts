@@ -21,7 +21,7 @@ declare module "undici" {
   }
 
   export function fetch(
-    input: RequestInfo | URL,
+    input: string | Request | URL,
     init?: RequestInit & { dispatcher?: Agent }
   ): Promise<Response>;
 }

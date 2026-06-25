@@ -317,10 +317,19 @@ const EMPTY_CLIENT: ClientFormData = {
   travelInterests: [], ambassadorOptIn: false,
 };
 
+function sanitizeBirthDateInput(isoStr: string): string {
+  const datePart = isoStr.split("T")[0];
+  const d = new Date(datePart);
+  if (isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  if (year < 1900 || year > 2100) return "";
+  return datePart;
+}
+
 function clientToForm(c: Client): ClientFormData {
   return {
     name: c.name, email: c.email, whatsapp: c.whatsapp, phone: c.phone ?? "",
-    cpf: c.cpf ?? "", rg: c.rg ?? "", birthDate: c.birthDate ? c.birthDate.split("T")[0] : "",
+    cpf: c.cpf ?? "", rg: c.rg ?? "", birthDate: c.birthDate ? sanitizeBirthDateInput(c.birthDate) : "",
     gender: c.gender ?? "none", addressCity: c.addressCity ?? "", addressState: c.addressState ?? "",
     instagram: c.instagram ?? "", pipelineStage: c.pipelineStage ?? "none",
     classification: c.classification ?? "lead", status: c.status ?? "active",

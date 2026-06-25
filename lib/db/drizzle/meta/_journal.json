@@ -162,6 +162,13 @@
       "when": 1802100000000,
       "tag": "0022_client_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1802200000000,
+      "tag": "0023_referrals_source",
+      "breakpoints": true
     }
   ]
 }
