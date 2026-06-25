@@ -813,16 +813,6 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Motivo da Viagem</Label>
-                <Select value={form.travelReason} onValueChange={set("travelReason")}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Não especificado</SelectItem>
-                    {TRAVEL_REASON_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="col-span-2 flex flex-col gap-3 pt-1">
                 <div className="flex items-center gap-3">
                   <Checkbox
@@ -948,6 +938,16 @@ export function ClientModal({ open, onClose, editClient, onSave, defaultStageId,
 
           {/* Aba 4 — Observações */}
           <TabsContent value="observations" className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Motivo da Viagem</Label>
+              <Select value={form.travelReason} onValueChange={set("travelReason")}>
+                <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Não especificado</SelectItem>
+                  {TRAVEL_REASON_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-3">
               <Label>Avaliação Interna (0–5)</Label>
               <p className="text-xs text-muted-foreground -mt-2">Como a equipe avalia esse cliente</p>
