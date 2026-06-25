@@ -959,6 +959,15 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
+    let numberingType = "sequential";
+    if (trip.layoutId) {
+      const [layout] = await db.select({ numberingType: vehicleLayoutsTable.numberingType })
+        .from(vehicleLayoutsTable)
+        .where(and(eq(vehicleLayoutsTable.id, trip.layoutId), eq(vehicleLayoutsTable.tenantId, me.tenantId)))
+        .limit(1);
+      if (layout) numberingType = layout.numberingType;
+    }
+
     if (!trip.manifestNumber) {
       const year = trip.departureDate.getFullYear();
       let assigned: string | null | undefined = null;
@@ -1024,6 +1033,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
         freePassengers: earlyFreePassengers,
         tenantName: tenantEarly?.name ?? "",
         tenantCnpj: tenantEarly?.cnpj ?? null,
+        numberingType,
         boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
         manifestNumber: trip.manifestNumber ?? null,
         vehiclePlate: trip.vehiclePlate ?? null,
@@ -1098,6 +1108,7 @@ router.get("/trips/:id/boarding-panel", async (req, res, next: NextFunction): Pr
       freePassengers: tripFreePassengers,
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
+      numberingType,
       boardingPoints: (trip.boardingPoints ?? []) as Array<{ id: string; name: string; time?: string; address?: string }>,
       manifestNumber: trip.manifestNumber ?? null,
       vehiclePlate: trip.vehiclePlate ?? null,

@@ -2027,6 +2027,7 @@ export const GetTripBoardingPanelResponse = zod.object({
   ),
   tenantName: zod.string(),
   tenantCnpj: zod.string().nullish(),
+  numberingType: zod.string().optional(),
   boardingPoints: zod.array(
     zod.object({
       id: zod.string(),

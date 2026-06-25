@@ -19,6 +19,7 @@ export interface BoardingPanel {
   tenantName: string;
   /** @nullable */
   tenantCnpj?: string | null;
+  numberingType?: string;
   boardingPoints: BoardingPoint[];
   /** @nullable */
   manifestNumber?: string | null;

@@ -6388,6 +6388,8 @@ components:
           type: string
         tenantCnpj:
           type: ["string", "null"]
+        numberingType:
+          type: string
         boardingPoints:
           type: array
           items:

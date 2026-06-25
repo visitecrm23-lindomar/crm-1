@@ -18,6 +18,13 @@ import { Client360Modal } from "@/components/client360-modal";
 import { PassengerObsModal } from "./PassengerObsModal";
 import type { BoardingPoint } from "./types";
 
+function seatPositionLabel(seatNumber: string, numberingType?: string): string {
+  if (!numberingType?.includes("brazilian_standard")) return "";
+  const num = parseInt(seatNumber, 10);
+  if (isNaN(num)) return "";
+  return num % 2 !== 0 ? " (Janela)" : " (Corredor)";
+}
+
 export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId: string; tripName: string; open: boolean; onClose: () => void }) {
   const [search, setSearch] = useState("");
   const [client360Id, setClient360Id] = useState<string | null>(null);
@@ -360,7 +367,7 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           {p.seatNumber && (
-                            <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}</span>
+                            <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{p.seatNumber}{seatPositionLabel(p.seatNumber, panel?.numberingType)}</span>
                           )}
                           <span className="font-medium text-sm">{p.name}</span>
                           {hasObs && (
@@ -466,7 +473,7 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               {fp.seatNumber && (
-                                <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}</span>
+                                <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}{seatPositionLabel(fp.seatNumber, panel?.numberingType)}</span>
                               )}
                               <span className="font-medium text-sm">{fp.name}</span>
                               <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
