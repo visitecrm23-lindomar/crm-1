@@ -61,6 +61,11 @@ vi.mock("@workspace/db", () => ({
   partnerCommissionsTable: {},
   dealsTable: {},
   pipelineStagesTable: {},
+  tenantsTable: {},
+  vehicleLayoutsTable: {},
+  partnerAvailabilityTable: {},
+  priceAlertSubscriptionsTable: {},
+  referralAttemptLogsTable: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -796,5 +801,95 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     // was enqueued during checkout — it is deferred to the payment-confirmation path.
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(mockEnqueueConfirmation).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/public/store/:slug — seatMapEnabled tenant toggle
+// ---------------------------------------------------------------------------
+
+describe("GET /api/public/store/:slug — seatMapEnabled in response", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+    mockWhere.mockReturnValue(
+      Object.assign(Promise.resolve([]), { limit: mockLimit, orderBy: mockOrderBy }),
+    );
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit, orderBy: mockOrderBy } as unknown as { where: typeof mockWhere; limit: typeof mockLimit });
+    mockSelect.mockReturnValue({ from: mockFrom });
+    mockTransaction.mockReset();
+    mockLimit.mockReset();
+  });
+
+  it("returns seatMapEnabled: false when tenantSettings.seatMapEnabled is explicitly false", async () => {
+    // DB call #1 (mockLimit): getActiveStore → store row
+    // DB call #2 (mockLimit): tenant settings row with seatMapEnabled=false
+    // db.update: mocked to resolve; no mockLimit consumed
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([{ settings: { seatMapEnabled: false } }]);
+
+    const res = await request(buildApp()).get("/api/public/store/minha-loja");
+
+    expect(res.status).toBe(200);
+    expect(res.body.seatMapEnabled).toBe(false);
+  });
+
+  it("returns seatMapEnabled: true when tenantSettings.seatMapEnabled is explicitly true", async () => {
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([{ settings: { seatMapEnabled: true } }]);
+
+    const res = await request(buildApp()).get("/api/public/store/minha-loja");
+
+    expect(res.status).toBe(200);
+    expect(res.body.seatMapEnabled).toBe(true);
+  });
+
+  it("defaults seatMapEnabled to true when the field is absent from tenant settings", async () => {
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([{ settings: {} }]); // seatMapEnabled not set
+
+    const res = await request(buildApp()).get("/api/public/store/minha-loja");
+
+    expect(res.status).toBe(200);
+    expect(res.body.seatMapEnabled).toBe(true);
+  });
+
+  it("defaults seatMapEnabled to true when the tenant row is missing entirely", async () => {
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([]); // no tenant row found
+
+    const res = await request(buildApp()).get("/api/public/store/minha-loja");
+
+    expect(res.status).toBe(200);
+    expect(res.body.seatMapEnabled).toBe(true);
+  });
+
+  it("returns 404 when the store slug does not exist", async () => {
+    mockLimit.mockResolvedValueOnce([]); // store not found
+
+    const res = await request(buildApp()).get("/api/public/store/nonexistent");
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("NOT_FOUND");
+  });
+
+  it("returns couponsEnabled and referralsEnabled alongside seatMapEnabled", async () => {
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])
+      .mockResolvedValueOnce([{
+        settings: { seatMapEnabled: false, couponsEnabled: false, referralsEnabled: true },
+      }]);
+
+    const res = await request(buildApp()).get("/api/public/store/minha-loja");
+
+    expect(res.status).toBe(200);
+    expect(res.body.seatMapEnabled).toBe(false);
+    expect(res.body.couponsEnabled).toBe(false);
+    expect(res.body.referralsEnabled).toBe(true);
   });
 });
