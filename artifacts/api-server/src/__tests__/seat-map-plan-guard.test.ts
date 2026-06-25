@@ -253,6 +253,70 @@ const FAKE_TRIP = {
   },
 };
 
+// Fixture for regenerate-seat-map: needs a layoutId and Date objects for formatTrip
+const FAKE_TRIP_WITH_LAYOUT = {
+  id: TRIP_ID,
+  tenantId: TENANT_ID,
+  layoutId: "layout-001",
+  name: "Test Trip",
+  slug: "test-trip-t001",
+  description: null,
+  destination: "São Paulo",
+  destinationCity: "São Paulo",
+  destinationState: "SP",
+  type: "nacional",
+  category: "turismo",
+  departureDate: new Date("2026-08-01"),
+  returnDate: null,
+  totalCapacity: 0,
+  availableSeats: 0,
+  reservedSeats: 0,
+  confirmedSeats: 0,
+  priceAdult: "500",
+  priceChild: null,
+  priceSenior: null,
+  inclusions: [],
+  exclusions: [],
+  coverImage: null,
+  gallery: [],
+  itinerary: [],
+  boardingPoints: [],
+  status: "active",
+  isPublic: true,
+  isFeatured: false,
+  vehiclePlate: null,
+  vehicleType: null,
+  driverName: null,
+  tourGuide: null,
+  tripOrganizer: null,
+  driver1Cpf: null,
+  driver1Cnh: null,
+  driver1CnhCategory: null,
+  driver1CnhExpiry: null,
+  driver2Name: null,
+  driver2Cpf: null,
+  driver2Cnh: null,
+  driver2CnhCategory: null,
+  driver2CnhExpiry: null,
+  freePassengers: [],
+  seatMap: {},
+  seatLayout: "2x2",
+  showSeatMap: false,
+  manifestNumber: null,
+  fixedCosts: [],
+  variableCosts: [],
+  notes: null,
+  createdAt: new Date("2026-01-01"),
+  updatedAt: new Date("2026-01-01"),
+};
+
+const FAKE_LAYOUT = {
+  id: "layout-001",
+  tenantId: TENANT_ID,
+  cells: [],
+  numberingType: "sequential",
+};
+
 // ---------------------------------------------------------------------------
 // Helpers: configure requireAuth mock per test
 // ---------------------------------------------------------------------------
@@ -385,5 +449,31 @@ describe("POST /trips/:id/regenerate-seat-map — seatMap plan guard", () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN_ROLE");
+  });
+
+  it("returns 200 and updated trip when admin has seatMap feature in plan", async () => {
+    asAgencyAdmin();
+
+    // DB call sequence:
+    //   mockLimit #1 → tenant row (getTenantSupportedFeatures)
+    //   mockLimit #2 → plan row with seatMap (getTenantSupportedFeatures)
+    //   mockLimit #3 → trip row (needs layoutId ≠ null)
+    //   mockLimit #4 → layout row (cells: [] → generates empty seatMap)
+    //   mockWhere direct await → [] (no active reservations, from beforeEach default)
+    //   db.transaction → vi.fn() resolves void (callback not invoked in mock)
+    //   mockLimit #5 → trip row (final refetch for response)
+    mockLimit
+      .mockResolvedValueOnce([{ planId: "plan-pro" }])
+      .mockResolvedValueOnce([{ supportedFeatures: ["seatMap"] }])
+      .mockResolvedValueOnce([FAKE_TRIP_WITH_LAYOUT])
+      .mockResolvedValueOnce([FAKE_LAYOUT])
+      .mockResolvedValueOnce([FAKE_TRIP_WITH_LAYOUT]);
+
+    const res = await request(buildApp())
+      .post(`/api/trips/${TRIP_ID}/regenerate-seat-map`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(TRIP_ID);
+    expect(res.body.departureDate).toBe(new Date("2026-08-01").toISOString());
   });
 });
