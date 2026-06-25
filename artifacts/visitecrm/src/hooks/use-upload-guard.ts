@@ -14,7 +14,7 @@ interface PendingNav {
 let activeUploads = 0;
 let savedPushState: typeof history.pushState | null = null;
 let savedReplaceState: typeof history.replaceState | null = null;
-let popstateHandler: (() => void) | null = null;
+let popstateHandler: ((event: PopStateEvent) => void) | null = null;
 let guardedHref: string | null = null;
 
 // Counts synthetic PopStateEvents we dispatch ourselves so the handler can skip them.
@@ -68,21 +68,28 @@ function installHistoryGuard(showDialog: (pending: PendingNav) => void): void {
     guardedHref = location.href;
   };
 
-  // Intercept browser back/forward (popstate fires AFTER the URL already changed).
-  // Strategy: immediately restore the previous URL + re-sync wouter via a synthetic
-  // popstate, then show the React dialog. If user confirms, dispatch to newHref.
-  popstateHandler = () => {
+  // Intercept browser back/forward in the CAPTURE phase so our handler runs before
+  // wouter's bubble-phase listener. When guarding, we call stopImmediatePropagation()
+  // on the original event — wouter never sees it — then dispatch a synthetic popstate
+  // at the guarded URL so wouter re-renders the correct page. This eliminates the
+  // one-frame flash that occurred when wouter processed the original event first.
+  popstateHandler = (event: PopStateEvent) => {
     if (syntheticPops > 0) {
+      // Our own synthetic event — let it propagate normally so wouter can process it.
       syntheticPops--;
-      return; // our own synthetic event — ignore
+      return;
     }
     if (activeUploads === 0) {
       guardedHref = location.href;
       return;
     }
 
+    // Stop the original event here: wouter must not see it or it will render newHref.
+    event.stopImmediatePropagation();
+
     const newHref = location.href;
-    // Restore previous URL and tell wouter to re-render it.
+    // Restore previous URL and tell wouter to re-render it via a synthetic popstate
+    // (which we allow through — syntheticPops guard above lets it reach wouter).
     dispatchSyntheticPopstate(guardedHref ?? location.href);
 
     showDialogFn?.({
@@ -94,7 +101,7 @@ function installHistoryGuard(showDialog: (pending: PendingNav) => void): void {
     });
   };
 
-  window.addEventListener("popstate", popstateHandler);
+  window.addEventListener("popstate", popstateHandler, { capture: true });
 }
 
 function removeHistoryGuard(): void {
@@ -107,7 +114,7 @@ function removeHistoryGuard(): void {
   savedReplaceState = null;
 
   if (popstateHandler) {
-    window.removeEventListener("popstate", popstateHandler);
+    window.removeEventListener("popstate", popstateHandler, { capture: true });
     popstateHandler = null;
   }
 
