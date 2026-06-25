@@ -1192,6 +1192,14 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
       .limit(1);
     if (!trip) { next(new NotFoundError("Trip not found", "NOT_FOUND")); return; }
 
+    const [exportLayoutRow] = trip.layoutId
+      ? await db.select({ numberingType: vehicleLayoutsTable.numberingType })
+          .from(vehicleLayoutsTable)
+          .where(eq(vehicleLayoutsTable.id, trip.layoutId))
+          .limit(1)
+      : [undefined];
+    const exportNumberingType = exportLayoutRow?.numberingType ?? null;
+
     const statusParam = req.query.status as string | undefined;
     const validStatuses: string[] = [...Object.values(RESERVATION_STATUS), "all"];
     if (statusParam && !validStatuses.includes(statusParam)) {
@@ -1248,7 +1256,7 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
           p.rg ?? "",
           birthDateStr,
           AGE_LABELS[p.ageCategory] ?? p.ageCategory,
-          p.seatNumber ?? "",
+          seatWithPosition(p.seatNumber ?? null, exportNumberingType),
           boardingName,
           checkInStr,
           "",
@@ -1264,7 +1272,7 @@ router.get("/trips/:id/passengers/export", async (req, res, next: NextFunction):
       "",
       "",
       "Gratuidade",
-      fp.seatNumber ?? "",
+      seatWithPosition(fp.seatNumber ?? null, exportNumberingType),
       "",
       "—",
       freeRoleLabel[fp.role] ?? fp.role,
