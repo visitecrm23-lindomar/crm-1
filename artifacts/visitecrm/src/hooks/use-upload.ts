@@ -2,6 +2,8 @@ import { useState, useRef } from "react";
 
 const UPLOAD_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api/upload";
 
+const MAX_RETRIES = 2;
+
 interface UploadCallbacks {
   onBegin?: () => void;
   onComplete?: (result: { url: string; key: string; name: string; size?: number; mimeType?: string }) => void;
@@ -18,6 +20,42 @@ interface MultiUploadCallbacks {
 
 interface UploadOptions {
   maxSizeMB?: number;
+}
+
+class UploadHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "UploadHttpError";
+  }
+}
+
+function isRetryable(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "AbortError") return false;
+  if (err instanceof UploadHttpError && err.status < 500) return false;
+  return true;
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  onRetrying: (attempt: number) => void,
+  resetProgress: () => void
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      resetProgress();
+      onRetrying(attempt);
+      await new Promise<void>((res) => setTimeout(res, attempt * 1000));
+    }
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isRetryable(err)) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr;
 }
 
 function xhrUpload<T>(
@@ -53,7 +91,7 @@ function xhrUpload<T>(
           const json = JSON.parse(xhr.responseText) as { error?: string };
           if (json.error) msg = json.error;
         } catch { /* ignore */ }
-        reject(new Error(msg));
+        reject(new UploadHttpError(xhr.status, msg));
       }
     };
 
@@ -75,11 +113,13 @@ function xhrUpload<T>(
 
 export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(file: File) {
     setIsUploading(true);
+    setIsRetrying(false);
     setUploadProgress(0);
     callbacks.onBegin?.();
     try {
@@ -88,11 +128,12 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       if (options.maxSizeMB) {
         form.append("maxSizeMB", String(options.maxSizeMB));
       }
-      const data = await xhrUpload<{ url: string; key: string; name: string }>(
-        `${UPLOAD_BASE}/image`,
-        form,
-        setUploadProgress,
-        xhrRef
+      const data = await withRetry(
+        () => xhrUpload<{ url: string; key: string; name: string }>(
+          `${UPLOAD_BASE}/image`, form, setUploadProgress, xhrRef
+        ),
+        () => setIsRetrying(true),
+        () => setUploadProgress(0)
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -103,6 +144,7 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      setIsRetrying(false);
       setUploadProgress(0);
       xhrRef.current = null;
     }
@@ -112,17 +154,19 @@ export function useUploadImage(callbacks: UploadCallbacks = {}, options: UploadO
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
 }
 
 export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(files: File[]) {
     if (!files.length) return;
     setIsUploading(true);
+    setIsRetrying(false);
     setUploadProgress(0);
     callbacks.onBegin?.();
     try {
@@ -133,11 +177,12 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       if (options.maxSizeMB) {
         form.append("maxSizeMB", String(options.maxSizeMB));
       }
-      const data = await xhrUpload<Array<{ url: string; key: string; name: string }>>(
-        `${UPLOAD_BASE}/images`,
-        form,
-        setUploadProgress,
-        xhrRef
+      const data = await withRetry(
+        () => xhrUpload<Array<{ url: string; key: string; name: string }>>(
+          `${UPLOAD_BASE}/images`, form, setUploadProgress, xhrRef
+        ),
+        () => setIsRetrying(true),
+        () => setUploadProgress(0)
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -148,6 +193,7 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      setIsRetrying(false);
       setUploadProgress(0);
       xhrRef.current = null;
     }
@@ -157,26 +203,29 @@ export function useUploadImages(callbacks: MultiUploadCallbacks = {}, options: U
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
 }
 
 export function useUploadDocument(callbacks: UploadCallbacks = {}) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   async function startUpload(file: File) {
     setIsUploading(true);
+    setIsRetrying(false);
     setUploadProgress(0);
     callbacks.onBegin?.();
     try {
       const form = new FormData();
       form.append("file", file);
-      const data = await xhrUpload<{ url: string; key: string; name: string; size?: number; mimeType?: string }>(
-        `${UPLOAD_BASE}/document`,
-        form,
-        setUploadProgress,
-        xhrRef
+      const data = await withRetry(
+        () => xhrUpload<{ url: string; key: string; name: string; size?: number; mimeType?: string }>(
+          `${UPLOAD_BASE}/document`, form, setUploadProgress, xhrRef
+        ),
+        () => setIsRetrying(true),
+        () => setUploadProgress(0)
       );
       callbacks.onComplete?.(data);
     } catch (err) {
@@ -187,6 +236,7 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
       callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsUploading(false);
+      setIsRetrying(false);
       setUploadProgress(0);
       xhrRef.current = null;
     }
@@ -196,5 +246,5 @@ export function useUploadDocument(callbacks: UploadCallbacks = {}) {
     xhrRef.current?.abort();
   }
 
-  return { startUpload, isUploading, uploadProgress, cancelUpload };
+  return { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload };
 }

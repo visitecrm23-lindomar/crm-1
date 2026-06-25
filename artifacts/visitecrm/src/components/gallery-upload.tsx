@@ -28,7 +28,7 @@ export function GalleryUpload({
   const canAdd = value.length < maxImages;
   const maxSizeMB = parseFloat(fileSizeMB) || 8;
 
-  const { startUpload, isUploading, uploadProgress, cancelUpload } = useUploadImages(
+  const { startUpload, isUploading, isRetrying, uploadProgress, cancelUpload } = useUploadImages(
     {
       onBegin: () => onUploadingChange?.(true),
       onComplete: (results) => {
@@ -120,7 +120,7 @@ export function GalleryUpload({
               {isUploading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                  {uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando..."}
+                  {isRetrying ? "Tentando novamente..." : uploadProgress > 0 ? `Enviando ${uploadProgress}%` : "Enviando..."}
                 </>
               ) : (
                 <>
@@ -210,7 +210,9 @@ export function GalleryUpload({
           {isUploading && (
             <div className="rounded-lg aspect-video bg-muted flex flex-col items-center justify-center gap-1 border-2 border-dashed border-muted-foreground/30 p-2">
               <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-              {uploadProgress > 0 && (
+              {isRetrying ? (
+                <span className="text-xs text-muted-foreground">Tentando novamente...</span>
+              ) : uploadProgress > 0 ? (
                 <>
                   <div className="w-10 bg-muted-foreground/20 rounded-full h-1">
                     <div
@@ -220,7 +222,7 @@ export function GalleryUpload({
                   </div>
                   <span className="text-xs text-muted-foreground">{uploadProgress}%</span>
                 </>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={cancelUpload}
