@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { logger } from "../lib/logger";
 import { db, tenantIntegrationsTable, tenantIntegrationLogsTable } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -71,7 +72,7 @@ async function writeLog(
       actorName: me.name,
     });
   } catch (err) {
-    console.error("[tenant-integrations] failed to write audit log", err);
+    logger.error({ err }, "[tenant-integrations] failed to write audit log");
   }
 }
 

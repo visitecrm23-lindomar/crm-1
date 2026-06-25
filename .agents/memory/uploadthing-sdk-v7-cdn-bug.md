@@ -4,7 +4,7 @@ description: Effect-Platform HTTP client in UTApi v7.x breaks CDN PUT requests i
 ---
 
 ## Rule
-Patch `globalThis.fetch` in `artifacts/api-server/src/lib/uploadthing.ts` before creating the UTApi instance. The patch targets PUT requests to `*.ingest.uploadthing.com` and fixes two bugs introduced by the Effect-Platform HTTP client used internally by UTApi v7.x.
+Patch via `undici.setGlobalDispatcher` + `agent.compose()` interceptor in `artifacts/api-server/src/lib/uploadthing.ts` before creating the UTApi instance. The interceptor targets PUT requests to `*.ingest.uploadthing.com` and fixes two bugs from the Effect-Platform HTTP client.
 
 Version is pinned to `"uploadthing": "7.7.4"` (exact, no `^`) in `artifacts/api-server/package.json` — do NOT add the caret back until the upstream fix is confirmed.
 
@@ -18,13 +18,15 @@ Effect-Platform percent-encodes already-encoded sequences in the presigned URL:
 
 The CDN decodes once, receiving `image%2Fpng` instead of `image/png`. Since the HMAC was computed over the decoded value `image/png`, the check fails with "Failed to verify URL: Invalid signature".
 
-**Fix** (single regex restores one layer of encoding):
+**Fix** (in `opts.path` inside the undici interceptor):
 ```typescript
-const fixedUrl = urlStr.replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
+opts["path"] = opts["path"].replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
 ```
 
-**Why:**
-Confirmed from production logs showing double-encoded params and `range: bytes=0-` in the PUT headers. Happens in the Replit production environment (Node.js native fetch path differs from dev).
+**Why undici compose, NOT globalThis.fetch:**
+Effect-Platform's `HttpClient` uses `undici` directly — it does NOT go through `globalThis.fetch`. Patching `globalThis.fetch` has zero effect on Effect Platform's outgoing requests, confirmed by production logs still showing double-encoded URLs even with the fetch patch in place.
+
+`undici.setGlobalDispatcher(agent.compose(interceptor))` intercepts ALL undici traffic at the dispatch level, before bytes hit the wire — including Effect Platform's requests.
 
 **How to apply:**
-Keep `patchFetchForUploadThingCDN()` in `uploadthing.ts`. Do not remove it or bump the version pin until the Effect-Platform CDN PUT behavior is confirmed fixed upstream. Latest checked: `7.7.4` is the current latest (no fix released yet as of June 2026).
+Keep `patchUndiciForUploadThingCDN()` in `uploadthing.ts`. The function uses a dynamic `require("undici")` to avoid TypeScript module-resolution issues with multiple undici versions in the monorepo. Do not remove it or bump the version pin until the Effect-Platform CDN PUT behavior is confirmed fixed upstream. Latest checked: `7.7.4` is the current latest (no fix released yet as of June 2026).

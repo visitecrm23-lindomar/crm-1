@@ -3,6 +3,7 @@
 // Clerk API calls cannot participate in the DB transaction and are invoked
 // post-commit from `post-booking.ts` as fire-and-forget.
 import { randomBytes } from "crypto";
+import { logger } from "../../lib/logger";
 import { clerkClient } from "@clerk/express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
@@ -80,7 +81,7 @@ export async function ensurePortalAccount(
     const errors = (clerkErr as { errors?: Array<{ code: string }> })?.errors ?? [];
     const isDuplicate = errors.some((e) => e.code === "form_identifier_exists");
     if (!isDuplicate) {
-      console.error("[checkout/portal-account] Clerk user creation error:", clerkErr);
+      logger.error({ err: clerkErr }, "[checkout/portal-account] Clerk user creation error");
     }
   }
 
@@ -116,7 +117,7 @@ export async function ensurePortalAccount(
       : `${tokenBase}?redirect_url=${redirectParam}`;
     credentials = { email, setupUrl, loginUrl, plainTextPassword: bootstrapPassword };
   } catch (tokenErr) {
-    console.error("[checkout/portal-account] Failed to create sign-in token:", tokenErr);
+    logger.error({ err: tokenErr }, "[checkout/portal-account] Failed to create sign-in token");
     credentials = { email, setupUrl: loginUrl, loginUrl, plainTextPassword: bootstrapPassword };
   }
 
@@ -133,7 +134,7 @@ export async function ensurePortalAccount(
     },
     tenantId,
   ).catch((welcomeErr) => {
-    console.error("[checkout/portal-account] Failed to send welcome email:", welcomeErr);
+    logger.error({ err: welcomeErr }, "[checkout/portal-account] Failed to send welcome email");
   });
 
   return { credentials };

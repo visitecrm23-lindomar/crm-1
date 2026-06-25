@@ -22,52 +22,83 @@ import { sql } from "drizzle-orm";
  *   The CDN decodes once, receiving `image%2Fpng` instead of `image/png`. Since the
  *   HMAC was computed over the decoded value, the check fails.
  *
+ * WHY undici setGlobalDispatcher + compose (not globalThis.fetch patch):
+ *   Effect-Platform's HttpClient uses undici directly — it does NOT go through
+ *   globalThis.fetch. Patching globalThis.fetch has no effect on Effect's requests.
+ *   undici's compose interceptor wraps the global agent and intercepts ALL undici
+ *   traffic (including Effect Platform's) at the dispatch level, before bytes hit wire.
+ *
  * BEFORE UPGRADING uploadthing:
  *   Check whether Effect-Platform's HTTP client still adds the Range header and
  *   double-encodes params on CDN PUT requests. If fixed upstream, remove this patch
  *   and the exact-version pin in package.json.
- *   Relevant upstream tracking: https://github.com/pingdotgg/uploadthing/issues
- *
- * This patch intercepts the native fetch used by the Effect HTTP client and
- * fixes both issues transparently for all utapi.* calls.
+ *   Relevant upstream: https://github.com/pingdotgg/uploadthing/issues
  */
-function patchFetchForUploadThingCDN() {
-  const _original = globalThis.fetch.bind(globalThis);
-
-  (globalThis as unknown as { fetch: typeof fetch }).fetch = async (
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1]
-  ): Promise<Response> => {
-    const urlStr =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-        ? input.href
-        : (input as Request).url;
-
-    const method =
-      init?.method?.toUpperCase() ??
-      (input instanceof Request ? (input as Request).method : "GET");
-
-    if (urlStr.includes(".ingest.uploadthing.com") && method === "PUT") {
-      // Fix 1: strip the spurious Range header added by Effect-Platform
-      const headers = new Headers((init?.headers ?? {}) as ConstructorParameters<typeof Headers>[0]);
-      headers.delete("range");
-
-      // Fix 2: un-double-encode query params — Effect-Platform percent-encodes the
-      // `%` in already-encoded sequences (e.g. %2F → %252F). One pass of this
-      // regex restores each `%25XX` back to `%XX`, making the URL match what
-      // UploadThing signed.
-      const fixedUrl = urlStr.replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
-
-      return _original(fixedUrl, { ...init, headers });
-    }
-
-    return _original(input, init);
+function patchUndiciForUploadThingCDN(): void {
+  // Dynamically required to avoid TS lib conflicts — undici v8 types live at
+  // ./types/index.d.ts and are re-exported from the package root; we use
+  // runtime require + cast to avoid import-resolution fights with different
+  // undici versions that may be present in the monorepo.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {
+    Agent,
+    setGlobalDispatcher,
+  } = require("undici") as {
+    Agent: new () => {
+      compose: (interceptor: (dispatch: (opts: Record<string, unknown>, handler: unknown) => boolean) => (opts: Record<string, unknown>, handler: unknown) => boolean) => { dispatch: (opts: Record<string, unknown>, handler: unknown) => boolean };
+    };
+    setGlobalDispatcher: (d: unknown) => void;
   };
+
+  const agent = new Agent();
+
+  const wrapped = agent.compose(
+    (dispatch) =>
+      (opts, handler) => {
+        const origin =
+          typeof opts["origin"] === "string"
+            ? opts["origin"]
+            : opts["origin"] instanceof URL
+            ? (opts["origin"] as URL).href
+            : "";
+
+        if (origin.includes(".ingest.uploadthing.com") && opts["method"] === "PUT") {
+          // Fix 1: Un-double-encode query params in the path.
+          // Effect-Platform encodes % → %25 so %2F becomes %252F.
+          // One substitution pass restores %25XX → %XX.
+          if (typeof opts["path"] === "string") {
+            opts["path"] = (opts["path"] as string).replace(/%25([0-9A-Fa-f]{2})/g, "%$1");
+          }
+
+          // Fix 2: Strip the spurious `Range: bytes=0-` header.
+          // Effect-Platform adds it unconditionally; UploadThing CDN rejects it.
+          const headers = opts["headers"];
+          if (Array.isArray(headers)) {
+            const filtered: unknown[] = [];
+            for (let i = 0; i < headers.length; i += 2) {
+              const key = headers[i];
+              if (typeof key !== "string" || key.toLowerCase() !== "range") {
+                filtered.push(headers[i], headers[i + 1]);
+              }
+            }
+            opts["headers"] = filtered;
+          } else if (headers && typeof headers === "object") {
+            const filtered: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {
+              if (k.toLowerCase() !== "range") filtered[k] = v;
+            }
+            opts["headers"] = filtered;
+          }
+        }
+
+        return dispatch(opts, handler);
+      },
+  );
+
+  setGlobalDispatcher(wrapped);
 }
 
-patchFetchForUploadThingCDN();
+patchUndiciForUploadThingCDN();
 
 export const utapi = new UTApi();
 

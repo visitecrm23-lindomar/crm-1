@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { logger } from "../lib/logger";
 import { db, aiIntegrationsTable, aiIntegrationLogsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -48,7 +49,7 @@ async function writeLog(
       actorName: me.name,
     });
   } catch (err) {
-    console.error("[ai-integration] failed to write audit log", err);
+    logger.error({ err }, "[ai-integration] failed to write audit log");
   }
 }
 

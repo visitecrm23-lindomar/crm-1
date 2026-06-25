@@ -296,36 +296,37 @@ async function maybeFixEvictionPolicy(conn: Redis): Promise<void> {
     await conn.config("SET", "maxmemory-policy", "noeviction");
     _evictionPolicySafe = true;
     logger.info("[redis] maxmemory-policy set to noeviction — BullMQ job safety ensured");
-    return;
+    // Note: do NOT return early here — the finally block below must always run
+    // to resolve _evictionPolicyPromise so waitForEvictionPolicyCheck() unblocks.
   } catch {
     // CONFIG SET not supported by this provider (e.g. Upstash Serverless).
     // Fall through to read the current policy and log an actionable message.
-  }
-
-  try {
-    const configResult = await conn.config("GET", "maxmemory-policy") as string[];
-    // ioredis returns ["maxmemory-policy", "<value>"]
-    const currentPolicy = configResult[1] ?? "unknown";
-    if (currentPolicy === "noeviction") {
-      _evictionPolicySafe = true;
-      logger.info("[redis] maxmemory-policy is already noeviction — no action needed");
-    } else {
+    try {
+      const configResult = await conn.config("GET", "maxmemory-policy") as string[];
+      // ioredis returns ["maxmemory-policy", "<value>"]
+      const currentPolicy = configResult[1] ?? "unknown";
+      if (currentPolicy === "noeviction") {
+        _evictionPolicySafe = true;
+        logger.info("[redis] maxmemory-policy is already noeviction — no action needed");
+      } else {
+        _evictionPolicySafe = false;
+        logger.warn(
+          { currentPolicy },
+          "[redis] maxmemory-policy is not 'noeviction' — BullMQ jobs may be silently lost under memory pressure. " +
+          "Fix: Upstash dashboard → your database → Settings → Eviction Policy → No Eviction. " +
+          "Self-hosted: run `redis-cli CONFIG SET maxmemory-policy noeviction`.",
+        );
+      }
+    } catch {
       _evictionPolicySafe = false;
       logger.warn(
-        { currentPolicy },
-        "[redis] maxmemory-policy is not 'noeviction' — BullMQ jobs may be silently lost under memory pressure. " +
-        "Fix: Upstash dashboard → your database → Settings → Eviction Policy → No Eviction. " +
-        "Self-hosted: run `redis-cli CONFIG SET maxmemory-policy noeviction`.",
+        "[redis] Cannot read maxmemory-policy (CONFIG GET not allowed by provider). " +
+        "If using Upstash, set Eviction Policy = No Eviction in the Upstash dashboard to prevent silent BullMQ job loss.",
       );
     }
-  } catch {
-    _evictionPolicySafe = false;
-    logger.warn(
-      "[redis] Cannot read maxmemory-policy (CONFIG GET not allowed by provider). " +
-      "If using Upstash, set Eviction Policy = No Eviction in the Upstash dashboard to prevent silent BullMQ job loss.",
-    );
   } finally {
-    // Resolve any callers awaiting the eviction policy check (e.g. server startup).
+    // Always resolve so waitForEvictionPolicyCheck() unblocks the server startup —
+    // whether CONFIG SET succeeded, fell through to CONFIG GET, or both failed.
     _evictionPolicyResolve?.();
     _evictionPolicyResolve = null;
   }

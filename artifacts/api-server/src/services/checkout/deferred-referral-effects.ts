@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 import { db } from "@workspace/db";
 import { storeOrdersTable, referralsTable, reservationsTable } from "@workspace/db";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -96,21 +97,17 @@ export async function applyDeferredOrderCredits(orderId: string): Promise<Deferr
       for (const { id, consumedAmount } of creditSpend) {
         const locked = lockedMap.get(id);
         if (!locked) {
-          console.warn(`[checkout/deferred-credits] credit row ${id} not found for order ${order.id}; skipping`);
+          logger.warn({ creditId: id, orderId: order.id }, "[checkout/deferred-credits] credit row not found; skipping");
           continue;
         }
         const available = Math.max(0, locked.bonusAmount - locked.alreadyUsed);
         const consume = Math.min(available, consumedAmount);
         if (consume <= 0) {
-          console.warn(
-            `[checkout/deferred-credits] no remaining credit on ${id} for order ${order.id} (planned ${consumedAmount}); skipping`,
-          );
+          logger.warn({ creditId: id, orderId: order.id, planned: consumedAmount }, "[checkout/deferred-credits] no remaining credit; skipping");
           continue;
         }
         if (consume < consumedAmount - 0.005) {
-          console.warn(
-            `[checkout/deferred-credits] partial credit on ${id} for order ${order.id}: consumed ${consume} of planned ${consumedAmount}`,
-          );
+          logger.warn({ creditId: id, orderId: order.id, consumed: consume, planned: consumedAmount }, "[checkout/deferred-credits] partial credit consumed");
         }
         await tx
           .update(referralsTable)

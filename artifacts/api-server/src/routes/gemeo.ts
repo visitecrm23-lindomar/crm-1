@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { logger } from "../lib/logger";
 import { db } from "@workspace/db";
 import {
   paymentsTable,
@@ -426,7 +427,7 @@ router.get("/dashboard/gemeo", async (req, res, next: NextFunction): Promise<voi
     metricsCache.set(tenantId, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     res.json(data);
   } catch (err) {
-    console.error("[gemeo/metrics]", err);
+    logger.error({ err }, "[gemeo/metrics]");
     next(err);
   }
 });
@@ -455,7 +456,7 @@ router.get("/dashboard/gemeo/alerts", async (req, res, next: NextFunction): Prom
 
     res.json({ alerts });
   } catch (err) {
-    console.error("[gemeo/alerts]", err);
+    logger.error({ err }, "[gemeo/alerts]");
     next(err);
   }
 });
@@ -485,7 +486,7 @@ router.patch("/dashboard/gemeo/alerts/:id/dismiss", async (req, res, next: NextF
 
     res.json({ success: true });
   } catch (err) {
-    console.error("[gemeo/alerts/dismiss]", err);
+    logger.error({ err }, "[gemeo/alerts/dismiss]");
     next(err);
   }
 });
@@ -514,7 +515,7 @@ router.get("/dashboard/gemeo/opportunities", async (req, res, next: NextFunction
 
     res.json({ opportunities });
   } catch (err) {
-    console.error("[gemeo/opportunities]", err);
+    logger.error({ err }, "[gemeo/opportunities]");
     next(err);
   }
 });
@@ -549,7 +550,7 @@ router.patch("/dashboard/gemeo/opportunities/:id/dismiss", async (req, res, next
 
     res.json({ success: true });
   } catch (err) {
-    console.error("[gemeo/opportunities/dismiss]", err);
+    logger.error({ err }, "[gemeo/opportunities/dismiss]");
     next(err);
   }
 });

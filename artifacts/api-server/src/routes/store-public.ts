@@ -1,4 +1,5 @@
 import { Router, type NextFunction } from "express";
+import { logger } from "../lib/logger";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { tryAddSeatClient, removeSeatClient, emitSeatUpdate } from "../lib/seat-sse";
@@ -1161,12 +1162,12 @@ function recordSuspendedReferralAttempt(params: {
     .where(eq(clientsTable.id, clientId))
     .execute()
     .catch((err: unknown) => {
-      console.warn("[store-public] Failed to record suspended referral attempt:", err instanceof Error ? err.message : String(err));
+      logger.warn({ err }, "[store-public] Failed to record suspended referral attempt");
     });
   db.insert(referralAttemptLogsTable)
     .values({ id: generateId(), tenantId, clientId, storeSlug, ipAddress })
     .catch((err: unknown) => {
-      console.warn("[store-public] Failed to log referral attempt:", err instanceof Error ? err.message : String(err));
+      logger.warn({ err }, "[store-public] Failed to log referral attempt");
     });
 }
 

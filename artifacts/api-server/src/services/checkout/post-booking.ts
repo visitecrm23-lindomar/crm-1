@@ -1,3 +1,4 @@
+import { logger } from "../../lib/logger";
 import { db } from "@workspace/db";
 import { reservationsTable, storesTable, storeOrdersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -46,7 +47,7 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
         deferred.customerName ?? "",
         deferred.tenantId,
       ).catch((err) =>
-        console.error("[checkout/post-payment] Failed to dispatch referral-converted email:", err),
+        logger.error({ err }, "[checkout/post-payment] Failed to dispatch referral-converted email"),
       );
       if (deferred.conversion?.tierUpgraded) {
         dispatchReferralTierUpgradeEmail(
@@ -56,7 +57,7 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
           deferred.conversion.newTierLabel,
           deferred.conversion.bonusMultiplier,
         ).catch((err) =>
-          console.error("[checkout/post-payment] Failed to dispatch referral tier-upgrade email:", err),
+          logger.error({ err }, "[checkout/post-payment] Failed to dispatch referral tier-upgrade email"),
         );
       }
       if (deferred.referralCode) {
@@ -66,12 +67,12 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
           referralCode: deferred.referralCode,
           tenantId: deferred.tenantId,
         }).catch((err) =>
-          console.error("[checkout/post-payment] Failed to dispatch referral WhatsApp notification:", err),
+          logger.error({ err }, "[checkout/post-payment] Failed to dispatch referral WhatsApp notification"),
         );
       }
     }
   } catch (err) {
-    console.error("[checkout/post-payment] Failed to apply deferred referral/credit effects:", err);
+    logger.error({ err }, "[checkout/post-payment] Failed to apply deferred referral/credit effects");
   }
 
   const [order] = await db
@@ -100,7 +101,7 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
       const baseCode = generateReferralCode(order.customerName);
       await generateAndAssignReferralCode(order.clientId, order.tenantId, baseCode, namePart, year);
     } catch (err) {
-      console.error("[checkout/post-payment] Failed to generate referral code:", err);
+      logger.error({ err }, "[checkout/post-payment] Failed to generate referral code");
     }
   }
 
@@ -150,6 +151,6 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
       agencyLogo: store.logo ?? "",
     });
   } catch (err) {
-    console.error("[checkout/post-payment] Failed to provision portal account:", err);
+    logger.error({ err }, "[checkout/post-payment] Failed to provision portal account");
   }
 }
