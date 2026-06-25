@@ -7,7 +7,7 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import {
   useListPipelineStages, useListDeals, useMoveDeal,
-  useDeleteDeal, useListClients, useListTrips, useUpdateDeal,
+  useDeleteDeal, useListClients, useListTrips, useUpdateDeal, useGetMe,
 } from "@workspace/api-client-react";
 import type { Deal, PipelineStage, Client } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -30,12 +30,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen,
   ExternalLink, ShoppingBag, ChevronDown, ChevronUp, BarChart2, Loader2, XCircle,
-  Settings2, Star, ChevronRight, ChevronLeft, GripVertical, Plane,
+  Settings2, Star, ChevronRight, ChevronLeft, GripVertical, Plane, ArrowRightLeft,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DEAL_STATUS } from "@workspace/permissions";
 import { formatCurrency } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -924,6 +925,222 @@ function ManageStagesModal({ open, onClose, pipelineId, pipelineName, onChanged 
   );
 }
 
+// ─── Bulk Migrate Modal ───────────────────────────────────────────────────────
+
+interface BulkMigrateModalProps {
+  open: boolean;
+  onClose: () => void;
+  pipelines: PipelineInfo[];
+  stages: PipelineStage[];
+  deals: Deal[];
+  onMigrated: () => void;
+}
+
+function BulkMigrateModal({ open, onClose, pipelines, stages, deals, onMigrated }: BulkMigrateModalProps) {
+  const { toast } = useToast();
+  const [srcPipelineId, setSrcPipelineId] = useState("");
+  const [srcStageId, setSrcStageId] = useState("all");
+  const [dstPipelineId, setDstPipelineId] = useState("");
+  const [dstStageId, setDstStageId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Initialize defaults when modal opens
+  useEffect(() => {
+    if (open && pipelines.length > 0) {
+      const def = pipelines.find(p => p.isDefault) ?? pipelines[0];
+      setSrcPipelineId(def.id);
+      setSrcStageId("all");
+      setDstPipelineId(def.id);
+      setDstStageId("");
+    }
+  }, [open, pipelines]);
+
+  // Reset dstStageId when dstPipeline changes
+  useEffect(() => { setDstStageId(""); }, [dstPipelineId]);
+  // Reset srcStageId when srcPipeline changes
+  useEffect(() => { setSrcStageId("all"); }, [srcPipelineId]);
+
+  const stagesByPipeline = useMemo(() => {
+    const map = new Map<string, PipelineStage[]>();
+    stages.forEach(s => {
+      const pid = s.pipelineId ?? "";
+      if (!map.has(pid)) map.set(pid, []);
+      map.get(pid)!.push(s);
+    });
+    return map;
+  }, [stages]);
+
+  const srcStages = stagesByPipeline.get(srcPipelineId) ?? [];
+  const dstStages = stagesByPipeline.get(dstPipelineId) ?? [];
+
+  const matchingDeals = useMemo(() => {
+    const srcStageIdSet = new Set((stagesByPipeline.get(srcPipelineId) ?? []).map(s => s.id));
+    let d = deals.filter(deal => srcStageIdSet.has(deal.stageId));
+    if (srcStageId !== "all") d = d.filter(deal => deal.stageId === srcStageId);
+    return d;
+  }, [deals, srcPipelineId, srcStageId, stagesByPipeline]);
+
+  const canMigrate = matchingDeals.length > 0 && !!dstStageId;
+  const isSameStage = canMigrate && dstStageId === (srcStageId !== "all" ? srcStageId : null);
+
+  async function handleMigrate() {
+    if (!canMigrate) return;
+    setLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/pipeline/deals/bulk-move`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealIds: matchingDeals.map(d => d.id), targetStageId: dstStageId }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Erro desconhecido" }));
+        toast({ title: "Erro ao migrar", description: err.error ?? "Tente novamente.", variant: "destructive" });
+        return;
+      }
+      const result: { count: number } = await resp.json();
+      toast({ title: "Migração concluída!", description: `${result.count} negócio${result.count !== 1 ? "s" : ""} migrado${result.count !== 1 ? "s" : ""} com sucesso.` });
+      onClose();
+      onMigrated();
+    } catch {
+      toast({ title: "Erro ao migrar", description: "Verifique sua conexão e tente novamente.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ArrowRightLeft className="w-5 h-5 text-primary" />
+            Migrar Negócios em Lote
+          </DialogTitle>
+          <DialogDescription>
+            Selecione a origem e o destino para mover negócios entre pipelines ou etapas.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-1">
+          {/* Source */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Origem</p>
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs mb-1 block">Pipeline de origem</Label>
+                <Select value={srcPipelineId} onValueChange={setSrcPipelineId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecionar pipeline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelines.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          {p.isDefault && <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />}
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Etapa de origem</Label>
+                <Select value={srcStageId} onValueChange={setSrcStageId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Todas as etapas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as etapas</SelectItem>
+                    {srcStages.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                          {s.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${matchingDeals.length > 0 ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-muted text-muted-foreground"}`}>
+              <ArrowRightLeft className="w-4 h-4 shrink-0" />
+              {matchingDeals.length === 0
+                ? "Nenhum negócio encontrado para essa seleção"
+                : `${matchingDeals.length} negócio${matchingDeals.length !== 1 ? "s" : ""} serão migrados`}
+            </div>
+          </div>
+
+          {/* Destination */}
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Destino</p>
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs mb-1 block">Pipeline de destino</Label>
+                <Select value={dstPipelineId} onValueChange={setDstPipelineId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecionar pipeline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelines.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          {p.isDefault && <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />}
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Etapa de destino</Label>
+                <Select value={dstStageId} onValueChange={setDstStageId} disabled={!dstPipelineId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecionar etapa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dstStages.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                          {s.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {isSameStage && (
+              <p className="text-xs text-amber-600 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5 shrink-0" />
+                A etapa de destino é a mesma da origem — a migração não terá efeito.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button
+            onClick={handleMigrate}
+            disabled={!canMigrate || loading}
+            className="gap-2"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loading ? "Migrando..." : `Migrar ${matchingDeals.length} negócio${matchingDeals.length !== 1 ? "s" : ""}`}
+            {!loading && <ArrowRightLeft className="w-4 h-4" />}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Pipeline() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
@@ -945,6 +1162,10 @@ export default function Pipeline() {
   const [renamingPipeline, setRenamingPipeline] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deletingPipelineLoading, setDeletingPipelineLoading] = useState(false);
+  const [bulkMigrateOpen, setBulkMigrateOpen] = useState(false);
+
+  const { data: me } = useGetMe();
+  const isAdmin = me?.role === "admin" || me?.role === "manager";
 
   const { data: pipelines, refetch: refetchPipelines } = useQuery<PipelineInfo[]>({
     queryKey: ["pipelines"],
@@ -1340,6 +1561,17 @@ export default function Pipeline() {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {isAdmin && (pipelines?.length ?? 0) > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkMigrateOpen(true)}
+              className="gap-1.5"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              Migrar
+            </Button>
+          )}
           {selectedPipelineId && (
             <Button
               variant="outline"
@@ -1556,6 +1788,15 @@ export default function Pipeline() {
           onChanged={() => { refetchStages(); refetchDeals(); refetchLostDeals(); }}
         />
       )}
+
+      <BulkMigrateModal
+        open={bulkMigrateOpen}
+        onClose={() => setBulkMigrateOpen(false)}
+        pipelines={pipelines ?? []}
+        stages={stages ?? []}
+        deals={deals ?? []}
+        onMigrated={() => { refetchDeals(); refetchLostDeals(); refetchStages(); }}
+      />
     </div>
   );
 }

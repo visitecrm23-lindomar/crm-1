@@ -728,6 +728,51 @@ router.delete("/pipelines/:id", async (req, res, next: NextFunction): Promise<vo
   }
 });
 
+// ─── BULK MOVE DEALS ──────────────────────────────────────────────────────────
+
+router.post("/pipeline/deals/bulk-move", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    if (!ADMIN_ROLES.includes(me.role)) {
+      next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
+      return;
+    }
+
+    const parsed = z.object({
+      dealIds: z.array(z.string().min(1)).min(1).max(500),
+      targetStageId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError(String(parsed.error.message), "VALIDATION_ERROR"));
+      return;
+    }
+
+    const { dealIds, targetStageId } = parsed.data;
+
+    // Verify target stage belongs to this tenant
+    const [targetStage] = await db
+      .select({ id: pipelineStagesTable.id })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.id, targetStageId), eq(pipelineStagesTable.tenantId, me.tenantId)))
+      .limit(1);
+    if (!targetStage) {
+      next(new NotFoundError("Target stage not found", "NOT_FOUND"));
+      return;
+    }
+
+    // Move only deals that belong to this tenant (inArray + tenant guard)
+    await db
+      .update(dealsTable)
+      .set({ stageId: targetStageId, updatedAt: new Date() })
+      .where(and(inArray(dealsTable.id, dealIds), eq(dealsTable.tenantId, me.tenantId)));
+
+    res.json({ success: true, count: dealIds.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── PIPELINE ANALYTICS ───────────────────────────────────────────────────────
 
 router.get("/pipeline/:pipelineId/analytics", async (req, res, next: NextFunction): Promise<void> => {
