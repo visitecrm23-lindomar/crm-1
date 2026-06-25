@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS "reservations" (
         "expires_at" timestamp with time zone,
         "commission_sync_status" text,
         "coupon_reversal_at" timestamp with time zone,
+        "referral_reversal_at" timestamp with time zone,
         "created_at" timestamp with time zone DEFAULT now() NOT NULL,
         "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
         CONSTRAINT "reservations_voucher_code_unique" UNIQUE("voucher_code")

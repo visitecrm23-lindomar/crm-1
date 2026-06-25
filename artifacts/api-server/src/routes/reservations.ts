@@ -1254,16 +1254,18 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
         }
 
         // --- Reversal 3: referral bonus credited to referrer ---
-        // Idempotency: both lookup branches filter on `status = COMPLETED`. If the
-        // referral record is already in REVERSED status (meaning this reversal already
-        // ran during a prior cancellation before the reservation was reopened), both
-        // queries return no rows and `referralRecord` stays undefined — so the update
-        // block below is naturally skipped and the referrer's earnings are NOT
-        // double-decremented. This is intentional: the COMPLETED filter acts as the
-        // idempotency guard for re-cancel flows.
+        // Idempotency: explicit timestamp guard (`referralReversalAt`) fires first —
+        // if already set, the entire lookup tree is skipped, preventing any DB reads
+        // and double-reversal on reopen → re-cancel flows. This mirrors the
+        // `couponReversalAt` pattern used by Reversal 1.
+        //
+        // Secondary (implicit) guard: both lookup branches filter on `status = COMPLETED`.
+        // If the referral record is already REVERSED (and `referralReversalAt` was somehow
+        // not set — e.g. legacy data), the COMPLETED-filtered queries return no rows and
+        // `referralRecord` stays undefined, so the update block is naturally skipped.
         //
         // Lookup by reservationId (set for all storefront and CRM bookings).
-        if (existing.discountReferralCode) {
+        if (existing.discountReferralCode && !existing.referralReversalAt) {
           let referralRecord: { id: string; referrerId: string; referredId: string | null; bonusAmount: string } | undefined;
 
           const [byReservation] = await tx
@@ -1393,6 +1395,9 @@ router.patch("/reservations/:id", async (req, res, next: NextFunction): Promise<
             await tx.update(referralsTable)
               .set({ status: REFERRAL_STATUS.REVERSED, reversalReason: "reservation_cancelled", reversalAt: reversalNow, updatedAt: reversalNow })
               .where(eq(referralsTable.id, referralRecord.id));
+            // Mark the reversal as completed so re-cancel flows are short-circuited
+            // by the explicit idempotency guard above (mirrors couponReversalAt).
+            updates.referralReversalAt = new Date();
             // Capture for post-transaction notification (#28)
             reversedReferralInfo = { referrerId: referralRecord.referrerId, referredId: referralRecord.referredId, bonusAmount: referralRecord.bonusAmount };
           }

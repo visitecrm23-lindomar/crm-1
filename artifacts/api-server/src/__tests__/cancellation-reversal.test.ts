@@ -677,6 +677,61 @@ describe("PATCH /api/reservations/:id — cancellation financial reversal", () =
   });
 
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Explicit idempotency guard for Reversal 3: when `referralReversalAt` is
+  // already set on the reservation (meaning the reversal ran in a prior
+  // cancellation before the reservation was reopened), the second cancellation
+  // must skip the entire referral lookup tree — no DB reads, no updates.
+  // This mirrors the `couponReversalAt` pattern used by Reversal 1.
+  it("skips referral reversal entirely when referralReversalAt is already set (explicit idempotency guard)", async () => {
+    const app = buildReservationsApp();
+    // Reservation with a referral that was already reversed in a prior
+    // cancellation (referralReversalAt is non-null). clientId is null so
+    // Reversal 4 (loyalty clawback) does not fire either.
+    const existing = makeReservation({
+      discountReferralCode: "REF-XYZ",
+      discountReferralAmount: "25",
+      clientId: null,
+      referralReversalAt: new Date("2026-04-01T12:00:00Z"),
+    });
+    const cancelled = { ...existing, status: "cancelled" };
+
+    mockLimit.mockResolvedValueOnce([existing]);
+
+    // tx select queue (in execution order):
+    //   [0] re-fetch updated reservation
+    // No referral lookups at all — the explicit referralReversalAt guard fires
+    // before any query is issued, so the queue has only the re-fetch entry.
+    const tx = buildTxMock([[cancelled]]);
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(tx));
+
+    mockLimit
+      .mockResolvedValueOnce([FAKE_TRIP])
+      .mockResolvedValueOnce([FAKE_CLIENT]);
+
+    const res = await request(app)
+      .patch("/api/reservations/res-001")
+      .send({ status: "cancelled" });
+
+    expect(res.status).toBe(200);
+
+    // trips (seats) + commissions (cancel) + reservations (status) = 3
+    // clients (referralEarnings) and referrals (status) must NOT be updated
+    expect(tx.update).toHaveBeenCalledTimes(3);
+
+    // Confirm no referral-related updates were captured
+    const referralUpdate = capturedUpdates.find(
+      (u) => "status" in u.set && (u.set as Record<string, unknown>)["status"] === "reversed",
+    );
+    expect(referralUpdate).toBeUndefined();
+
+    const earningsUpdate = capturedUpdates.find(
+      (u) => "referralEarnings" in u.set,
+    );
+    expect(earningsUpdate).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // Idempotency guard for Reversal 3: when the referral record is already in
   // REVERSED status (e.g. reservation was cancelled, reopened, then cancelled
   // again), both lookup branches filter on `status = COMPLETED` and return no
