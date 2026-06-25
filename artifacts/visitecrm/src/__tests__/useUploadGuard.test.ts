@@ -381,6 +381,90 @@ describe("useUploadGuard — beforeunload interception", () => {
   });
 });
 
+// ─── onConfirmLeave — upload abort on guard confirm ──────────────────────────
+
+// Helper: like renderUploadGuard but also wires up an onConfirmLeave callback
+// so we can verify the abort path added in Task #615.
+async function renderUploadGuardWithLeave(
+  initial: boolean,
+  onConfirmLeave: () => void,
+): Promise<Handle> {
+  const result = { current: { guardDialog: null as unknown } };
+  let isUploading = initial;
+
+  function TestComponent() {
+    result.current = useUploadGuard(isUploading, onConfirmLeave);
+    return null;
+  }
+
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  activeRoots.push(root);
+
+  await act(async () => { root.render(createElement(TestComponent)); });
+
+  return {
+    getDialogProps: () =>
+      (result.current.guardDialog as ReactElement<GuardDialogProps>).props,
+
+    rerender: async (next: boolean) => {
+      isUploading = next;
+      await act(async () => { root.render(createElement(TestComponent)); });
+    },
+
+    unmount: async () => {
+      await act(async () => { root.unmount(); });
+    },
+  };
+}
+
+describe("useUploadGuard — onConfirmLeave (upload abort on confirm)", () => {
+  it("calls onConfirmLeave before completing a blocked pushState navigation", async () => {
+    const onConfirmLeave = vi.fn();
+    const { getDialogProps } = await renderUploadGuardWithLeave(true, onConfirmLeave);
+
+    await act(async () => { history.pushState(null, "", "/destination"); });
+    expect(getDialogProps().open).toBe(true);
+    expect(onConfirmLeave).not.toHaveBeenCalled(); // not called yet
+
+    await act(async () => { getDialogProps().onConfirm(); });
+
+    expect(onConfirmLeave).toHaveBeenCalledOnce();
+    expect(location.pathname).toBe("/destination"); // navigation proceeded
+    expect(getDialogProps().open).toBe(false);
+  });
+
+  it("calls onConfirmLeave before completing a blocked popstate navigation", async () => {
+    const onConfirmLeave = vi.fn();
+    const { getDialogProps } = await renderUploadGuardWithLeave(true, onConfirmLeave);
+
+    rawNavigate("/popstate-dest");
+    await act(async () => {
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+    expect(getDialogProps().open).toBe(true);
+
+    await act(async () => { getDialogProps().onConfirm(); });
+
+    expect(onConfirmLeave).toHaveBeenCalledOnce();
+    expect(location.pathname).toBe("/popstate-dest");
+  });
+
+  it("does NOT call onConfirmLeave when the user dismisses the dialog", async () => {
+    const onConfirmLeave = vi.fn();
+    const { getDialogProps } = await renderUploadGuardWithLeave(true, onConfirmLeave);
+
+    await act(async () => { history.pushState(null, "", "/unwanted"); });
+    expect(getDialogProps().open).toBe(true);
+
+    await act(async () => { getDialogProps().onCancel(); });
+
+    expect(onConfirmLeave).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/"); // navigation stayed blocked
+    expect(getDialogProps().open).toBe(false);
+  });
+});
+
 // ─── Multi-instance reference counting ───────────────────────────────────────
 
 describe("useUploadGuard — multi-instance reference counting", () => {
