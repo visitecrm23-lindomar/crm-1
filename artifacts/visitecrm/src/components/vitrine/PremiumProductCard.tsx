@@ -418,6 +418,12 @@ export function PremiumProductCard({
           )}
         </div>
 
+        {product.shortDescription && (
+          <p className="mb-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {product.shortDescription.replace(/<[^>]*>/g, "")}
+          </p>
+        )}
+
         {inclusions.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
             {inclusions.map((inc, i) => (
