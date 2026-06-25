@@ -869,3 +869,62 @@ describe("GET /api/alerts — email-retry-exhausted detection", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: GET /api/alerts — role gating
+//
+// The route requires AGENCY_STAFF_ROLES or SUPER_ADMIN. Any other role
+// (e.g. ROLES.CLIENT) must receive 403 FORBIDDEN_ROLE before the handler
+// touches the database.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/alerts — role gating", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSelect.mockReturnValue({ from: mockFrom });
+    mockFrom.mockReturnValue({ where: mockWhere, limit: mockLimit });
+    mockWhere.mockImplementation(() =>
+      Object.assign([] as unknown[], { limit: mockLimit }),
+    );
+    mockLimit.mockResolvedValue([]);
+    mockExecute.mockResolvedValue({ rows: [] });
+  });
+
+  it("returns 403 FORBIDDEN_ROLE for a non-staff (client) role", async () => {
+    const app = buildAlertsApp();
+    requireAuthMock.mockResolvedValue(CLIENT_USER as never);
+
+    const res = await request(app).get("/api/alerts");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ code: "FORBIDDEN_ROLE" });
+    // Role check fires before any DB access.
+    expect(mockSelect).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 and an alerts array for an allowed staff role (agency admin)", async () => {
+    const app = buildAlertsApp();
+    requireAuthMock.mockResolvedValue(STAFF_USER as never);
+
+    const res = await request(app).get("/api/alerts");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("alerts");
+    expect(Array.isArray(res.body.alerts)).toBe(true);
+    expect(res.body).toHaveProperty("count");
+  });
+
+  it("returns 200 with an empty alerts array when no conditions are met", async () => {
+    const app = buildAlertsApp();
+    requireAuthMock.mockResolvedValue(STAFF_USER as never);
+    // beforeEach already configures mockWhere → [] and mockExecute → { rows: [] },
+    // so all 9 parallel queries resolve to empty — no alert should be built.
+
+    const res = await request(app).get("/api/alerts");
+
+    expect(res.status).toBe(200);
+    expect(res.body.alerts).toEqual([]);
+    expect(res.body.count).toBe(0);
+  });
+});
