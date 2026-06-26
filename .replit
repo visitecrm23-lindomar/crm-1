@@ -180,6 +180,7 @@ timeoutMs = 300000
 NODE_ENV = "production"
 ENABLE_WORKERS = "true"
 UPLOADTHING_CALLBACK_URL = "https://visitecrm.com/api/uploadthing"
+VITE_CLERK_PROXY_URL = "https://visitecrm.com/api/__clerk"
 
   [userenv.shared]
   VITE_UPLOADTHING_URL = "/api/uploadthing"
