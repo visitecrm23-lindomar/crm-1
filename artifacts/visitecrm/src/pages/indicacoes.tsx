@@ -198,6 +198,9 @@ async function fetchReversalGaps(
 }
 
 export default function Indicacoes() {
+  const canCopyImageToClipboard =
+    typeof ClipboardItem !== "undefined" && !!navigator?.clipboard;
+
   const { data: subData } = useGetCurrentSubscription();
   const referralsLocked = subData !== undefined &&
     !(subData.plan?.supportedFeatures ?? []).includes("referrals");
@@ -1920,8 +1923,11 @@ export default function Indicacoes() {
                     onClick={() => copyQrCodeToClipboard(shareData.qrCodeDataUrl, shareReferral?.code ?? "referral")}
                     className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    <Copy className="w-3.5 h-3.5" />
-                    Copiar imagem
+                    {canCopyImageToClipboard ? (
+                      <><Copy className="w-3.5 h-3.5" />Copiar imagem</>
+                    ) : (
+                      <><Download className="w-3.5 h-3.5" />Baixar QR-code</>
+                    )}
                   </button>
                   {isValidWhatsapp(shareReferral?.referrerWhatsapp) && (
                     <button
@@ -2460,8 +2466,11 @@ export default function Indicacoes() {
                           onClick={() => copyQrCodeToClipboard(shareData.qrCodeDataUrl, selectedReferral.code ?? "referral")}
                           className="mt-2 flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
                         >
-                          <Copy className="w-3 h-3" />
-                          Copiar imagem
+                          {canCopyImageToClipboard ? (
+                            <><Copy className="w-3 h-3" />Copiar imagem</>
+                          ) : (
+                            <><Download className="w-3 h-3" />Baixar QR-code</>
+                          )}
                         </button>
                         {isValidWhatsapp(selectedReferral.referrerWhatsapp) && (
                           <button
