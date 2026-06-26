@@ -124,6 +124,7 @@ import type {
   ListDealsParams,
   ListExpensesParams,
   ListMessagesParams,
+  GetNpsSummaryParams,
   ListNpsResponsesParams,
   ListOrdersParams,
   ListPaymentsParams,
@@ -11942,41 +11943,57 @@ export const useSendNpsSurvey = <
 /**
  * @summary Get NPS summary and score
  */
-export const getGetNpsSummaryUrl = () => {
-  return `/api/nps/summary`;
+export const getGetNpsSummaryUrl = (params?: GetNpsSummaryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      normalizedParams.append(key, value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/nps/summary?${stringifiedParams}`
+    : `/api/nps/summary`;
 };
 
 export const getNpsSummary = async (
+  params?: GetNpsSummaryParams,
   options?: RequestInit,
 ): Promise<NpsSummary> => {
-  return customFetch<NpsSummary>(getGetNpsSummaryUrl(), {
+  return customFetch<NpsSummary>(getGetNpsSummaryUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetNpsSummaryQueryKey = () => {
-  return [`/api/nps/summary`] as const;
+export const getGetNpsSummaryQueryKey = (params?: GetNpsSummaryParams) => {
+  return [`/api/nps/summary`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetNpsSummaryQueryOptions = <
   TData = Awaited<ReturnType<typeof getNpsSummary>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getNpsSummary>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetNpsSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNpsSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetNpsSummaryQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetNpsSummaryQueryKey(params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getNpsSummary>>> = ({
     signal,
-  }) => getNpsSummary({ signal, ...requestOptions });
+  }) => getNpsSummary(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getNpsSummary>>,
@@ -11997,15 +12014,18 @@ export type GetNpsSummaryQueryError = ErrorType<unknown>;
 export function useGetNpsSummary<
   TData = Awaited<ReturnType<typeof getNpsSummary>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getNpsSummary>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetNpsSummaryQueryOptions(options);
+>(
+  params?: GetNpsSummaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNpsSummary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNpsSummaryQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

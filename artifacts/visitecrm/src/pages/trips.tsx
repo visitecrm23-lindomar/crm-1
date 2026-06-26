@@ -8,6 +8,7 @@ import { TripCalendar } from "./trips/TripCalendar";
 import { TripCheckinPanel } from "./trips/TripCheckinPanel";
 import { TabletCheckin } from "./trips/TabletCheckin";
 import { BoardingControlPage } from "./trips/BoardingControlPage";
+import { TripNpsTab } from "./trips/TripNpsTab";
 
 export { TripForm, TripList, SeatMap, PassengersOverview, PassengersList, TripCalendar };
 
@@ -21,6 +22,7 @@ export default function Trips() {
   const [matchCheckinPanel, paramsCheckinPanel] = useRoute("/trips/:id/checkin-panel");
   const [matchTabletCheckin, paramsTabletCheckin] = useRoute("/trips/:id/checkin");
   const [matchBoardingControl, paramsBoardingControl] = useRoute("/trips/:id/boarding-control");
+  const [matchNps, paramsNps] = useRoute("/trips/:id/nps");
   const [matchDetail, paramsDetail] = useRoute("/trips/:id");
 
   if (matchNew) return <TripForm />;
@@ -32,6 +34,7 @@ export default function Trips() {
   if (matchCheckinPanel && paramsCheckinPanel?.id) return <TripCheckinPanel tripId={paramsCheckinPanel.id} />;
   if (matchTabletCheckin && paramsTabletCheckin?.id) return <TabletCheckin tripId={paramsTabletCheckin.id} />;
   if (matchBoardingControl && paramsBoardingControl?.id) return <BoardingControlPage tripId={paramsBoardingControl.id} />;
+  if (matchNps && paramsNps?.id) return <TripNpsTab tripId={paramsNps.id} />;
   if (matchDetail && paramsDetail?.id) return <PassengersOverview tripId={paramsDetail.id} />;
 
   return <TripList />;

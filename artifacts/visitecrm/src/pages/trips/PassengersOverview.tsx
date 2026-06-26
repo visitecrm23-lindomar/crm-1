@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, Bus, Edit, X, Check, Download, Send, Plus, DollarSign,
-  List, UserRound, MapPin, ChevronDown, ClipboardCheck, AlertTriangle, ShoppingBag,
+  List, UserRound, MapPin, ChevronDown, ClipboardCheck, AlertTriangle, ShoppingBag, Star,
 } from "lucide-react";
 import { STATUS_MAP } from "./constants";
 import { formatCurrency, formatDate } from "./utils";
@@ -264,6 +264,7 @@ export function PassengersOverview({ tripId: initialTripId }: { tripId: string }
           {trip && trip.status !== TRIP_STATUS.CANCELLED && trip.status !== TRIP_STATUS.DRAFT && (
             <Link href={`/trips/${tripId}/boarding-control`}><Button className="bg-blue-700 hover:bg-blue-800 text-white gap-2"><Bus className="w-4 h-4" />Central de Embarque</Button></Link>
           )}
+          <Link href={`/trips/${tripId}/nps`}><Button variant="outline"><Star className="w-4 h-4 mr-2" />NPS</Button></Link>
           <Link href={`/trips/${tripId}/edit`}><Button variant="outline"><Edit className="w-4 h-4 mr-2" />Editar Viagem</Button></Link>
         </div>
       </div>

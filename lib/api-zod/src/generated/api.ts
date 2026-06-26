@@ -3944,6 +3944,9 @@ export const listNpsResponsesQueryLimitDefault = 20;
 
 export const ListNpsResponsesQueryParams = zod.object({
   classification: zod.coerce.string().nullish(),
+  tripId: zod.coerce.string().nullish(),
+  dateFrom: zod.coerce.string().nullish(),
+  dateTo: zod.coerce.string().nullish(),
   page: zod.coerce.number().default(listNpsResponsesQueryPageDefault),
   limit: zod.coerce.number().default(listNpsResponsesQueryLimitDefault),
 });
@@ -3980,6 +3983,12 @@ export const SendNpsSurveyResponse = zod.object({
 /**
  * @summary Get NPS summary and score
  */
+export const GetNpsSummaryQueryParams = zod.object({
+  tripId: zod.coerce.string().nullish(),
+  dateFrom: zod.coerce.string().nullish(),
+  dateTo: zod.coerce.string().nullish(),
+});
+
 export const GetNpsSummaryResponse = zod.object({
   averageScore: zod.number(),
   npsScore: zod.number(),

@@ -302,13 +302,48 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const { tripId, dateFrom, dateTo } = req.query as Record<string, string | undefined>;
+
+    const travelConditions = [eq(clientNpsResponsesTable.tenantId, me.tenantId)];
+    if (tripId) travelConditions.push(eq(clientNpsResponsesTable.tripId, tripId));
+    if (dateFrom) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} >= ${new Date(dateFrom)}`);
+    if (dateTo) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} <= ${new Date(dateTo + "T23:59:59.999Z")}`);
+
+    if (tripId) {
+      const travelResponses = await db
+        .select({ score: clientNpsResponsesTable.score })
+        .from(clientNpsResponsesTable)
+        .where(and(...travelConditions));
+      const travelMapped = travelResponses.map(r => ({
+        score: r.score,
+        classification: r.score >= 9 ? "promoter" : r.score >= 7 ? "passive" : "detractor",
+      }));
+      const total = travelMapped.length;
+      const promoters = travelMapped.filter(r => r.classification === "promoter").length;
+      const detractors = travelMapped.filter(r => r.classification === "detractor").length;
+      const npsScore = total === 0 ? 0 : Math.round(((promoters - detractors) / total) * 100);
+      const avgScore = total === 0 ? 0 : travelMapped.reduce((s, r) => s + r.score, 0) / total;
+      return void res.json({
+        total,
+        promoters,
+        passives: travelMapped.filter(r => r.classification === "passive").length,
+        detractors,
+        npsScore,
+        averageScore: Math.round(avgScore * 10) / 10,
+      });
+    }
+
+    const storeConditions = [eq(npsResponsesTable.tenantId, me.tenantId)];
+    if (dateFrom) storeConditions.push(sql`${npsResponsesTable.createdAt} >= ${new Date(dateFrom)}`);
+    if (dateTo) storeConditions.push(sql`${npsResponsesTable.createdAt} <= ${new Date(dateTo + "T23:59:59.999Z")}`);
+
     const [storeResponses, travelResponses] = await Promise.all([
       db.select({ score: npsResponsesTable.score, classification: npsResponsesTable.classification })
         .from(npsResponsesTable)
-        .where(eq(npsResponsesTable.tenantId, me.tenantId)),
+        .where(and(...storeConditions)),
       db.select({ score: clientNpsResponsesTable.score })
         .from(clientNpsResponsesTable)
-        .where(eq(clientNpsResponsesTable.tenantId, me.tenantId)),
+        .where(and(...travelConditions)),
     ]);
     const travelMapped = travelResponses.map(r => ({
       score: r.score,
@@ -337,6 +372,60 @@ router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
+    const { classification, tripId, dateFrom, dateTo } = req.query as Record<string, string | undefined>;
+
+    const travelConditions = [eq(clientNpsResponsesTable.tenantId, me.tenantId)];
+    if (tripId) travelConditions.push(eq(clientNpsResponsesTable.tripId, tripId));
+    if (dateFrom) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} >= ${new Date(dateFrom)}`);
+    if (dateTo) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} <= ${new Date(dateTo + "T23:59:59.999Z")}`);
+
+    const storeConditions = [eq(npsResponsesTable.tenantId, me.tenantId)];
+    if (dateFrom) storeConditions.push(sql`${npsResponsesTable.createdAt} >= ${new Date(dateFrom)}`);
+    if (dateTo) storeConditions.push(sql`${npsResponsesTable.createdAt} <= ${new Date(dateTo + "T23:59:59.999Z")}`);
+
+    const travelQuery = db
+      .select({
+        id: clientNpsResponsesTable.id,
+        score: clientNpsResponsesTable.score,
+        comment: clientNpsResponsesTable.comment,
+        createdAt: clientNpsResponsesTable.createdAt,
+        clientName: clientsTable.name,
+        tripId: clientNpsResponsesTable.tripId,
+        scoreTransport: clientNpsResponsesTable.scoreTransport,
+        scoreService: clientNpsResponsesTable.scoreService,
+        scoreOrganization: clientNpsResponsesTable.scoreOrganization,
+        scoreGuide: clientNpsResponsesTable.scoreGuide,
+      })
+      .from(clientNpsResponsesTable)
+      .leftJoin(clientsTable, eq(clientsTable.id, clientNpsResponsesTable.clientId))
+      .where(and(...travelConditions))
+      .orderBy(desc(clientNpsResponsesTable.createdAt));
+
+    if (tripId) {
+      const travelRows = await travelQuery;
+      const mapped = travelRows.map(r => ({
+        id: r.id,
+        tenantId: me.tenantId,
+        userId: null as string | null,
+        orderId: null as string | null,
+        score: r.score,
+        classification: (r.score >= 9 ? "promoter" : r.score >= 7 ? "passive" : "detractor") as string,
+        feedback: r.comment ?? null,
+        clientName: r.clientName ?? null,
+        createdAt: r.createdAt.toISOString(),
+        source: "travel" as const,
+        tripId: r.tripId ?? null,
+        scoreTransport: r.scoreTransport ?? null,
+        scoreService: r.scoreService ?? null,
+        scoreOrganization: r.scoreOrganization ?? null,
+        scoreGuide: r.scoreGuide ?? null,
+      }));
+      const filtered = classification && classification !== "all"
+        ? mapped.filter(r => r.classification === classification)
+        : mapped;
+      return void res.json(filtered);
+    }
+
     const [storeRows, travelRows] = await Promise.all([
       db
         .select({
@@ -361,23 +450,10 @@ router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
             ),
           ),
         )
-        .where(eq(npsResponsesTable.tenantId, me.tenantId))
+        .where(and(...storeConditions))
         .orderBy(desc(npsResponsesTable.createdAt)),
-      db
-        .select({
-          id: clientNpsResponsesTable.id,
-          score: clientNpsResponsesTable.score,
-          comment: clientNpsResponsesTable.comment,
-          createdAt: clientNpsResponsesTable.createdAt,
-          clientName: clientsTable.name,
-        })
-        .from(clientNpsResponsesTable)
-        .leftJoin(clientsTable, eq(clientsTable.id, clientNpsResponsesTable.clientId))
-        .where(eq(clientNpsResponsesTable.tenantId, me.tenantId))
-        .orderBy(desc(clientNpsResponsesTable.createdAt)),
+      travelQuery,
     ]);
-
-    const classification = req.query.classification as string | undefined;
 
     const combined = [
       ...storeRows.map(r => ({
@@ -391,6 +467,11 @@ router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
         clientName: r.clientName ?? null,
         createdAt: r.createdAt.toISOString(),
         source: "store" as const,
+        tripId: null as string | null,
+        scoreTransport: null as number | null,
+        scoreService: null as number | null,
+        scoreOrganization: null as number | null,
+        scoreGuide: null as number | null,
       })),
       ...travelRows.map(r => ({
         id: r.id,
@@ -403,6 +484,11 @@ router.get("/nps", async (req, res, next: NextFunction): Promise<void> => {
         clientName: r.clientName ?? null,
         createdAt: r.createdAt.toISOString(),
         source: "travel" as const,
+        tripId: r.tripId ?? null,
+        scoreTransport: r.scoreTransport ?? null,
+        scoreService: r.scoreService ?? null,
+        scoreOrganization: r.scoreOrganization ?? null,
+        scoreGuide: r.scoreGuide ?? null,
       })),
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 

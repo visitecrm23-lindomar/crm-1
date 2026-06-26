@@ -11,6 +11,18 @@ export type ListNpsResponsesParams = {
    * @nullable
    */
   classification?: string | null;
+  /**
+   * @nullable
+   */
+  tripId?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
   page?: number;
   limit?: number;
 };

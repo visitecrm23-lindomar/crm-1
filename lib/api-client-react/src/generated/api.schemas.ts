@@ -2011,7 +2011,8 @@ export interface UpdateCampaignBody {
 
 export interface NpsResponse {
   id: string;
-  userId: string;
+  /** @nullable */
+  userId?: string | null;
   score: number;
   classification: string;
   /** @nullable */
@@ -2019,6 +2020,17 @@ export interface NpsResponse {
   /** @nullable */
   clientName?: string | null;
   createdAt: string;
+  source?: "store" | "travel";
+  /** @nullable */
+  tripId?: string | null;
+  /** @nullable */
+  scoreTransport?: number | null;
+  /** @nullable */
+  scoreService?: number | null;
+  /** @nullable */
+  scoreOrganization?: number | null;
+  /** @nullable */
+  scoreGuide?: number | null;
 }
 
 export interface NpsSendLink {
@@ -3608,8 +3620,35 @@ export type ListNpsResponsesParams = {
    * @nullable
    */
   classification?: string | null;
+  /**
+   * @nullable
+   */
+  tripId?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
   page?: number;
   limit?: number;
+};
+
+export type GetNpsSummaryParams = {
+  /**
+   * @nullable
+   */
+  tripId?: string | null;
+  /**
+   * @nullable
+   */
+  dateFrom?: string | null;
+  /**
+   * @nullable
+   */
+  dateTo?: string | null;
 };
 
 export type SendNpsSurveyBody = {
