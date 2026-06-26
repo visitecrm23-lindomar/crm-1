@@ -43,3 +43,4 @@
 - [Clerk instance mismatch](clerk-instance-mismatch.md) — pk_live_ + sk_test_ from different instances → silent 401 on all requests; secrets override env vars in Replit so delete conflicting env var entirely.
 - [express-rate-limit v8 ipKeyGenerator](express-rate-limit-ipv6.md) — custom keyGenerators must call `ipKeyGenerator(req.ip ?? "unknown")` (string arg), NOT `ipKeyGenerator(req)` — v8 validates the arg type and throws ERR_ERL_KEY_GEN_IPV6.
 - [UploadThing SDK v7 CDN upload bug](uploadthing-sdk-v7-cdn-bug.md) — Effect-Platform adds spurious Range header + double-encodes URL params; patch globalThis.fetch in uploadthing.ts before UTApi instantiation.
+- [Expo pnpm workspace types conflict](expo-pnpm-types-conflict.md) — root pnpm.overrides wins over app-level @types/react specs; downgrade root override to match Expo expected version to silence mismatch warnings

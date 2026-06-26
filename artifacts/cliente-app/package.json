@@ -54,7 +54,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "expo-auth-session": "^56.0.14",
+    "expo-auth-session": "~7.0.11",
     "expo-clipboard": "~8.0.8",
     "expo-file-system": "~19.0.23",
     "expo-secure-store": "~15.0.8",

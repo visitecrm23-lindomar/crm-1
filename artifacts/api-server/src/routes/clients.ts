@@ -26,6 +26,28 @@ import { getRedisConnection } from "../lib/redis";
 import { getAIClientForTenant } from "../lib/ai-client";
 import { z } from "zod";
 
+const ListClientsQuery = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  sortBy: z.enum(["createdAt", "name", "totalSpent", "lastActivity", "purchaseScore", "churnScore"]).default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).default("desc"),
+  search: z.string().max(200).optional(),
+  cpf: z.string().max(20).optional(),
+  status: z.string().optional(),
+  pipelineStage: z.string().optional(),
+  classification: z.string().optional(),
+  city: z.string().max(100).optional(),
+  tripId: z.string().optional(),
+  sellerId: z.string().optional(),
+  origin: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  minPurchaseScore: z.coerce.number().min(0).max(100).optional(),
+  maxPurchaseScore: z.coerce.number().min(0).max(100).optional(),
+  minChurnScore: z.coerce.number().min(0).max(100).optional(),
+  maxChurnScore: z.coerce.number().min(0).max(100).optional(),
+});
+
 const router = Router();
 
 function parseSafeBirthDate(str: string): Date | null {
@@ -105,14 +127,17 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
+    const queryResult = ListClientsQuery.safeParse(req.query);
+    if (!queryResult.success) {
+      next(new ValidationError(queryResult.error.errors[0]?.message ?? "Invalid query params", "VALIDATION_ERROR"));
+      return;
+    }
     const {
       search, cpf: cpfParam, status, pipelineStage, classification,
-      city, tripId, sellerId, origin, dateFrom, dateTo, sortBy = "createdAt", sortOrder = "desc",
-      page = "1", limit = "20",
+      city, tripId, sellerId, origin, dateFrom, dateTo, sortBy, sortOrder,
+      page: pageNum, limit: limitNum,
       minPurchaseScore, maxPurchaseScore, minChurnScore, maxChurnScore,
-    } = req.query as Record<string, string>;
-    const pageNum = parseInt(page) || 1;
-    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    } = queryResult.data;
     const offset = (pageNum - 1) * limitNum;
 
     if (me.role === ROLES.CLIENT) {
@@ -165,10 +190,10 @@ router.get("/clients", async (req, res, next: NextFunction): Promise<void> => {
     if (me.role !== ROLES.SALES && sellerId) conditions.push(eq(clientsTable.createdById, sellerId));
     const scoreSubquery = (col: "purchase_score" | "churn_score") =>
       sql`(SELECT ${sql.raw(col)} FROM client_scores WHERE client_id = ${clientsTable.id} AND tenant_id = ${clientsTable.tenantId})`;
-    if (minPurchaseScore) conditions.push(sql`${scoreSubquery("purchase_score")} >= ${parseInt(minPurchaseScore)}` as ReturnType<typeof eq>);
-    if (maxPurchaseScore) conditions.push(sql`${scoreSubquery("purchase_score")} <= ${parseInt(maxPurchaseScore)}` as ReturnType<typeof eq>);
-    if (minChurnScore) conditions.push(sql`${scoreSubquery("churn_score")} >= ${parseInt(minChurnScore)}` as ReturnType<typeof eq>);
-    if (maxChurnScore) conditions.push(sql`${scoreSubquery("churn_score")} <= ${parseInt(maxChurnScore)}` as ReturnType<typeof eq>);
+    if (minPurchaseScore != null) conditions.push(sql`${scoreSubquery("purchase_score")} >= ${minPurchaseScore}` as ReturnType<typeof eq>);
+    if (maxPurchaseScore != null) conditions.push(sql`${scoreSubquery("purchase_score")} <= ${maxPurchaseScore}` as ReturnType<typeof eq>);
+    if (minChurnScore != null) conditions.push(sql`${scoreSubquery("churn_score")} >= ${minChurnScore}` as ReturnType<typeof eq>);
+    if (maxChurnScore != null) conditions.push(sql`${scoreSubquery("churn_score")} <= ${maxChurnScore}` as ReturnType<typeof eq>);
     if (tripId) {
       const clientIdsInTrip = await db.selectDistinct({ clientId: reservationsTable.clientId })
         .from(reservationsTable)

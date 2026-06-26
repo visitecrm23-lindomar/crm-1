@@ -4,8 +4,17 @@ import { clientsTable, tripsTable, reservationsTable, paymentsTable, dealsTable,
 import { eq, and, gte, lte, lt, desc, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
 import { roundMoney } from "../lib/pricing";
-import { ForbiddenError } from "../lib/errors";
+import { ForbiddenError, ValidationError } from "../lib/errors";
 import { ROLES, RESERVATION_STATUS, PAYMENT_STATUS, PAYMENT_TYPE, DEAL_STATUS, TRIP_STATUS } from "@workspace/permissions";
+import { z } from "zod";
+
+const RevenueChartQuery = z.object({
+  period: z.enum(["7d", "30d", "90d", "12m"]).default("30d"),
+});
+
+const ChartsQuery = z.object({
+  period: z.enum(["3m", "6m", "12m"]).default("12m"),
+});
 
 const router = Router();
 
@@ -287,7 +296,12 @@ router.get("/dashboard/revenue-chart", async (req, res, next: NextFunction): Pro
       return;
     }
 
-    const { period = "30d" } = req.query as Record<string, string>;
+    const queryResult = RevenueChartQuery.safeParse(req.query);
+    if (!queryResult.success) {
+      next(new ValidationError(queryResult.error.errors[0]?.message ?? "Invalid query params", "VALIDATION_ERROR"));
+      return;
+    }
+    const { period } = queryResult.data;
     const now = new Date();
     const points: Array<{ label: string; revenue: number; expenses: number; reservations: number }> = [];
 
@@ -370,7 +384,12 @@ router.get("/dashboard/charts", async (req, res, next: NextFunction): Promise<vo
     const now = new Date();
 
     // Period filter support (default 12m)
-    const { period = "12m" } = req.query as Record<string, string>;
+    const chartsQueryResult = ChartsQuery.safeParse(req.query);
+    if (!chartsQueryResult.success) {
+      next(new ValidationError(chartsQueryResult.error.errors[0]?.message ?? "Invalid query params", "VALIDATION_ERROR"));
+      return;
+    }
+    const { period } = chartsQueryResult.data;
     const monthCount = period === "3m" ? 3 : period === "6m" ? 6 : 12;
     const since = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1), 1);
 

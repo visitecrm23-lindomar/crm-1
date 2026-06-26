@@ -269,7 +269,18 @@ router.get("/deals", async (req, res, next: NextFunction): Promise<void> => {
       next(new ForbiddenError("Access denied", "FORBIDDEN_ROLE"));
       return;
     }
-    const { stageId, clientId, ownerId, status } = req.query as Record<string, string>;
+    const ListDealsQuery = z.object({
+      stageId: z.string().optional(),
+      clientId: z.string().optional(),
+      ownerId: z.string().optional(),
+      status: z.enum(["open", "won", "lost"]).optional(),
+    });
+    const queryResult = ListDealsQuery.safeParse(req.query);
+    if (!queryResult.success) {
+      next(new ValidationError(queryResult.error.errors[0]?.message ?? "Invalid query params", "VALIDATION_ERROR"));
+      return;
+    }
+    const { stageId, clientId, ownerId, status } = queryResult.data;
     const conditions: ReturnType<typeof eq>[] = [eq(dealsTable.tenantId, me.tenantId)];
     if (stageId) conditions.push(eq(dealsTable.stageId, stageId));
     if (clientId) conditions.push(eq(dealsTable.clientId, clientId));

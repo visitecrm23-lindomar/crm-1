@@ -25,9 +25,17 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
-import { RESERVATION_STATUS, REFERRAL_STATUS, type TripStatus, type ReservationStatus } from "@workspace/permissions";
+import { RESERVATION_STATUS, REFERRAL_STATUS, TRIP_STATUS, type TripStatus, type ReservationStatus } from "@workspace/permissions";
 import { parseTripStatus } from "../lib/status-validators";
+
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
+
+const ListTripsQuery = z.object({
+  search: z.string().optional(),
+  status: z.enum(["draft", "published", "active", "confirmed", "cancelled", "completed"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
 
 type SeatMapEntry = { row: number; col: number; floor?: number; status: string; type?: string };
 
@@ -260,9 +268,12 @@ router.get("/trips", async (req, res, next: NextFunction): Promise<void> => {
     const me = await requireAuth(req, res);
     if (!me) return;
 
-    const { search, status, page = "1", limit = "20" } = req.query as Record<string, string>;
-    const pageNum = parseInt(page) || 1;
-    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const queryResult = ListTripsQuery.safeParse(req.query);
+    if (!queryResult.success) {
+      next(new ValidationError(queryResult.error.errors[0]?.message ?? "Invalid query params", "VALIDATION_ERROR"));
+      return;
+    }
+    const { search, status, page: pageNum, limit: limitNum } = queryResult.data;
     const offset = (pageNum - 1) * limitNum;
 
     const conditions: ReturnType<typeof eq>[] = [eq(tripsTable.tenantId, me.tenantId)];
