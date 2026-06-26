@@ -55,11 +55,12 @@ interface CardMarkData {
 interface CardMarkModalProps {
   deal: Deal | null;
   perdidoStageId: string | null | undefined;
+  initialMarking?: "perdida" | "follow" | "";
   onClose: () => void;
   onConfirm: (data: CardMarkData) => Promise<void>;
 }
 
-function CardMarkModal({ deal, perdidoStageId, onClose, onConfirm }: CardMarkModalProps) {
+function CardMarkModal({ deal, perdidoStageId, initialMarking, onClose, onConfirm }: CardMarkModalProps) {
   const [marking, setMarking] = useState<"perdida" | "follow" | "">("");
   const [lostReason, setLostReason] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
@@ -68,11 +69,12 @@ function CardMarkModal({ deal, perdidoStageId, onClose, onConfirm }: CardMarkMod
 
   useEffect(() => {
     if (deal) {
-      setMarking(deal.status === DEAL_STATUS.LOST ? "perdida" : "");
+      setMarking(initialMarking ?? (deal.status === DEAL_STATUS.LOST ? "perdida" : ""));
       setLostReason(deal.lostReason ?? "");
       setFollowUpNote(deal.followUpNote ?? "");
       setTravelReason(deal.travelReason ?? "");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deal]);
 
   async function handleSubmit() {
@@ -1123,7 +1125,7 @@ export default function Pipeline() {
   const [activeDragDeal, setActiveDragDeal] = useState<Deal | null>(null);
   const [client360Id, setClient360Id] = useState<string | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const [pendingMarkDeal, setPendingMarkDeal] = useState<Deal | null>(null);
+  const [pendingMarkDeal, setPendingMarkDeal] = useState<{ deal: Deal; initialMarking?: "perdida" | "follow" | "" } | null>(null);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
   const [newPipelineOpen, setNewPipelineOpen] = useState(false);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
@@ -1281,7 +1283,7 @@ export default function Pipeline() {
 
     const targetStage = stages?.find(s => s.id === targetStageId);
     if (targetStage?.name.toLowerCase() === "perdido") {
-      setPendingMarkDeal(deal);
+      setPendingMarkDeal({ deal, initialMarking: "perdida" });
       return;
     }
 
@@ -1301,6 +1303,7 @@ export default function Pipeline() {
 
   const handleMarkModalConfirm = async (data: CardMarkData) => {
     if (!pendingMarkDeal) return;
+    const { deal: markDeal } = pendingMarkDeal;
     const updates: Parameters<typeof updateDeal.mutateAsync>[0]["data"] = {
       travelReason: data.travelReason.trim() || null,
     };
@@ -1311,12 +1314,10 @@ export default function Pipeline() {
       updates.followUpNote = null;
     } else if (data.marking === "follow") {
       updates.followUpNote = data.followUpNote.trim() || null;
-      if (pendingMarkDeal.status === DEAL_STATUS.LOST) {
-        updates.status = DEAL_STATUS.OPEN as "open";
-        updates.lostReason = null;
-      }
+      // Keep status/stage unchanged — "Follow" just records a follow-up note
+      // regardless of the current deal status (open or lost)
     }
-    await updateDeal.mutateAsync({ id: pendingMarkDeal.id, data: updates });
+    await updateDeal.mutateAsync({ id: markDeal.id, data: updates });
     setPendingMarkDeal(null);
     refetchDeals();
     refetchLostDeals();
@@ -1662,7 +1663,7 @@ export default function Pipeline() {
                         onDelete={handleDelete}
                         onCreateReservation={handleCreateReservation}
                         onViewReservation={handleViewReservation}
-                        onOpenMarkModal={setPendingMarkDeal}
+                        onOpenMarkModal={d => setPendingMarkDeal({ deal: d })}
                         isFinalStage={stage.isFinal}
                         isLostStage={isLostStage}
                       />
@@ -1717,8 +1718,9 @@ export default function Pipeline() {
       <Client360Modal open={!!client360Id} onClose={() => setClient360Id(null)} clientId={client360Id} />
 
       <CardMarkModal
-        deal={pendingMarkDeal}
+        deal={pendingMarkDeal?.deal ?? null}
         perdidoStageId={perdidoStageId}
+        initialMarking={pendingMarkDeal?.initialMarking}
         onClose={() => setPendingMarkDeal(null)}
         onConfirm={handleMarkModalConfirm}
       />
