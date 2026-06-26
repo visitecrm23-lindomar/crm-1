@@ -139,10 +139,11 @@ export function interpolateWhatsAppMessage(
   template: string,
   vars: { nome?: string; codigo?: string; bonus?: string; valor?: string; agencia?: string; link?: string; saldo?: string },
 ): string {
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const replace = (tpl: string, key: string, value: string) =>
     tpl
-      .replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value)
-      .replace(new RegExp(`\\{${key}\\}`, "g"), value);
+      .replace(new RegExp(`\\{\\{${escapeRegex(key)}\\}\\}`, "g"), value)
+      .replace(new RegExp(`\\{${escapeRegex(key)}\\}`, "g"), value);
 
   let result = template;
   result = replace(result, "nome", vars.nome ?? "");

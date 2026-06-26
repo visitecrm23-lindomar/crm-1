@@ -321,8 +321,12 @@ async function processPaymentReminders(): Promise<void> {
   <p>Entre em contato com ${contactLink} para efetuar o pagamento antes do vencimento e garantir sua vaga.</p>
   ${(() => {
     const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
-    const base = (row.agencyWebsite ?? `${STORE_PUBLIC_BASE}/loja/${row.agencySlug}`).replace(/\/$/, "");
-    const profileUrl = `${base}/perfil?tab=reservas`;
+    const rawBase = (row.agencyWebsite ?? `${STORE_PUBLIC_BASE}/loja/${row.agencySlug}`).replace(/\/$/, "");
+    // Only embed http/https URLs — prevent javascript: URI injection
+    if (!/^https?:\/\//i.test(rawBase)) return "";
+    // Encode double-quotes to prevent HTML attribute injection
+    const safeBase = rawBase.replace(/"/g, "%22");
+    const profileUrl = `${safeBase}/perfil?tab=reservas`;
     return `<p style="text-align:center;margin:24px 0;">
     <a href="${profileUrl}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;display:inline-block;font-size:14px;">🎒 Ver Minhas Reservas</a>
   </p>`;

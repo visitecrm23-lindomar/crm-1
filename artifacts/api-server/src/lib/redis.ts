@@ -696,8 +696,9 @@ export async function fetchUpstashDailyStats(): Promise<UpstashDailyStats | null
     const json = (await response.json()) as { result?: string };
     const infoStr = json.result ?? "";
 
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const parseField = (field: string): number | null => {
-      const match = new RegExp(`^${field}:(\\d+)`, "m").exec(infoStr);
+      const match = new RegExp(`^${escapeRegex(field)}:(\\d+)`, "m").exec(infoStr);
       return match ? parseInt(match[1], 10) : null;
     };
 
