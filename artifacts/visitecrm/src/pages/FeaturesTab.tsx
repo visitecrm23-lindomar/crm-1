@@ -17,7 +17,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ToastAction } from "@/components/ui/toast";
 import { Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractApiError } from "@/lib/apiError";
@@ -96,33 +95,25 @@ export function FeaturesTab() {
     return !supportedFeatures.includes(featureKey);
   }
 
-  async function handleToggle(key: "referralsEnabled" | "couponsEnabled" | "seatMapEnabled", value: boolean) {
+  async function handleToggle(
+    key: "referralsEnabled" | "couponsEnabled" | "seatMapEnabled",
+    value: boolean,
+    featureLabel: string,
+    requiredPlanLabel: string,
+  ) {
     if (!tenantId) return;
     try {
       await updateTenant.mutateAsync({ id: tenantId, data: { [key]: value } });
       toast({ title: value ? "Funcionalidade ativada" : "Funcionalidade desativada" });
       await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
     } catch (err) {
-      const is403 = (err as { response?: { status?: number } })?.response?.status === 403;
-      const message = extractApiError(err, "Erro ao salvar configuração");
-      toast({
-        title: message,
-        variant: "destructive",
-        ...(is403 && {
-          action: (
-            <ToastAction
-              altText="Ver plano"
-              onClick={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.set("tab", "plan");
-                window.location.href = url.toString();
-              }}
-            >
-              Ver plano
-            </ToastAction>
-          ),
-        }),
-      });
+      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+      if (code === "PLAN_UPGRADE_REQUIRED") {
+        setUpgradeModal({ label: featureLabel, planLabel: requiredPlanLabel });
+      } else {
+        const message = extractApiError(err, "Erro ao salvar configuração");
+        toast({ title: message, variant: "destructive" });
+      }
     }
   }
 
@@ -189,7 +180,7 @@ export function FeaturesTab() {
                     setUpgradeModal({ label: f.label, planLabel: f.requiredPlanLabel! });
                     return;
                   }
-                  handleToggle(f.key, v);
+                  handleToggle(f.key, v, f.label, f.requiredPlanLabel!);
                 }}
                 disabled={updateTenant.isPending && !locked}
               />

@@ -272,8 +272,8 @@ describe("FeaturesTab — toggle error handling", () => {
     expect(mockToast).toHaveBeenCalledTimes(1);
   });
 
-  it("includes a 'Ver plano' action in the toast when a 403 is returned", async () => {
-    const error403 = { response: { status: 403 } };
+  it("shows a destructive toast (no modal) for a generic 403 without PLAN_UPGRADE_REQUIRED code", async () => {
+    const error403 = { response: { status: 403, data: { code: "FORBIDDEN_ROLE" } } };
     mockMutateAsync.mockRejectedValue(error403);
     mockGetTenant.mockReturnValue(makeTenantData(true));
 
@@ -287,10 +287,52 @@ describe("FeaturesTab — toggle error handling", () => {
     });
 
     expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "destructive", action: expect.anything() }),
+      expect.objectContaining({ variant: "destructive" }),
     );
-    const toastArgs = mockToast.mock.calls[0][0] as { action: ReactElement };
-    const { container: actionContainer } = await renderComponent(toastArgs.action);
-    expect(actionContainer.textContent).toContain("Ver plano");
+    expect(container.textContent).not.toContain("Funcionalidade bloqueada");
+  });
+
+  it("shows the upgrade modal (not a toast) when PLAN_UPGRADE_REQUIRED is returned", async () => {
+    const planUpgradeError = {
+      response: { status: 403, data: { code: "PLAN_UPGRADE_REQUIRED" } },
+    };
+    mockMutateAsync.mockRejectedValue(planUpgradeError);
+    mockGetTenant.mockReturnValue(makeTenantData(false));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(mockToast).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Funcionalidade bloqueada");
+    expect(container.textContent).toContain("Mapa de Assentos Personalizável");
+  });
+
+  it("reverts the toggle to its server state after a PLAN_UPGRADE_REQUIRED error", async () => {
+    const planUpgradeError = {
+      response: { status: 403, data: { code: "PLAN_UPGRADE_REQUIRED" } },
+    };
+    mockMutateAsync.mockRejectedValue(planUpgradeError);
+    mockGetTenant.mockReturnValue(makeTenantData(false));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
+    expect(seatMapSwitch.getAttribute("aria-checked")).toBe("false");
+
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    // Switch stays at its server-controlled value (false) — mutation failed,
+    // no cache invalidation, so the controlled value is unchanged.
+    expect(seatMapSwitch.getAttribute("aria-checked")).toBe("false");
   });
 });
