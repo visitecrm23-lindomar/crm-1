@@ -100,6 +100,7 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
+  Save,
 } from "lucide-react";
 import { formatCurrencyBRL } from "@/lib/utils";
 import { ROLES, INVOICE_STATUS } from "@workspace/permissions";
@@ -2205,6 +2206,87 @@ function GoogleCalendarCard() {
   );
 }
 
+/* ──────────────────── NPS Categories Section ──────────────────── */
+function NpsCategoriesSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: fullTenant } = useGetTenant(tenantId ?? "", {
+    query: { queryKey: getGetTenantQueryKey(tenantId ?? ""), enabled: !!tenantId },
+  });
+  const updateTenant = useUpdateTenant();
+
+  const currentSettings = (fullTenant?.settings as Record<string, unknown> | null | undefined) ?? {};
+  const currentCategories = (currentSettings.npsCategories as { transport?: boolean; service?: boolean; organization?: boolean; guide?: boolean } | null | undefined) ?? null;
+
+  const [transport, setTransport] = useState(currentCategories?.transport !== false);
+  const [service, setService] = useState(currentCategories?.service !== false);
+  const [organization, setOrganization] = useState(currentCategories?.organization !== false);
+  const [guide, setGuide] = useState(currentCategories?.guide !== false);
+
+  useEffect(() => {
+    setTransport(currentCategories?.transport !== false);
+    setService(currentCategories?.service !== false);
+    setOrganization(currentCategories?.organization !== false);
+    setGuide(currentCategories?.guide !== false);
+  }, [fullTenant?.id]);
+
+  async function handleSave() {
+    if (!tenantId) return;
+    try {
+      await updateTenant.mutateAsync({
+        id: tenantId,
+        data: { npsCategories: { transport, service, organization, guide } },
+      });
+      await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
+      toast({ title: "Categorias NPS salvas com sucesso" });
+    } catch {
+      toast({ title: "Erro ao salvar categorias NPS", variant: "destructive" });
+    }
+  }
+
+  const CATEGORIES = [
+    { key: "transport" as const, label: "🚌 Transporte/Ônibus", value: transport, onChange: setTransport },
+    { key: "service" as const, label: "👥 Atendimento da equipe", value: service, onChange: setService },
+    { key: "organization" as const, label: "📋 Organização da viagem", value: organization, onChange: setOrganization },
+    { key: "guide" as const, label: "🎤 Guia/Monitoria", value: guide, onChange: setGuide },
+  ];
+
+  return (
+    <div className="rounded-md border p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">Categorias do formulário NPS</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Escolha quais categorias de satisfação aparecem no formulário enviado ao cliente.
+          Agências sem guia, por exemplo, podem desativar a categoria Guia/Monitoria.
+        </p>
+      </div>
+      <div className="divide-y rounded-md border">
+        {CATEGORIES.map((cat) => (
+          <div key={cat.key} className="flex items-center justify-between px-4 py-3">
+            <Label className="cursor-pointer text-sm">{cat.label}</Label>
+            <Switch checked={cat.value} onCheckedChange={cat.onChange} />
+          </div>
+        ))}
+      </div>
+      <Button size="sm" onClick={handleSave} disabled={updateTenant.isPending}>
+        {updateTenant.isPending ? (
+          <>
+            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            Salvando...
+          </>
+        ) : (
+          <>
+            <Save className="w-3.5 h-3.5 mr-1.5" />
+            Salvar categorias
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
 /* ──────────────────── Notifications Tab ──────────────────── */
 function NotificationsTab() {
   const { toast } = useToast();
@@ -2322,6 +2404,8 @@ function NotificationsTab() {
           <strong>NPS</strong>.
         </p>
       </div>
+
+      <NpsCategoriesSection />
     </div>
   );
 }

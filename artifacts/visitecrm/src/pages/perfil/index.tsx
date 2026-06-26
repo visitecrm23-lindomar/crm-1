@@ -550,8 +550,18 @@ function StarRating({
   );
 }
 
-function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservations"][number] }) {
+function NpsCard({
+  reservation,
+  npsCategories,
+}: {
+  reservation: ClientPortalProfile["reservations"][number];
+  npsCategories?: { transport?: boolean; service?: boolean; organization?: boolean; guide?: boolean } | null;
+}) {
   const { toast } = useToast();
+  const showTransport = npsCategories ? (npsCategories.transport !== false) : true;
+  const showService = npsCategories ? (npsCategories.service !== false) : true;
+  const showOrganization = npsCategories ? (npsCategories.organization !== false) : true;
+  const showGuide = npsCategories ? (npsCategories.guide !== false) : true;
   const [score, setScore] = useState<number | null>(null);
   const [scoreTransport, setScoreTransport] = useState<number | null>(null);
   const [scoreService, setScoreService] = useState<number | null>(null);
@@ -642,30 +652,39 @@ function NpsCard({ reservation }: { reservation: ClientPortalProfile["reservatio
             <span>Extremamente provável</span>
           </div>
         </div>
-        <div className="space-y-3 pt-2 border-t">
-          <p className="text-xs text-muted-foreground">Avalie cada aspecto da viagem (opcional)</p>
-          <StarRating
-            value={scoreTransport}
-            onChange={setScoreTransport}
-            label="🚌 Transporte/Ônibus"
-          />
-          <StarRating
-            value={scoreService}
-            onChange={setScoreService}
-            label="👥 Atendimento da equipe"
-          />
-          <StarRating
-            value={scoreOrganization}
-            onChange={setScoreOrganization}
-            label="📋 Organização da viagem"
-          />
-          <StarRating
-            value={scoreGuide}
-            onChange={setScoreGuide}
-            label="🎤 Guia/Monitoria"
-            hint="Pule se não houve guia"
-          />
-        </div>
+        {(showTransport || showService || showOrganization || showGuide) && (
+          <div className="space-y-3 pt-2 border-t">
+            <p className="text-xs text-muted-foreground">Avalie cada aspecto da viagem (opcional)</p>
+            {showTransport && (
+              <StarRating
+                value={scoreTransport}
+                onChange={setScoreTransport}
+                label="🚌 Transporte/Ônibus"
+              />
+            )}
+            {showService && (
+              <StarRating
+                value={scoreService}
+                onChange={setScoreService}
+                label="👥 Atendimento da equipe"
+              />
+            )}
+            {showOrganization && (
+              <StarRating
+                value={scoreOrganization}
+                onChange={setScoreOrganization}
+                label="📋 Organização da viagem"
+              />
+            )}
+            {showGuide && (
+              <StarRating
+                value={scoreGuide}
+                onChange={setScoreGuide}
+                label="🎤 Guia/Monitoria"
+              />
+            )}
+          </div>
+        )}
         <textarea
           placeholder="Conte-nos mais sobre sua experiência (opcional)"
           value={comment}
@@ -977,7 +996,7 @@ function InicioTab({
             Como foi sua viagem?
           </h3>
           {npsTrips.map((r) => (
-            <NpsCard key={r.id} reservation={r} />
+            <NpsCard key={r.id} reservation={r} npsCategories={profile.tenant?.npsCategories} />
           ))}
         </div>
       )}

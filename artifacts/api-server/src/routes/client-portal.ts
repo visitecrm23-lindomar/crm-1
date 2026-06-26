@@ -94,6 +94,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
         slug: tenantsTable.slug,
         logoUrl: tenantsTable.logoUrl,
         primaryColor: tenantsTable.primaryColor,
+        settings: tenantsTable.settings,
       })
       .from(tenantsTable)
       .where(eq(tenantsTable.id, me.tenantId))
@@ -440,6 +441,7 @@ router.get("/client/me", async (req, res, next: NextFunction): Promise<void> => 
             slug: tenant.slug,
             logoUrl: tenant.logoUrl,
             primaryColor: tenant.primaryColor ?? "#3B82F6",
+            npsCategories: (tenant.settings as Record<string, unknown> | null)?.npsCategories ?? null,
           }
         : null,
       reservations,

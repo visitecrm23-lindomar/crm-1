@@ -36,6 +36,12 @@ const UpdateTenantBody = z.object({
   couponsEnabled: z.boolean().nullable().optional(),
   referralsEnabled: z.boolean().nullable().optional(),
   seatMapEnabled: z.boolean().nullable().optional(),
+  npsCategories: z.object({
+    transport: z.boolean().optional(),
+    service: z.boolean().optional(),
+    organization: z.boolean().optional(),
+    guide: z.boolean().optional(),
+  }).nullable().optional(),
 });
 
 router.get("/admin/stats", async (req, res, next: NextFunction): Promise<void> => {
@@ -154,7 +160,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     }
     const parsed = UpdateTenantBody.safeParse(req.body);
     if (!parsed.success) { next(new ValidationError(String(parsed.error.message ), "VALIDATION_ERROR")); return; }
-    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, seatMapEnabled, suspensionReason, ...rest } = parsed.data;
+    const { birthdayMessagesEnabled, couponsEnabled, referralsEnabled, seatMapEnabled, npsCategories, suspensionReason, ...rest } = parsed.data;
     const updateData: Record<string, unknown> = { ...rest };
     if (me.role !== ROLES.SUPER_ADMIN) {
       delete updateData.planId;
@@ -202,6 +208,7 @@ router.patch("/tenants/:id", async (req, res, next: NextFunction): Promise<void>
     if (couponsEnabled !== undefined) settingsUpdates.couponsEnabled = couponsEnabled ?? true;
     if (referralsEnabled !== undefined) settingsUpdates.referralsEnabled = referralsEnabled ?? true;
     if (seatMapEnabled !== undefined) settingsUpdates.seatMapEnabled = seatMapEnabled ?? true;
+    if (npsCategories !== undefined) settingsUpdates.npsCategories = npsCategories ?? { transport: true, service: true, organization: true, guide: true };
     if (Object.keys(settingsUpdates).length > 0) {
       const currentSettings = (existing?.settings ?? {}) as Record<string, unknown>;
       updateData.settings = { ...currentSettings, ...settingsUpdates };

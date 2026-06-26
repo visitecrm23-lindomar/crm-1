@@ -107,6 +107,12 @@ export interface ClientPortalProfile {
     slug: string;
     logoUrl: string | null;
     primaryColor: string;
+    npsCategories: {
+      transport?: boolean;
+      service?: boolean;
+      organization?: boolean;
+      guide?: boolean;
+    } | null;
   } | null;
   reservations: ClientPortalReservation[];
   referral: {

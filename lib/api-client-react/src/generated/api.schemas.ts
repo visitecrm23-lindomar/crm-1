@@ -2243,6 +2243,8 @@ export interface Tenant {
   reservationPrefix?: string | null;
   /** @nullable */
   prefixLocked?: boolean | null;
+  /** @nullable */
+  settings?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -2288,6 +2290,12 @@ export interface UpdateTenantBody {
   couponsEnabled?: boolean | null;
   /** @nullable */
   referralsEnabled?: boolean | null;
+  npsCategories?: {
+    transport?: boolean;
+    service?: boolean;
+    organization?: boolean;
+    guide?: boolean;
+  } | null;
 }
 
 export interface BoardingLocation {
