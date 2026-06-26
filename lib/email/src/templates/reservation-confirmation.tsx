@@ -48,6 +48,8 @@ export interface ReservationConfirmationEmailProps {
   voucherUrl: string
   consultUrl: string
   whatsappUrl: string
+  /** Deep-link to the client's "Reservas" tab on their portal profile page (/perfil?tab=reservas). Optional — omit when the client has no portal account. */
+  profileUrl?: string
   credentials?: ReservationCredentials
 }
 
@@ -77,6 +79,7 @@ export function ReservationConfirmationEmail({
   voucherUrl,
   consultUrl,
   whatsappUrl,
+  profileUrl,
   credentials,
 }: ReservationConfirmationEmailProps) {
   return (
@@ -272,11 +275,18 @@ export function ReservationConfirmationEmail({
               </Column>
             </Row>
             <Row>
-              <Column>
+              <Column style={buttonColumn}>
                 <Button style={buttonOutline} href={consultUrl}>
                   🔍 Consultar Pedido
                 </Button>
               </Column>
+              {profileUrl && (
+                <Column style={buttonColumn}>
+                  <Button style={buttonOutline} href={profileUrl}>
+                    🎒 Minhas Reservas
+                  </Button>
+                </Column>
+              )}
             </Row>
           </Section>
 

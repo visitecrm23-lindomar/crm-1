@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy, X,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy, X, Link,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -911,10 +911,28 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                     </div>
                   )}
                 </div>
-                {(() => {
-                  const s = STATUS_LABELS[client.status];
-                  return s ? <Badge className={`${s.color} border ml-auto`}>{s.label}</Badge> : null;
-                })()}
+                <div className="flex items-center gap-2 ml-auto">
+                  {(() => {
+                    const s = STATUS_LABELS[client.status];
+                    return s ? <Badge className={`${s.color} border`}>{s.label}</Badge> : null;
+                  })()}
+                  <div className="relative group">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted hover:bg-muted/70 transition-colors text-muted-foreground"
+                      title="Copiar link direto para o perfil do cliente"
+                      onClick={() => {
+                        const base = window.location.origin;
+                        const url = `${base}/perfil?tab=reservas`;
+                        navigator.clipboard.writeText(url).catch(() => {});
+                        toast({ title: "Link copiado!", description: "Link para a aba Reservas do perfil." });
+                      }}
+                    >
+                      <Link className="w-3 h-3" />
+                      Link perfil
+                    </button>
+                  </div>
+                </div>
               </div>
             </DialogHeader>
 

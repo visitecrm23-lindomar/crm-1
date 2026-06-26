@@ -3689,6 +3689,20 @@ function ClubeTab({ profile }: { profile: ClientPortalProfile }) {
   );
 }
 
+/**
+ * Valid values for the `?tab=<value>` query parameter on this page.
+ *
+ * Deep-link format: `/perfil?tab=<value>`
+ *
+ * Examples:
+ *   /perfil?tab=reservas      → opens the Reservas (bookings) tab
+ *   /perfil?tab=fidelidade    → opens the Fidelidade (loyalty) tab
+ *   /perfil?tab=indicacoes    → opens the Indicações (referrals) tab
+ *   /perfil?tab=dados         → opens the Meus Dados tab
+ *   /perfil?tab=favoritos     → opens the Favoritos tab
+ *
+ * Invalid or missing values fall back to "inicio".
+ */
 const VALID_PERFIL_TABS = ["inicio", "reservas", "dados", "indicacoes", "fidelidade", "preferencias", "favoritos", "conquistas", "mapa", "sonhos", "memorias", "clube"];
 
 export default function PerfilPage() {

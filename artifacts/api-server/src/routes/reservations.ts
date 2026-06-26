@@ -1049,6 +1049,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
         const publicBase = agencyWebsite.replace(/\/$/, "");
         const voucherUrl = `${publicBase}/reserva/${reservation.voucherCode}`;
         const consultUrl = `${publicBase}/reservas`;
+        const profileUrl = `${publicBase}/perfil?tab=reservas`;
         const subject = `Reserva Confirmada — ${reservation.reservationNumber ?? reservation.voucherCode}`;
         await enqueueReservationConfirmationEmail({
           tenantId: me.tenantId,
@@ -1079,6 +1080,7 @@ router.post("/reservations", async (req, res, next: NextFunction): Promise<void>
             agencyWebsite,
             voucherUrl,
             consultUrl,
+            profileUrl,
             whatsappUrl,
           },
         });

@@ -488,6 +488,7 @@ export async function buildEmailPropsFromReservation(
   const publicBase = agencyWebsite.replace(/\/$/, "");
   const voucherUrl = `${publicBase}/reserva/${row.voucherCode}`;
   const consultUrl = `${publicBase}/reservas`;
+  const profileUrl = `${publicBase}/perfil?tab=reservas`;
 
   return {
     reservationNumber: row.reservationNumber ?? row.voucherCode ?? "",
@@ -514,6 +515,7 @@ export async function buildEmailPropsFromReservation(
     agencyWebsite,
     voucherUrl,
     consultUrl,
+    profileUrl,
     whatsappUrl,
   };
 }
