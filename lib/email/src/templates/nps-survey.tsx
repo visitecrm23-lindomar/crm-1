@@ -19,6 +19,9 @@ export interface NpsSurveyEmailProps {
   returnDate: string
   surveyBaseUrl: string
   token: string
+  /** Optional client portal URL. When provided, a CTA button linking to the
+   *  portal's /perfil page is shown so the client can also rate through the app. */
+  portalUrl?: string | null
 }
 
 export function NpsSurveyEmail({
@@ -28,6 +31,7 @@ export function NpsSurveyEmail({
   tripName,
   surveyBaseUrl,
   token,
+  portalUrl,
 }: NpsSurveyEmailProps) {
   const firstName = clientName.split(' ')[0]
   const scores = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -110,6 +114,20 @@ export function NpsSurveyEmail({
               Basta clicar no número que melhor representa sua opinião.
               A pesquisa leva menos de 30 segundos.
             </Text>
+
+            {portalUrl ? (
+              <Section style={portalSection}>
+                <Text style={portalText}>
+                  Prefere avaliar pelo app? Acesse sua área do cliente:
+                </Text>
+                <a
+                  href={portalUrl}
+                  style={portalButton}
+                >
+                  Acessar minha área do cliente
+                </a>
+              </Section>
+            ) : null}
           </Section>
 
           <Hr style={hr} />
@@ -208,6 +226,28 @@ const smallText: React.CSSProperties = {
   lineHeight: '1.5',
   margin: '0',
   textAlign: 'center',
+}
+
+const portalSection: React.CSSProperties = {
+  marginTop: '24px',
+  textAlign: 'center',
+}
+
+const portalText: React.CSSProperties = {
+  color: '#6b7280',
+  fontSize: '13px',
+  margin: '0 0 12px',
+}
+
+const portalButton: React.CSSProperties = {
+  display: 'inline-block',
+  backgroundColor: '#1e40af',
+  color: '#ffffff',
+  padding: '10px 24px',
+  borderRadius: '8px',
+  textDecoration: 'none',
+  fontSize: '14px',
+  fontWeight: '600',
 }
 
 const hr: React.CSSProperties = {

@@ -3,8 +3,8 @@ import { useAuth, useUser } from "@clerk/clerk-expo";
 import { SkeletonBox } from "@/components/Skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
-import React, { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -59,6 +59,15 @@ export default function PerfilScreen() {
   const [phoneInput, setPhoneInput] = useState("");
   const [birthDateInput, setBirthDateInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const params = useLocalSearchParams<{ openNps?: string }>();
+
+  // When the client portal email CTA is clicked with ?openNps=1, navigate
+  // to the home tab where the NPS survey modal auto-appears for eligible trips.
+  useEffect(() => {
+    if (params.openNps === "1") {
+      router.replace("/(tabs)/");
+    }
+  }, [params.openNps]);
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery<ClientPortalProfile>({
     queryKey: ["client-profile"],

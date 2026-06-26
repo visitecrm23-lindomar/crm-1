@@ -1480,6 +1480,13 @@ export async function processNpsDispatch(): Promise<void> {
         );
 
       const baseUrl = process.env["API_BASE_URL"] ?? process.env["FRONTEND_URL"] ?? "";
+      // CLIENT_PORTAL_URL is the base URL of the client portal app.
+      // When set, the NPS survey email includes a CTA button linking to the
+      // client's /perfil page so they can also rate through the portal.
+      const clientPortalBase = (process.env["CLIENT_PORTAL_URL"] ?? "").replace(/\/$/, "");
+      // Deeplink to the NPS card on the profile page. The `openNps=1` param is
+      // read by perfil.tsx to auto-scroll and highlight the NPS survey card.
+      const portalUrl = clientPortalBase ? `${clientPortalBase}/perfil?openNps=1` : null;
 
       for (const row of eligible) {
         if (!row.clientEmail) { skipped++; continue; }
@@ -1512,6 +1519,7 @@ export async function processNpsDispatch(): Promise<void> {
             returnDate: row.returnDate?.toISOString() ?? "",
             surveyBaseUrl: baseUrl,
             token: newInvitation.token,
+            portalUrl,
           });
 
           if (result.success) {
