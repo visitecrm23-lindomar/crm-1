@@ -429,34 +429,126 @@ function generateFloorCells(
   return cells;
 }
 
+function computePreviewLabels(cells: LayoutCell[], numberingType: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const seatTypes = SEAT_TYPES_RENUMBER as readonly string[];
+  const upperFirst = numberingType.endsWith("_upper_first");
+  const baseType = upperFirst ? numberingType.replace("_upper_first", "") : numberingType;
+  const keyOf = (c: LayoutCell) => `${c.floor ?? 1}-${c.row}-${c.col}`;
+
+  const seatCells = cells
+    .filter(c => seatTypes.includes(c.type))
+    .sort((a, b) => {
+      const fa = a.floor ?? 1, fb = b.floor ?? 1;
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+      if (a.row !== b.row) return a.row - b.row;
+      return a.col - b.col;
+    });
+
+  if (seatCells.length === 0) return result;
+
+  const maxFloor = Math.max(...cells.map(c => c.floor ?? 1), 1);
+  const isMultiFloor = maxFloor > 1;
+
+  if (baseType === "by_row") {
+    const floorRowGroups = new Map<string, LayoutCell[]>();
+    for (const cell of seatCells) {
+      const floor = cell.floor ?? 1;
+      const groupKey = `${floor}-${cell.row}`;
+      if (!floorRowGroups.has(groupKey)) floorRowGroups.set(groupKey, []);
+      floorRowGroups.get(groupKey)!.push(cell);
+    }
+    for (const [groupKey, groupCells] of [...floorRowGroups.entries()].sort(([a], [b]) => {
+      const [fa, ra] = a.split("-").map(Number);
+      const [fb, rb] = b.split("-").map(Number);
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+      return ra - rb;
+    })) {
+      const [floor, row] = groupKey.split("-").map(Number);
+      groupCells.sort((a, b) => a.col - b.col);
+      groupCells.forEach((cell, i) => {
+        const floorPrefix = isMultiFloor ? `A${floor}-` : "";
+        result.set(keyOf(cell), `${floorPrefix}${row}${String.fromCharCode(65 + i)}`);
+      });
+    }
+  } else if (baseType === "brazilian_standard") {
+    const maxCol = Math.max(...seatCells.map(c => c.col), 4);
+    const aisleCol = Math.ceil(maxCol / 2);
+
+    const rowGroups = new Map<string, LayoutCell[]>();
+    for (const cell of seatCells) {
+      const key = `${cell.floor ?? 1}-${cell.row}`;
+      if (!rowGroups.has(key)) rowGroups.set(key, []);
+      rowGroups.get(key)!.push(cell);
+    }
+
+    const sortedGroups = [...rowGroups.entries()].sort(([a], [b]) => {
+      const [fa, ra] = a.split("-").map(Number);
+      const [fb, rb] = b.split("-").map(Number);
+      if (fa !== fb) return upperFirst ? fb - fa : fa - fb;
+      return ra - rb;
+    });
+
+    let counter = 1;
+    for (const [, groupCells] of sortedGroups) {
+      const leftCells = groupCells.filter(c => c.col <= aisleCol).sort((a, b) => a.col - b.col);
+      const rightCells = groupCells.filter(c => c.col > aisleCol).sort((a, b) => a.col - b.col);
+      for (const lCell of leftCells) {
+        result.set(keyOf(lCell), String(counter++));
+      }
+      const rightBase = counter;
+      for (let i = 0; i < rightCells.length; i++) {
+        result.set(keyOf(rightCells[i]), String(rightBase + (rightCells.length - 1 - i)));
+      }
+      counter += rightCells.length;
+    }
+  } else {
+    seatCells.forEach((cell, i) => {
+      result.set(keyOf(cell), String(i + 1));
+    });
+  }
+
+  return result;
+}
+
 function GridCell({
   cell,
   selected,
   onClick,
   cellSize,
+  previewLabel,
 }: {
   cell: LayoutCell;
   selected: boolean;
   onClick: () => void;
   cellSize: number;
+  previewLabel?: string;
 }) {
   const info = cellTypeMap[cell.type] ?? cellTypeMap["seat"];
+  const displayLabel = previewLabel ?? ((SEAT_TYPES_RENUMBER as readonly string[]).includes(cell.type) ? (cell.label ?? undefined) : undefined);
   return (
     <button
       type="button"
       onClick={onClick}
       style={{ width: cellSize, height: cellSize }}
       className={`
-        rounded border-2 flex items-center justify-center text-center transition-all
+        rounded border-2 flex flex-col items-center justify-center text-center transition-all
         hover:scale-105 hover:shadow-sm
         ${selected ? "ring-2 ring-offset-1 ring-primary scale-105" : ""}
         ${info.bg} ${info.border} ${info.text}
       `}
-      title={info.label}
+      title={displayLabel ? `${info.label} ${displayLabel}` : info.label}
     >
-      <span style={{ fontSize: Math.max(10, cellSize * 0.4) }}>
-        {info.emoji}
-      </span>
+      {displayLabel ? (
+        <>
+          <span style={{ fontSize: Math.max(6, cellSize * 0.2), lineHeight: 1 }}>{info.emoji}</span>
+          <span style={{ fontSize: Math.max(8, cellSize * 0.32), lineHeight: 1, fontWeight: 700 }}>{displayLabel}</span>
+        </>
+      ) : (
+        <span style={{ fontSize: Math.max(10, cellSize * 0.4) }}>
+          {info.emoji}
+        </span>
+      )}
     </button>
   );
 }
@@ -836,6 +928,10 @@ function LayoutEditorModal({
   const aisleAfterCol = Math.ceil(activeFloorDims.cols / 2);
   const cellSize = Math.min(42, Math.floor(320 / activeFloorDims.cols));
   const activeFloorCells = form.cells.filter(c => (c.floor ?? 1) === editingFloor);
+  const previewLabelMap = useMemo(
+    () => computePreviewLabels(form.cells, form.numberingType),
+    [form.cells, form.numberingType],
+  );
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -1100,6 +1196,7 @@ function LayoutEditorModal({
                             selected={false}
                             onClick={() => handleCellClick(cell.row, cell.col, cell.floor ?? 1)}
                             cellSize={cellSize}
+                            previewLabel={previewLabelMap.get(`${cell.floor ?? 1}-${cell.row}-${cell.col}`)}
                           />
                         ))}
                       </div>
@@ -1112,6 +1209,7 @@ function LayoutEditorModal({
                             selected={false}
                             onClick={() => handleCellClick(cell.row, cell.col, cell.floor ?? 1)}
                             cellSize={cellSize}
+                            previewLabel={previewLabelMap.get(`${cell.floor ?? 1}-${cell.row}-${cell.col}`)}
                           />
                         ))}
                       </div>
