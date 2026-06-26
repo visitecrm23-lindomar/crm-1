@@ -941,6 +941,26 @@ router.post("/trips/:id/regenerate-seat-map", async (req, res, next: NextFunctio
         .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)));
     });
 
+    const seatsChangedCount = pendingUpdates.reduce((acc, { oldSeats, newSeats }) => {
+      return acc + oldSeats.filter((s, i) => s !== newSeats[i]).length;
+    }, 0);
+
+    await db.insert(auditLogsTable).values({
+      id: generateId(),
+      tenantId: me.tenantId,
+      userId: me.id,
+      action: "regenerate_seat_map",
+      entityType: "trip",
+      entityId: req.params.id,
+      after: {
+        reservationsRenumbered: pendingUpdates.filter(({ oldSeats, newSeats }) => JSON.stringify(oldSeats) !== JSON.stringify(newSeats)).length,
+        seatsChanged: seatsChangedCount,
+        layoutId: trip.layoutId,
+      },
+      ipAddress: req.ip ?? null,
+      userAgent: req.headers["user-agent"] ?? null,
+    });
+
     const [updatedTrip] = await db.select().from(tripsTable)
       .where(and(eq(tripsTable.id, req.params.id), eq(tripsTable.tenantId, me.tenantId)))
       .limit(1);
