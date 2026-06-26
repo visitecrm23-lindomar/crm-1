@@ -618,6 +618,7 @@ export default function HomeScreen() {
         <NpsSurveyModal
           reservation={npsReservation}
           onDismiss={handleNpsDismiss}
+          npsCategories={data?.tenant?.npsCategories}
         />
       ) : null}
     </View>

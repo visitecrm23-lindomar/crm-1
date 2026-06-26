@@ -29,7 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Search, Trash2, Phone, Calendar, MapPin, X, Pencil, UserPen, Eye, BookOpen,
   ExternalLink, ShoppingBag, ChevronDown, ChevronUp, BarChart2, Loader2, XCircle,
-  Settings2, Star, ChevronRight, ChevronLeft, GripVertical, Plane, ArrowRightLeft,
+  Settings2, Star, ChevronRight, ChevronLeft, GripVertical, Plane, ArrowRightLeft, Bell,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -399,6 +399,15 @@ function ClientCardContent({ deal, tripsById, onEditClient, onView360, onDelete,
           <span className="text-xs bg-purple-50 text-purple-600 border border-purple-100 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
             <Plane className="w-2.5 h-2.5 shrink-0" />
             {deal.travelReason}
+          </span>
+        </div>
+      )}
+
+      {deal.followUpNote && (
+        <div className="mb-1">
+          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded inline-flex items-center gap-1 max-w-full">
+            <Bell className="w-2.5 h-2.5 shrink-0" />
+            <span className="truncate">{deal.followUpNote}</span>
           </span>
         </div>
       )}

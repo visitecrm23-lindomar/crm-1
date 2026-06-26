@@ -3,8 +3,10 @@ import {
   useGetNpsSummary,
   useListNpsResponses,
   useSendNpsSurvey,
+  useGetTrip,
+  useGetMe,
+  useGetTenant,
 } from "@workspace/api-client-react";
-import { useGetTrip } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -229,6 +231,14 @@ export function TripNpsTab({ tripId }: { tripId: string }) {
   const [sendOpen, setSendOpen] = useState(false);
   const [generatedLinks, setGeneratedLinks] = useState<NpsSendLink[]>([]);
 
+  const { data: me } = useGetMe();
+  const tenantId = me?.tenantId ?? null;
+  const { data: tenantData } = useGetTenant(tenantId ?? "", {
+    query: { enabled: !!tenantId, queryKey: ["tenant", tenantId] },
+  });
+  const npsCategories = ((tenantData as (typeof tenantData & { settings?: Record<string, unknown> }))?.settings?.npsCategories ?? {}) as { transport?: boolean; service?: boolean; organization?: boolean; guide?: boolean };
+  const isCategoryEnabled = (key: string) => (npsCategories as Record<string, boolean | undefined>)[key] !== false;
+
   const { data: trip } = useGetTrip(tripId, {
     query: { queryKey: ["/api/trips", tripId] },
   });
@@ -446,11 +456,11 @@ export function TripNpsTab({ tripId }: { tripId: string }) {
               <CardContent className="pt-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: "Transporte", value: summary.avgTransport, icon: <Bus className="w-4 h-4" />, color: "text-blue-500" },
-                    { label: "Atendimento", value: summary.avgService, icon: <HeartHandshake className="w-4 h-4" />, color: "text-green-500" },
-                    { label: "Organização", value: summary.avgOrganization, icon: <ClipboardList className="w-4 h-4" />, color: "text-purple-500" },
-                    { label: "Guia", value: summary.avgGuide, icon: <PersonStanding className="w-4 h-4" />, color: "text-orange-500" },
-                  ].map(({ label, value, icon, color }) => (
+                    { label: "Transporte", key: "transport", value: summary.avgTransport, icon: <Bus className="w-4 h-4" />, color: "text-blue-500" },
+                    { label: "Atendimento", key: "service", value: summary.avgService, icon: <HeartHandshake className="w-4 h-4" />, color: "text-green-500" },
+                    { label: "Organização", key: "organization", value: summary.avgOrganization, icon: <ClipboardList className="w-4 h-4" />, color: "text-purple-500" },
+                    { label: "Guia", key: "guide", value: summary.avgGuide, icon: <PersonStanding className="w-4 h-4" />, color: "text-orange-500" },
+                  ].filter(({ key }) => isCategoryEnabled(key)).map(({ label, value, icon, color }) => (
                     <div key={label} className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted/50">
                       <span className={color}>{icon}</span>
                       <p className="text-xs text-muted-foreground font-medium">{label}</p>

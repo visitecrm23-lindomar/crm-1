@@ -34,8 +34,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, Calendar, FileText, Download, Upload, Trash2,
   Star, TrendingUp, Gift, Award, Zap, MessageSquare, Loader2, Plus,
-  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy, X, Link,
+  CreditCard, CheckSquare, XCircle, Globe, RefreshCw, AlertCircle, Ban, ShieldCheck, Clock, ChevronDown, Copy, X, Link, ChevronRight,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -916,22 +919,48 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                     const s = STATUS_LABELS[client.status];
                     return s ? <Badge className={`${s.color} border`}>{s.label}</Badge> : null;
                   })()}
-                  <div className="relative group">
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted hover:bg-muted/70 transition-colors text-muted-foreground"
-                      title="Copiar link direto para o perfil do cliente"
-                      onClick={() => {
-                        const base = window.location.origin;
-                        const url = `${base}/perfil?tab=reservas`;
-                        navigator.clipboard.writeText(url).catch(() => {});
-                        toast({ title: "Link copiado!", description: "Link para a aba Reservas do perfil." });
-                      }}
-                    >
-                      <Link className="w-3 h-3" />
-                      Link perfil
-                    </button>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded border bg-muted hover:bg-muted/70 transition-colors text-muted-foreground"
+                        title="Copiar link direto para uma aba do perfil do cliente"
+                      >
+                        <Link className="w-3 h-3" />
+                        Link perfil
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[180px]">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Copiar link para aba</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {([
+                        { tab: "inicio",       label: "Início" },
+                        { tab: "reservas",     label: "Reservas" },
+                        { tab: "dados",        label: "Dados pessoais" },
+                        { tab: "indicacoes",   label: "Indicações" },
+                        { tab: "fidelidade",   label: "Fidelidade" },
+                        { tab: "preferencias", label: "Preferências" },
+                        { tab: "favoritos",    label: "Favoritos" },
+                        { tab: "conquistas",   label: "Conquistas" },
+                        { tab: "mapa",         label: "Mapa de viagens" },
+                        { tab: "sonhos",       label: "Lista de sonhos" },
+                        { tab: "memorias",     label: "Memórias" },
+                        { tab: "clube",        label: "Clube" },
+                      ] as const).map(({ tab, label }) => (
+                        <DropdownMenuItem
+                          key={tab}
+                          onClick={() => {
+                            const url = `${window.location.origin}/perfil?tab=${tab}`;
+                            navigator.clipboard.writeText(url).catch(() => {});
+                            toast({ title: "Link copiado!", description: `Link para a aba "${label}" do perfil.` });
+                          }}
+                        >
+                          {label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </DialogHeader>

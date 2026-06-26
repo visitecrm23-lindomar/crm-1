@@ -31,6 +31,7 @@ export function TripList() {
     search, setSearch, statusFilter, setStatusFilter,
     typeFilter, setTypeFilter, dateFilter, setDateFilter,
     page, setPage, deleteTrip, handleDuplicate, handleDelete,
+    hasActiveFilters, clearFilters,
   } = useTrips();
   const { data: me } = useGetMe();
   const tenantId = me?.tenantId ?? null;
@@ -130,8 +131,8 @@ export function TripList() {
           </SelectContent>
         </Select>
         <Input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); setPage(1); }} className="w-40" title="Filtrar por data de saída (a partir de)" />
-        {(search || statusFilter !== "all" || typeFilter !== "all" || dateFilter) && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setDateFilter(""); setPage(1); }}>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             <X className="w-4 h-4 mr-1" />Limpar
           </Button>
         )}

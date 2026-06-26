@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearch, useLocation } from "wouter";
 import { parseISO } from "date-fns";
 import {
   useListTrips, useCreateTrip, useDeleteTrip, useGetDashboardUpcomingTrips, useGetMe,
@@ -9,11 +10,36 @@ import { ROLES, TRIP_STATUS } from "@workspace/permissions";
 const PAGE_SIZE = 12;
 
 export function useTrips() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const searchStr = useSearch();
+  const [, navigate] = useLocation();
+
+  const [search, setSearch] = useState(() => new URLSearchParams(searchStr).get("q") ?? "");
+  const [statusFilter, setStatusFilter] = useState(() => new URLSearchParams(searchStr).get("status") ?? "all");
+  const [typeFilter, setTypeFilter] = useState(() => new URLSearchParams(searchStr).get("type") ?? "all");
+  const [dateFilter, setDateFilter] = useState(() => new URLSearchParams(searchStr).get("date") ?? "");
+  const [page, setPage] = useState(() => parseInt(new URLSearchParams(searchStr).get("page") ?? "1") || 1);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (typeFilter !== "all") params.set("type", typeFilter);
+    if (dateFilter) params.set("date", dateFilter);
+    if (page > 1) params.set("page", String(page));
+    const qs = params.toString();
+    navigate(qs ? `?${qs}` : window.location.pathname, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, typeFilter, dateFilter, page]);
+
+  const hasActiveFilters = !!(search || statusFilter !== "all" || typeFilter !== "all" || dateFilter);
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setDateFilter("");
+    setPage(1);
+  };
 
   const { data: me } = useGetMe();
   const isVendedor = me?.role === ROLES.SALES;
@@ -101,6 +127,7 @@ export function useTrips() {
     typeFilter, setTypeFilter,
     dateFilter, setDateFilter,
     page, setPage,
+    hasActiveFilters, clearFilters,
     refetch, deleteTrip,
     handleDuplicate, handleDelete,
   };
