@@ -15,7 +15,8 @@
     "check": "drizzle-kit check --config ./drizzle.config.ts",
     "validate-coverage": "node scripts/validate-coverage.mjs",
     "validate-columns": "node scripts/validate-columns.mjs",
-    "validate-tables": "node scripts/validate-tables.mjs"
+    "validate-tables": "node scripts/validate-tables.mjs",
+    "verify-db": "node scripts/verify-db-columns.mjs"
   },
   "dependencies": {
     "@workspace/permissions": "workspace:*",

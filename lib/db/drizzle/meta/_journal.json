@@ -176,6 +176,13 @@
       "when": 1802300000000,
       "tag": "0024_referral_reversal_at",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1802400000000,
+      "tag": "0025_missing_pre_squash_tables",
+      "breakpoints": true
     }
   ]
 }
