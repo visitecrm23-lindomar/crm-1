@@ -2577,10 +2577,13 @@ function TeamTab() {
         fetch(`${BASE}/api/team/members`, { credentials: "include" }),
         fetch(`${BASE}/api/team/invites`, { credentials: "include" }),
       ]);
-      if (membersRes.ok) setMembers(await membersRes.json());
+      if (membersRes.ok) {
+        const all: TeamMember[] = await membersRes.json();
+        setMembers(all.filter((m) => m.role === "vendedor"));
+      }
       if (invitesRes.ok) {
         const all: PendingInvite[] = await invitesRes.json();
-        setInvites(all.filter((i) => !i.accepted));
+        setInvites(all.filter((i) => !i.accepted && i.role === "vendedor"));
       }
     } catch {
       toast({ title: "Erro ao carregar equipe", variant: "destructive" });
