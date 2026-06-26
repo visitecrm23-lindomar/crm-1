@@ -4,6 +4,7 @@ import {
   storeOrdersTable,
   clientsTable,
   referralSettingsTable,
+  tenantsTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { AppError, ValidationError } from "../../lib/errors";
@@ -39,7 +40,20 @@ export async function resolveCheckoutDiscounts(
   let appliedReferralDiscountValue = 5;
   let appliedReferralDiscountType = "percentage";
 
-  if (couponCode) {
+  let couponsEnabled = true;
+  let referralsEnabled = true;
+  if (couponCode || referralCode) {
+    const [tenantRow] = await db
+      .select({ settings: tenantsTable.settings })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1);
+    const tenantSettings = (tenantRow?.settings ?? {}) as Record<string, unknown>;
+    couponsEnabled = tenantSettings.couponsEnabled !== false;
+    referralsEnabled = tenantSettings.referralsEnabled !== false;
+  }
+
+  if (couponsEnabled && couponCode) {
     const [coupon] = await db.select().from(storeCouponsTable)
       .where(and(
         eq(storeCouponsTable.storeId, storeId),
@@ -66,7 +80,7 @@ export async function resolveCheckoutDiscounts(
     }
   }
 
-  if (referralCode && !couponId) {
+  if (referralsEnabled && referralCode && !couponId) {
     const upperCode = referralCode.toUpperCase();
     const [referrer] = await db.select({
       id: clientsTable.id,

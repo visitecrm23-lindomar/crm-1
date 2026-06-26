@@ -423,6 +423,7 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])
       .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([{ settings: {} }])   // tenant feature flags (resolveCheckoutDiscounts)
       .mockResolvedValueOnce([expiredCoupon]);
 
     const res = await request(buildApp())
@@ -451,6 +452,7 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     mockLimit
       .mockResolvedValueOnce([FAKE_STORE])
       .mockResolvedValueOnce([FAKE_PRODUCT])
+      .mockResolvedValueOnce([{ settings: {} }])   // tenant feature flags (resolveCheckoutDiscounts)
       .mockResolvedValueOnce([maxedCoupon]);
 
     const res = await request(buildApp())
@@ -478,10 +480,11 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "20.00", totalAmount: "130.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
-      .mockResolvedValueOnce([fixedCoupon])     // coupon lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([fixedCoupon])            // coupon lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder])        // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -510,10 +513,11 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
-      .mockResolvedValueOnce([percentCoupon])   // coupon lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([discountedOrder]) // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([percentCoupon])          // coupon lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder])        // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -618,11 +622,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])        // product fetch (no tripId)
-      .mockResolvedValueOnce([blockedReferrer])     // referrer lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([refSettings])         // referral settings (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([FAKE_ORDER])          // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([blockedReferrer])        // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])            // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])             // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -652,11 +657,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])       // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])     // product fetch (no tripId)
-      .mockResolvedValueOnce([selfReferrer])     // referrer lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([refSettings])      // referral settings (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([FAKE_ORDER])       // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([selfReferrer])           // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])            // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])             // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -687,12 +693,13 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const priorOrder = { id: "order-prior-001" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])      // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])    // product fetch (no tripId)
-      .mockResolvedValueOnce([referrer])        // referrer lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([refSettings])     // referral settings (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([priorOrder])      // prior completed order check (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([FAKE_ORDER])      // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([referrer])               // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])            // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([priorOrder])             // prior completed order check (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([FAKE_ORDER])             // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -723,11 +730,12 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     const discountedOrder = { ...FAKE_ORDER, discountAmount: "15.00", totalAmount: "135.00" };
 
     mockLimit
-      .mockResolvedValueOnce([FAKE_STORE])         // getActiveStore
-      .mockResolvedValueOnce([FAKE_PRODUCT])        // product fetch (no tripId)
-      .mockResolvedValueOnce([referrer])            // referrer lookup (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([refSettings])         // referral settings (resolveCheckoutDiscounts)
-      .mockResolvedValueOnce([discountedOrder])     // post-tx order re-fetch
+      .mockResolvedValueOnce([FAKE_STORE])            // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])           // product fetch (no tripId)
+      .mockResolvedValueOnce([{ settings: {} }])       // tenant feature flags (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([referrer])               // referrer lookup (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([refSettings])            // referral settings (resolveCheckoutDiscounts)
+      .mockResolvedValueOnce([discountedOrder])        // post-tx order re-fetch
       .mockResolvedValue([]);
 
     const res = await request(buildApp())
@@ -739,7 +747,51 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(parseFloat(res.body.totalAmount)).toBeLessThan(150);
   });
 
-  // ── 7. Valid order (200) ──────────────────────────────────────────────────
+  // ── 7. Feature-flag gates (referralsEnabled / couponsEnabled) ───────────
+
+  it("does not apply referral discount when tenant has referralsEnabled: false", async () => {
+    // When referralsEnabled is false the discount service must skip the referral
+    // lookup entirely — no referrer or settings DB call should be made — and the
+    // order must succeed at full price (no discount applied).
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                                         // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])                                        // product fetch
+      .mockResolvedValueOnce([{ settings: { referralsEnabled: false } }])          // tenant feature flags
+      .mockResolvedValueOnce([FAKE_ORDER])                                          // post-tx order re-fetch
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, referralCode: "ANY-REF" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    // Full price — no referral discount applied
+    expect(parseFloat(res.body.totalAmount)).toBe(150);
+  });
+
+  it("does not apply coupon discount when tenant has couponsEnabled: false", async () => {
+    // When couponsEnabled is false the discount service must skip the coupon
+    // lookup entirely — the order must succeed at full price with no discount,
+    // and no COUPON_* error must be raised.
+    mockLimit
+      .mockResolvedValueOnce([FAKE_STORE])                                         // getActiveStore
+      .mockResolvedValueOnce([FAKE_PRODUCT])                                        // product fetch
+      .mockResolvedValueOnce([{ settings: { couponsEnabled: false } }])            // tenant feature flags
+      .mockResolvedValueOnce([FAKE_ORDER])                                          // post-tx order re-fetch
+      .mockResolvedValue([]);
+
+    const res = await request(buildApp())
+      .post("/api/public/store/minha-loja/orders")
+      .send({ ...VALID_BODY, couponCode: "ANY-COUPON" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("orderId");
+    // Full price — no coupon discount applied
+    expect(parseFloat(res.body.totalAmount)).toBe(150);
+  });
+
+  // ── 8. Valid order (200) ──────────────────────────────────────────────────
 
   it("returns 200 with orderId when all fields are valid and product is in stock", async () => {
     mockLimit
@@ -758,7 +810,7 @@ describe("POST /api/public/store/:slug/orders — checkout endpoint", () => {
     expect(res.body).toHaveProperty("totalAmount");
   });
 
-  // ── 8. Post-booking side effects are deferred to payment (task #17 hardening) ──
+  // ── 9. Post-booking side effects are deferred to payment (task #17 hardening) ──
 
   it("does not enqueue the reservation confirmation email at checkout (deferred to payment)", async () => {
     const tripProduct = { ...FAKE_PRODUCT, tripId: "trip-001" };
