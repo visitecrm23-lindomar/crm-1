@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { SkeletonBox } from "@/components/Skeleton";
+import { NpsSurveyModal } from "@/components/NpsSurveyModal";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useRef } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import {
   Animated,
   Platform,
@@ -19,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { apiFetch, fmtCurrency, fmtDate, daysUntil } from "@/lib/api";
-import type { ClientPortalProfile } from "@/lib/types";
+import type { ClientPortalProfile, ClientPortalReservation } from "@/lib/types";
 
 function TravelerCard({
   profile,
@@ -477,10 +478,27 @@ const TIER_COLORS: Record<string, [string, string]> = {
   diamond: ["#6d28d9", "#ede9fe"],
 };
 
+function pickNpsPendingReservation(
+  reservations: ClientPortalReservation[],
+): ClientPortalReservation | null {
+  const now = new Date();
+  return (
+    reservations.find((r) => {
+      if (r.npsSubmitted) return false;
+      if (r.status === "cancelled") return false;
+      const dateStr = r.tripReturnDate ?? r.tripDepartureDate;
+      if (!dateStr) return false;
+      return new Date(dateStr) < now;
+    }) ?? null
+  );
+}
+
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const [npsReservation, setNpsReservation] = useState<ClientPortalReservation | null>(null);
+  const [npsDismissedIds, setNpsDismissedIds] = useState<Set<string>>(new Set());
 
   const { data, isLoading, error, refetch, isRefetching } =
     useQuery<ClientPortalProfile>({
@@ -490,6 +508,18 @@ export default function HomeScreen() {
         return apiFetch<ClientPortalProfile>(token, "GET", "/client/me");
       },
     });
+
+  const pendingNps = useMemo(() => {
+    if (!data?.reservations) return null;
+    const eligible = data.reservations.filter((r) => !npsDismissedIds.has(r.id));
+    return pickNpsPendingReservation(eligible);
+  }, [data?.reservations, npsDismissedIds]);
+
+  React.useEffect(() => {
+    if (pendingNps && !npsReservation) {
+      setNpsReservation(pendingNps);
+    }
+  }, [pendingNps, npsReservation]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -540,41 +570,57 @@ export default function HomeScreen() {
     );
   }
 
+  function handleNpsDismiss() {
+    if (npsReservation) {
+      setNpsDismissedIds((prev) => new Set([...prev, npsReservation.id]));
+    }
+    setNpsReservation(null);
+  }
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={[
-        styles.scroll,
-        { paddingTop: topPad + 8, paddingBottom: insets.bottom + 100 },
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={refetch}
-          tintColor={colors.primary}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: topPad + 8, paddingBottom: insets.bottom + 100 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.greetingRow}>
+          <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
+            Bom dia,
+          </Text>
+          <Text style={[styles.greetingName, { color: colors.foreground }]}>
+            {(data.client?.name ?? data.user?.name ?? "Viajante").split(" ")[0]}
+          </Text>
+        </View>
+
+        <TravelerCard profile={data} colors={colors} />
+
+        <NextTripBanner profile={data} colors={colors} />
+
+        <QuickStats profile={data} colors={colors} />
+
+        <UpcomingReservations profile={data} colors={colors} />
+
+        {data.loyalty ? <LoyaltySummary profile={data} colors={colors} /> : null}
+      </ScrollView>
+
+      {npsReservation ? (
+        <NpsSurveyModal
+          reservation={npsReservation}
+          onDismiss={handleNpsDismiss}
         />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.greetingRow}>
-        <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
-          Bom dia,
-        </Text>
-        <Text style={[styles.greetingName, { color: colors.foreground }]}>
-          {(data.client?.name ?? data.user?.name ?? "Viajante").split(" ")[0]}
-        </Text>
-      </View>
-
-      <TravelerCard profile={data} colors={colors} />
-
-      <NextTripBanner profile={data} colors={colors} />
-
-      <QuickStats profile={data} colors={colors} />
-
-      <UpcomingReservations profile={data} colors={colors} />
-
-      {data.loyalty ? <LoyaltySummary profile={data} colors={colors} /> : null}
-    </ScrollView>
+      ) : null}
+    </View>
   );
 }
 
