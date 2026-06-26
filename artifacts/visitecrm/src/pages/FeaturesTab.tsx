@@ -107,9 +107,13 @@ export function FeaturesTab() {
       toast({ title: value ? "Funcionalidade ativada" : "Funcionalidade desativada" });
       await queryClient.invalidateQueries({ queryKey: getGetTenantQueryKey(tenantId) });
     } catch (err) {
-      const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
-      if (code === "PLAN_UPGRADE_REQUIRED") {
-        setUpgradeModal({ label: featureLabel, planLabel: requiredPlanLabel });
+      const errData = (err as { response?: { data?: { code?: string; error?: string } } })?.response?.data;
+      if (errData?.code === "PLAN_UPGRADE_REQUIRED") {
+        // Parse the required plan name from the API error message.
+        // Message format: "… Faça upgrade para o plano <PlanName> ou superior …"
+        // Fall back to the static label baked into the feature config if parsing fails.
+        const parsed = errData.error?.match(/plano\s+([^\s]+)\s+ou superior/i)?.[1] ?? null;
+        setUpgradeModal({ label: featureLabel, planLabel: parsed ?? requiredPlanLabel });
       } else {
         const message = extractApiError(err, "Erro ao salvar configuração");
         toast({ title: message, variant: "destructive" });

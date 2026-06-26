@@ -294,7 +294,14 @@ describe("FeaturesTab — toggle error handling", () => {
 
   it("shows the upgrade modal (not a toast) when PLAN_UPGRADE_REQUIRED is returned", async () => {
     const planUpgradeError = {
-      response: { status: 403, data: { code: "PLAN_UPGRADE_REQUIRED" } },
+      response: {
+        status: 403,
+        data: {
+          code: "PLAN_UPGRADE_REQUIRED",
+          error:
+            'O plano atual não inclui "Mapa de Assentos". Faça upgrade para o plano Business ou superior para ativar esta funcionalidade.',
+        },
+      },
     };
     mockMutateAsync.mockRejectedValue(planUpgradeError);
     mockGetTenant.mockReturnValue(makeTenantData(false));
@@ -311,6 +318,33 @@ describe("FeaturesTab — toggle error handling", () => {
     expect(mockToast).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Funcionalidade bloqueada");
     expect(container.textContent).toContain("Mapa de Assentos Personalizável");
+    // Plan name must come from the API error message, not hardcoded "Pro"
+    expect(container.textContent).toContain("Business");
+  });
+
+  it("falls back to the static plan label when the error message has no plan name", async () => {
+    const planUpgradeError = {
+      response: {
+        status: 403,
+        data: { code: "PLAN_UPGRADE_REQUIRED", error: "Upgrade necessário." },
+      },
+    };
+    mockMutateAsync.mockRejectedValue(planUpgradeError);
+    mockGetTenant.mockReturnValue(makeTenantData(false));
+
+    const { container } = await renderComponent(createElement(FeaturesTab, null));
+
+    const seatMapSwitch = container.querySelector(
+      '[data-testid="feature-switch-seatMapEnabled"]',
+    ) as HTMLElement;
+    await act(async () => {
+      seatMapSwitch.click();
+    });
+
+    expect(mockToast).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Funcionalidade bloqueada");
+    // Falls back to the static label from FEATURES config
+    expect(container.textContent).toContain("Pro");
   });
 
   it("reverts the toggle to its server state after a PLAN_UPGRADE_REQUIRED error", async () => {
