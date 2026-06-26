@@ -36,6 +36,10 @@ import {
   ChevronLeft,
   Copy,
   Check,
+  Bus,
+  HeartHandshake,
+  ClipboardList,
+  PersonStanding,
 } from "lucide-react";
 import type { NpsResponse, NpsSendLink } from "@workspace/api-client-react";
 import { Link } from "wouter";
@@ -355,82 +359,125 @@ export function TripNpsTab({ tripId }: { tripId: string }) {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : summary ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Score desta Viagem</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-4 pt-2">
-              <NpsGauge score={summary.npsScore} />
-              <div className="w-full grid grid-cols-2 gap-3">
-                <div className="text-center p-2 rounded-lg bg-muted/50">
-                  <p className="text-xl font-bold">
-                    {summary.averageScore.toFixed(1)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Média</p>
-                </div>
-                <div className="text-center p-2 rounded-lg bg-muted/50">
-                  <p className="text-xl font-bold">{summary.total}</p>
-                  <p className="text-xs text-muted-foreground">Respostas</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Distribuição</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-2">
-              {[
-                {
-                  type: "promoter" as const,
-                  count: summary.promoters,
-                  icon: <ThumbsUp className="w-4 h-4" />,
-                  color: "bg-green-500",
-                },
-                {
-                  type: "passive" as const,
-                  count: summary.passives,
-                  icon: <Minus className="w-4 h-4" />,
-                  color: "bg-yellow-400",
-                },
-                {
-                  type: "detractor" as const,
-                  count: summary.detractors,
-                  icon: <ThumbsDown className="w-4 h-4" />,
-                  color: "bg-red-500",
-                },
-              ].map(({ type, count, icon, color }) => {
-                const cfg = classConfig[type];
-                const pct =
-                  summary.total > 0
-                    ? ((count / summary.total) * 100).toFixed(0)
-                    : "0";
-                return (
-                  <div key={type} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-1.5 font-medium">
-                        <span className={`p-0.5 rounded text-white ${color}`}>
-                          {icon}
-                        </span>
-                        {cfg.label} ({cfg.score})
-                      </span>
-                      <span className="text-muted-foreground">
-                        {count} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className={`${color} h-2 rounded-full transition-all`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Score desta Viagem</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center gap-4 pt-2">
+                <NpsGauge score={summary.npsScore} />
+                <div className="w-full grid grid-cols-2 gap-3">
+                  <div className="text-center p-2 rounded-lg bg-muted/50">
+                    <p className="text-xl font-bold">
+                      {summary.averageScore.toFixed(1)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Média</p>
                   </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+                  <div className="text-center p-2 rounded-lg bg-muted/50">
+                    <p className="text-xl font-bold">{summary.total}</p>
+                    <p className="text-xs text-muted-foreground">Respostas</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Distribuição</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-2">
+                {[
+                  {
+                    type: "promoter" as const,
+                    count: summary.promoters,
+                    icon: <ThumbsUp className="w-4 h-4" />,
+                    color: "bg-green-500",
+                  },
+                  {
+                    type: "passive" as const,
+                    count: summary.passives,
+                    icon: <Minus className="w-4 h-4" />,
+                    color: "bg-yellow-400",
+                  },
+                  {
+                    type: "detractor" as const,
+                    count: summary.detractors,
+                    icon: <ThumbsDown className="w-4 h-4" />,
+                    color: "bg-red-500",
+                  },
+                ].map(({ type, count, icon, color }) => {
+                  const cfg = classConfig[type];
+                  const pct =
+                    summary.total > 0
+                      ? ((count / summary.total) * 100).toFixed(0)
+                      : "0";
+                  return (
+                    <div key={type} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <span className={`p-0.5 rounded text-white ${color}`}>
+                            {icon}
+                          </span>
+                          {cfg.label} ({cfg.score})
+                        </span>
+                        <span className="text-muted-foreground">
+                          {count} ({pct}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div
+                          className={`${color} h-2 rounded-full transition-all`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+
+          {[summary.avgTransport, summary.avgService, summary.avgOrganization, summary.avgGuide].some(v => v != null) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Satisfação por Categoria</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: "Transporte", value: summary.avgTransport, icon: <Bus className="w-4 h-4" />, color: "text-blue-500" },
+                    { label: "Atendimento", value: summary.avgService, icon: <HeartHandshake className="w-4 h-4" />, color: "text-green-500" },
+                    { label: "Organização", value: summary.avgOrganization, icon: <ClipboardList className="w-4 h-4" />, color: "text-purple-500" },
+                    { label: "Guia", value: summary.avgGuide, icon: <PersonStanding className="w-4 h-4" />, color: "text-orange-500" },
+                  ].map(({ label, value, icon, color }) => (
+                    <div key={label} className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted/50">
+                      <span className={color}>{icon}</span>
+                      <p className="text-xs text-muted-foreground font-medium">{label}</p>
+                      {value != null ? (
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="text-2xl font-bold">{value.toFixed(1)}</span>
+                          <span className="text-xs text-muted-foreground">/5</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                      {value != null && (
+                        <div className="flex gap-0.5 mt-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-3 h-3 ${i < Math.round(value) ? "text-yellow-400 fill-yellow-400" : "text-gray-200"}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       ) : null}
 

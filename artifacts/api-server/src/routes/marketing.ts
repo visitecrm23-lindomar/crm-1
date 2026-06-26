@@ -309,9 +309,21 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
     if (dateFrom) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} >= ${new Date(dateFrom)}`);
     if (dateTo) travelConditions.push(sql`${clientNpsResponsesTable.createdAt} <= ${new Date(dateTo + "T23:59:59.999Z")}`);
 
+    function categoryAvg(values: (number | null)[]): number | null {
+      const valid = values.filter((v): v is number => v !== null);
+      if (valid.length === 0) return null;
+      return Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10;
+    }
+
     if (tripId) {
       const travelResponses = await db
-        .select({ score: clientNpsResponsesTable.score })
+        .select({
+          score: clientNpsResponsesTable.score,
+          scoreTransport: clientNpsResponsesTable.scoreTransport,
+          scoreService: clientNpsResponsesTable.scoreService,
+          scoreOrganization: clientNpsResponsesTable.scoreOrganization,
+          scoreGuide: clientNpsResponsesTable.scoreGuide,
+        })
         .from(clientNpsResponsesTable)
         .where(and(...travelConditions));
       const travelMapped = travelResponses.map(r => ({
@@ -330,6 +342,10 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
         detractors,
         npsScore,
         averageScore: Math.round(avgScore * 10) / 10,
+        avgTransport: categoryAvg(travelResponses.map(r => r.scoreTransport)),
+        avgService: categoryAvg(travelResponses.map(r => r.scoreService)),
+        avgOrganization: categoryAvg(travelResponses.map(r => r.scoreOrganization)),
+        avgGuide: categoryAvg(travelResponses.map(r => r.scoreGuide)),
       });
     }
 
@@ -341,7 +357,13 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
       db.select({ score: npsResponsesTable.score, classification: npsResponsesTable.classification })
         .from(npsResponsesTable)
         .where(and(...storeConditions)),
-      db.select({ score: clientNpsResponsesTable.score })
+      db.select({
+        score: clientNpsResponsesTable.score,
+        scoreTransport: clientNpsResponsesTable.scoreTransport,
+        scoreService: clientNpsResponsesTable.scoreService,
+        scoreOrganization: clientNpsResponsesTable.scoreOrganization,
+        scoreGuide: clientNpsResponsesTable.scoreGuide,
+      })
         .from(clientNpsResponsesTable)
         .where(and(...travelConditions)),
     ]);
@@ -362,6 +384,10 @@ router.get("/nps/summary", async (req, res, next: NextFunction): Promise<void> =
       detractors,
       npsScore,
       averageScore: Math.round(avg * 10) / 10,
+      avgTransport: categoryAvg(travelResponses.map(r => r.scoreTransport)),
+      avgService: categoryAvg(travelResponses.map(r => r.scoreService)),
+      avgOrganization: categoryAvg(travelResponses.map(r => r.scoreOrganization)),
+      avgGuide: categoryAvg(travelResponses.map(r => r.scoreGuide)),
     });
   } catch (err) {
     next(err);

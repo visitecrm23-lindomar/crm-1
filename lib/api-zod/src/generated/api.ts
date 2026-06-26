@@ -3996,6 +3996,10 @@ export const GetNpsSummaryResponse = zod.object({
   passives: zod.number(),
   detractors: zod.number(),
   total: zod.number(),
+  avgTransport: zod.number().nullable().optional(),
+  avgService: zod.number().nullable().optional(),
+  avgOrganization: zod.number().nullable().optional(),
+  avgGuide: zod.number().nullable().optional(),
 });
 
 /**
