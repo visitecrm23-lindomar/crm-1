@@ -1,4 +1,5 @@
 - [api-zod-manual-edits](api-zod-manual-edits.md) — orval-generated files in lib/api-zod are hand-edited; must update both TS types AND Zod schemas in api.ts together
+- [api-zod-duplicate-export](api-zod-duplicate-export.md) — index.ts must only export ./generated/api (superset); adding ./generated/types causes ~200 TS2308 duplicate-export errors
 - [Workspace lib TypeScript build](db-ts-build.md) — Consumers read lib dist/*.d.ts via project references; rebuild with `tsc --build` after a schema column change OR after adding a new exported file (e.g. api-client-react), else TS2305/missing-property.
 - [Recharts React 19 type fix](recharts-react19-types.md) — Recharts 2.x class components are incompatible with React 19 TypeScript types; fix: declare module "recharts" with all components as `any` in src/types/recharts.d.ts; inline callbacks need explicit param types (tickFormatter: (v: number) =>, etc.).
 - [Clerk e2e testing flag](testing-clerk-auth.md) — runTest on this Clerk app needs `testClerkAuth:true` (else Cloudflare bot wall); reach role-gated pages via a [DB] role/tenant UPDATE + reload.
