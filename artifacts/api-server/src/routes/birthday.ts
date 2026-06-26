@@ -117,7 +117,16 @@ router.get("/birthday/history", async (req, res, next: NextFunction): Promise<vo
     if (!ADMIN_ROLES.includes(me.role)) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const year = req.query.year ? Number(req.query.year) : undefined;
+
+    let year: number | undefined;
+    if (req.query.year !== undefined) {
+      const yearNum = Number(req.query.year);
+      if (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 2100) {
+        next(new ValidationError("Parâmetro inválido: year deve ser um ano inteiro entre 2000 e 2100", "VALIDATION_ERROR"));
+        return;
+      }
+      year = yearNum;
+    }
 
     const conditions = [eq(birthdayMessagesTable.tenantId, me.tenantId)];
     if (year) conditions.push(eq(birthdayMessagesTable.birthdayYear, year));

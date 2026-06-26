@@ -1,6 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db, tenantsTable, usersTable, clientsTable, tripsTable, auditLogsTable, reservationsTable, plansTable, emailLogsTable } from "@workspace/db";
 import { eq, desc, and, count, sql } from "drizzle-orm";
+import { z } from "zod/v4";
 import { requireAuth } from "../lib/tenant";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 import { ROLES } from "@workspace/permissions";
@@ -233,16 +234,29 @@ router.get("/admin/users", async (req, res, next: NextFunction): Promise<void> =
   }
 });
 
+const AuditLogsQuery = z.object({
+  tenantId: z.string().uuid().optional(),
+  action: z.string().max(100).optional(),
+  entityType: z.string().max(100).optional(),
+});
+
 router.get("/admin/audit-logs", async (req, res, next: NextFunction): Promise<void> => {
   try {
     const me = await requireAuth(req, res);
     if (!me) return;
     if (me.role !== ROLES.SUPER_ADMIN) { next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE")); return; }
 
+    const parsed = AuditLogsQuery.safeParse(req.query);
+    if (!parsed.success) {
+      next(new ValidationError("Parâmetro inválido: tenantId deve ser UUID válido; action e entityType devem ter no máximo 100 caracteres", "VALIDATION_ERROR"));
+      return;
+    }
+    const { tenantId, action, entityType } = parsed.data;
+
     const conditions = [];
-    if (req.query.tenantId) conditions.push(eq(auditLogsTable.tenantId, req.query.tenantId as string));
-    if (req.query.action) conditions.push(eq(auditLogsTable.action, req.query.action as string));
-    if (req.query.entityType) conditions.push(eq(auditLogsTable.entityType, req.query.entityType as string));
+    if (tenantId) conditions.push(eq(auditLogsTable.tenantId, tenantId));
+    if (action) conditions.push(eq(auditLogsTable.action, action));
+    if (entityType) conditions.push(eq(auditLogsTable.entityType, entityType));
 
     const aliasedUsers = db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email }).from(usersTable).as("log_users");
 

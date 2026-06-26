@@ -447,6 +447,10 @@ CONTEXTO DA AGÊNCIA:
 - Top destinos: ${exp.topDestinations.slice(0, 3).map((d) => `${d.name}(${d.count})`).join(", ") || "nenhum"}`;
 }
 
+const InsightsPeriodQuery = z.object({
+  period: z.enum(["month", "quarter", "year"]).default("month"),
+});
+
 // ─── GET /insights/summary ────────────────────────────────────────────────────
 router.get("/insights/summary", async (req, res, next: NextFunction): Promise<void> => {
   try {
@@ -456,7 +460,12 @@ router.get("/insights/summary", async (req, res, next: NextFunction): Promise<vo
       next(new ForbiddenError("Forbidden", "FORBIDDEN_ROLE"));
       return;
     }
-    const period = (req.query.period as string) || "month";
+    const parsed = InsightsPeriodQuery.safeParse(req.query);
+    if (!parsed.success) {
+      next(new ValidationError("Parâmetro inválido: period deve ser 'month', 'quarter' ou 'year'", "VALIDATION_ERROR"));
+      return;
+    }
+    const { period } = parsed.data;
     const data = await buildInsightsSummary(me.tenantId, period);
     res.json(data);
   } catch (err) {
