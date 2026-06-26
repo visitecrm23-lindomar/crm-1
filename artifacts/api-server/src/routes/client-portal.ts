@@ -936,6 +936,11 @@ router.post("/client/nps", async (req, res, next: NextFunction): Promise<void> =
     });
     res.status(201).json({ id });
   } catch (err) {
+    const pgErr = err as { code?: string };
+    if (pgErr?.code === "23505") {
+      next(new ConflictError("Avaliação já enviada para esta reserva", "DUPLICATE_NPS"));
+      return;
+    }
     next(err);
   }
 });
