@@ -169,12 +169,34 @@ function safeQrDarkColor(hex: string, fallback = "#111827"): string {
 
 const VALID_STATUS_FILTERS = ["all", "pending", "confirmed", "expired", "reversed"] as const;
 type StatusFilter = (typeof VALID_STATUS_FILTERS)[number];
+const REFERRAL_FILTER_SESSION_KEY = "referral-status-filter";
 
 function parseStatusFilter(value: string | null): StatusFilter {
   if (value && (VALID_STATUS_FILTERS as readonly string[]).includes(value)) {
     return value as StatusFilter;
   }
   return "all";
+}
+
+function readStoredFilter(): StatusFilter {
+  try {
+    const stored = sessionStorage.getItem(REFERRAL_FILTER_SESSION_KEY);
+    return parseStatusFilter(stored);
+  } catch {
+    return "all";
+  }
+}
+
+function writeStoredFilter(filter: StatusFilter): void {
+  try {
+    if (filter === "all") {
+      sessionStorage.removeItem(REFERRAL_FILTER_SESSION_KEY);
+    } else {
+      sessionStorage.setItem(REFERRAL_FILTER_SESSION_KEY, filter);
+    }
+  } catch {
+    // sessionStorage unavailable (e.g. private mode with storage blocked) — no-op
+  }
 }
 
 export default function MyReferralPage({ slug, store }: Props) {
@@ -192,9 +214,11 @@ export default function MyReferralPage({ slug, store }: Props) {
   const [referrals, setReferrals] = useState<ClientReferral[] | null>(null);
   const [loadingReferrals, setLoadingReferrals] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() =>
-    parseStatusFilter(new URLSearchParams(search).get("status"))
-  );
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const fromUrl = new URLSearchParams(search).get("status");
+    if (fromUrl) return parseStatusFilter(fromUrl);
+    return readStoredFilter();
+  });
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [showQrDialog, setShowQrDialog] = useState(false);
@@ -218,7 +242,8 @@ export default function MyReferralPage({ slug, store }: Props) {
   }, [activeCampaign]);
 
   useEffect(() => {
-    const incoming = parseStatusFilter(new URLSearchParams(search).get("status"));
+    const fromUrl = new URLSearchParams(search).get("status");
+    const incoming = fromUrl ? parseStatusFilter(fromUrl) : readStoredFilter();
     setStatusFilter(incoming);
   }, [search]);
 
@@ -898,6 +923,7 @@ export default function MyReferralPage({ slug, store }: Props) {
                       key={key}
                       onClick={() => {
                         setVisibleCount(PAGE_SIZE);
+                        writeStoredFilter(key);
                         const params = new URLSearchParams(window.location.search);
                         if (key === "all") {
                           params.delete("status");
