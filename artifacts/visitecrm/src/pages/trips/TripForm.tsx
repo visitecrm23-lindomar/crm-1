@@ -152,8 +152,9 @@ export function TripForm({ tripId }: { tripId?: string }) {
 
   useEffect(() => {
     if (seatConflictError) setSeatConflictError(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: setSeatConflictError is a stable React
-  // state setter (reference never changes between renders); adding it to deps would be unnecessary noise.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: seatConflictError is deliberately omitted
+  // so the effect only fires when freePassengers changes (the user adjusted seats), not when the error itself
+  // is cleared — which would cause a re-run loop (clear → dep changes → run again).
   }, [form.freePassengers]);
 
   useEffect(() => {
