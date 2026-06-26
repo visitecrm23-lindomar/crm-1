@@ -1,7 +1,7 @@
 import { Router, type NextFunction } from "express";
 import { db } from "@workspace/db";
-import { vehicleLayoutsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { vehicleLayoutsTable, tripsTable, reservationsTable } from "@workspace/db";
+import { eq, and, desc, inArray, notInArray, sql } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { requireAuth } from "../lib/tenant";
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors"; 
@@ -146,6 +146,46 @@ router.put("/layouts/:id", async (req, res, next: NextFunction): Promise<void> =
 
     if (!layout) { next(new NotFoundError("Not found", "NOT_FOUND")); return; }
     res.json(formatLayout(layout));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/layouts/:id/usage", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+
+    const activeTrips = await db
+      .select({ id: tripsTable.id })
+      .from(tripsTable)
+      .where(
+        and(
+          eq(tripsTable.tenantId, me.tenantId),
+          eq(tripsTable.layoutId, req.params.id),
+          notInArray(tripsTable.status, ["cancelled", "completed"]),
+        ),
+      );
+
+    const activeTripsCount = activeTrips.length;
+    let confirmedReservationsCount = 0;
+
+    if (activeTripsCount > 0) {
+      const tripIds = activeTrips.map(t => t.id);
+      const [row] = await db
+        .select({ cnt: sql<number>`count(*)::int` })
+        .from(reservationsTable)
+        .where(
+          and(
+            eq(reservationsTable.tenantId, me.tenantId),
+            inArray(reservationsTable.tripId, tripIds),
+            inArray(reservationsTable.status, ["confirmed", "completed"]),
+          ),
+        );
+      confirmedReservationsCount = row?.cnt ?? 0;
+    }
+
+    res.json({ activeTripsCount, confirmedReservationsCount });
   } catch (err) {
     next(err);
   }

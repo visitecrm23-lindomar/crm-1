@@ -1427,7 +1427,13 @@ export default function LayoutsPage() {
   const [editingLayout, setEditingLayout] = useState<VehicleLayout | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VehicleLayout | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveWarning, setSaveWarning] = useState<{
+    pendingForm: EditorState;
+    activeTripsCount: number;
+    confirmedReservationsCount: number;
+  } | null>(null);
 
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["layouts"] });
 
   const openCreate = () => {
@@ -1449,8 +1455,7 @@ export default function LayoutsPage() {
     setEditorOpen(true);
   };
 
-  const handleSave = async (form: EditorState) => {
-    if (!form.name.trim()) return;
+  const doSave = async (form: EditorState) => {
     setSaving(true);
     const floorDimValues = Object.values(form.floorDimensions);
     const persistRows = floorDimValues.length > 0 ? Math.max(...floorDimValues.map(d => d.rows)) : form.rows;
@@ -1493,6 +1498,32 @@ export default function LayoutsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = async (form: EditorState) => {
+    if (!form.name.trim()) return;
+
+    if (editingLayout?.id) {
+      setSaving(true);
+      try {
+        const res = await fetch(`${BASE}/api/layouts/${editingLayout.id}/usage`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const usage = await res.json() as { activeTripsCount: number; confirmedReservationsCount: number };
+          if (usage.confirmedReservationsCount > 0) {
+            setSaving(false);
+            setSaveWarning({ pendingForm: form, ...usage });
+            return;
+          }
+        }
+      } catch {
+        // If the check fails, proceed with save (don't block the user)
+      }
+      setSaving(false);
+    }
+
+    await doSave(form);
   };
 
   const handleDelete = async () => {
@@ -1624,6 +1655,46 @@ export default function LayoutsPage() {
               onClick={handleDelete}
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save warning — confirmed reservations exist */}
+      <AlertDialog open={!!saveWarning} onOpenChange={v => !v && setSaveWarning(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>⚠️ Viagens com reservas confirmadas</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Este layout está sendo usado por{" "}
+                  <strong>{saveWarning?.activeTripsCount} viagem{saveWarning?.activeTripsCount !== 1 ? "ns" : ""} ativa{saveWarning?.activeTripsCount !== 1 ? "s" : ""}</strong>{" "}
+                  com{" "}
+                  <strong>{saveWarning?.confirmedReservationsCount} reserva{saveWarning?.confirmedReservationsCount !== 1 ? "s" : ""} confirmada{saveWarning?.confirmedReservationsCount !== 1 ? "s" : ""}</strong>.
+                </p>
+                <p>
+                  Salvar alterações no layout (especialmente mudanças de numeração ou tipo de assento)
+                  pode deixar passageiros com referências de assentos inválidas. Verifique os manifestos
+                  de passageiros após salvar.
+                </p>
+                <p>Deseja salvar mesmo assim?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSaveWarning(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => {
+                const form = saveWarning!.pendingForm;
+                setSaveWarning(null);
+                void doSave(form);
+              }}
+            >
+              Salvar mesmo assim
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
