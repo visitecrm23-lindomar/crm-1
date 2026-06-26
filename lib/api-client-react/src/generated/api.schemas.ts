@@ -326,6 +326,11 @@ export interface Client {
   customerCode?: string | null;
   travelInterests?: string[];
   /** @nullable */
+  travelPreference?: string | null;
+  preferredDestinationTypes?: string[];
+  /** @nullable */
+  likesPhotosVideos?: boolean | null;
+  /** @nullable */
   ambassadorOptIn?: boolean | null;
 }
 

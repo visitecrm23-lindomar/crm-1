@@ -117,6 +117,9 @@ function formatClient(c: typeof clientsTable.$inferSelect, extra?: { isNew?: boo
     nboReasoning: extra?.scores?.nboReasoning ?? null,
     scoresCalculatedAt: extra?.scores?.calculatedAt?.toISOString() ?? null,
     travelInterests: c.travelInterests ?? [],
+    travelPreference: c.travelPreference ?? null,
+    preferredDestinationTypes: c.preferredDestinationTypes ?? [],
+    likesPhotosVideos: c.likesPhotosVideos ?? null,
     ambassadorOptIn: c.ambassadorOptIn ?? null,
     customerCode: c.customerCode ?? null,
   };

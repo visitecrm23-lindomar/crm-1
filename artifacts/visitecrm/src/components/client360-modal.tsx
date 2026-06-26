@@ -1019,14 +1019,73 @@ export function Client360Modal({ open, onClose, clientId }: Client360ModalProps)
                     <div className="flex flex-wrap gap-1">{client.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}</div>
                   </div>
                 )}
-                {(client.dreamDestinations ?? []).length > 0 && (
-                  <div><p className="text-xs text-muted-foreground mb-1">Destinos Sonhados</p>
-                    <div className="flex flex-wrap gap-1">{client.dreamDestinations.map(d => <Badge key={d} variant="secondary" className="text-xs">{d}</Badge>)}</div>
-                  </div>
-                )}
                 {client.observations && (
                   <div><p className="text-xs text-muted-foreground mb-1">Observações</p>
                     <p className="text-sm bg-muted/50 rounded-lg p-3">{client.observations}</p>
+                  </div>
+                )}
+                {(
+                  client.musicalPreferences ||
+                  client.favoriteDrink ||
+                  (client.dreamDestinations ?? []).length > 0 ||
+                  client.foodPreferences ||
+                  (client.preferredDestinationTypes ?? []).length > 0 ||
+                  (client.travelInterests ?? []).length > 0 ||
+                  client.travelPreference ||
+                  client.likesPhotosVideos != null
+                ) && (
+                  <div className="space-y-2 border-t pt-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Preferências de viagem</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {client.musicalPreferences && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Estilo musical</p>
+                          <p className="font-medium">{client.musicalPreferences}</p>
+                        </div>
+                      )}
+                      {client.favoriteDrink && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Bebida favorita</p>
+                          <p className="font-medium">{client.favoriteDrink}</p>
+                        </div>
+                      )}
+                      {client.foodPreferences && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Comida favorita</p>
+                          <p className="font-medium">{client.foodPreferences}</p>
+                        </div>
+                      )}
+                      {client.travelPreference && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Estilo de viagem</p>
+                          <p className="font-medium">{client.travelPreference}</p>
+                        </div>
+                      )}
+                      {client.likesPhotosVideos != null && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Gosta de fotos/vídeos</p>
+                          <p className="font-medium">{client.likesPhotosVideos ? "Sim" : "Não"}</p>
+                        </div>
+                      )}
+                    </div>
+                    {(client.dreamDestinations ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Destinos dos sonhos</p>
+                        <div className="flex flex-wrap gap-1">{client.dreamDestinations.map(d => <Badge key={d} variant="secondary" className="text-xs">{d}</Badge>)}</div>
+                      </div>
+                    )}
+                    {(client.preferredDestinationTypes ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Tipo de destino preferido</p>
+                        <div className="flex flex-wrap gap-1">{(client.preferredDestinationTypes ?? []).map((t: string) => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}</div>
+                      </div>
+                    )}
+                    {(client.travelInterests ?? []).length > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Interesses</p>
+                        <div className="flex flex-wrap gap-1">{(client.travelInterests ?? []).map(i => <Badge key={i} variant="outline" className="text-xs">{i}</Badge>)}</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </TabsContent>
