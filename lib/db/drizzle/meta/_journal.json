@@ -183,6 +183,13 @@
       "when": 1802400000000,
       "tag": "0025_missing_pre_squash_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1802500000000,
+      "tag": "0026_deal_follow_up_note",
+      "breakpoints": true
     }
   ]
 }

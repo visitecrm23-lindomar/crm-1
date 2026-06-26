@@ -59,6 +59,7 @@ export const dealsTable = pgTable("deals", {
   status: text("status").$type<DealStatus>().notNull().default("open"),
   lostReason: text("lost_reason"),
   travelReason: text("travel_reason"),
+  followUpNote: text("follow_up_note"),
   reservationId: text("reservation_id"),
   source: text("source").notNull().default("manual"),
   autoCreated: boolean("auto_created").notNull().default(false),

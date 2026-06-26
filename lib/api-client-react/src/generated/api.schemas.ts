@@ -1412,6 +1412,8 @@ export interface Deal {
   /** @nullable */
   travelReason?: string | null;
   /** @nullable */
+  followUpNote?: string | null;
+  /** @nullable */
   clientWhatsapp?: string | null;
   /** @nullable */
   clientCity?: string | null;
@@ -1458,6 +1460,10 @@ export interface UpdateDealBody {
   status?: string | null;
   /** @nullable */
   lostReason?: string | null;
+  /** @nullable */
+  travelReason?: string | null;
+  /** @nullable */
+  followUpNote?: string | null;
   /** @nullable */
   description?: string | null;
   /** @nullable */

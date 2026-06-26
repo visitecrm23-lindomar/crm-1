@@ -36,6 +36,7 @@ const UpdateDealBody = z.object({
   stageId: z.string().optional(),
   lostReason: z.string().optional().nullable(),
   travelReason: z.string().optional().nullable(),
+  followUpNote: z.string().optional().nullable(),
   reservationId: z.string().optional().nullable(),
   tripId: z.string().optional().nullable(),
 });
@@ -209,6 +210,7 @@ function formatDeal(d: typeof dealsTable.$inferSelect, seats: string[] = [], res
     status: d.status, ownerId: d.ownerId,
     leadName: d.leadName, leadEmail: d.leadEmail, leadWhatsapp: d.leadWhatsapp,
     tripId: d.tripId, lostReason: d.lostReason, travelReason: d.travelReason ?? null,
+    followUpNote: d.followUpNote ?? null,
     reservationId: d.reservationId ?? null,
     reservationNumber,
     source: d.source ?? "manual",
@@ -433,6 +435,7 @@ router.patch("/deals/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.status != null) updates.status = parseDealStatus(parsed.data.status);
     if (parsed.data.lostReason !== undefined) updates.lostReason = parsed.data.lostReason ?? null;
     if (parsed.data.travelReason !== undefined) updates.travelReason = parsed.data.travelReason ?? null;
+    if (parsed.data.followUpNote !== undefined) updates.followUpNote = parsed.data.followUpNote ?? null;
     if (parsed.data.expectedCloseDate !== undefined) {
       updates.expectedCloseDate = parsed.data.expectedCloseDate ? new Date(parsed.data.expectedCloseDate) : null;
     }

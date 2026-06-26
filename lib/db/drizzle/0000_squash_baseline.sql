@@ -363,6 +363,7 @@ CREATE TABLE IF NOT EXISTS "deals" (
         "status" text DEFAULT 'open' NOT NULL,
         "lost_reason" text,
         "travel_reason" text,
+        "follow_up_note" text,
         "reservation_id" text,
         "source" text DEFAULT 'manual' NOT NULL,
         "auto_created" boolean DEFAULT false NOT NULL,
