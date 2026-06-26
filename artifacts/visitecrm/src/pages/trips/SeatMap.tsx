@@ -37,6 +37,8 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
   const [showRenumberDialog, setShowRenumberDialog] = useState(false);
   const [isRenumbering, setIsRenumbering] = useState(false);
   const [renumberError, setRenumberError] = useState<string | null>(null);
+  const [isDryRunLoading, setIsDryRunLoading] = useState(false);
+  const [dryRunResult, setDryRunResult] = useState<{ changes: { oldNumber: string; newNumber: string }[]; preserved: string[] } | null>(null);
   const [exportStatusFilter, setExportStatusFilter] = useState("");
   const regenerateSeatMap = useRegenerateTripSeatMap();
 
@@ -197,6 +199,23 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
     }).length;
   }, [seats, optimisticSeats]);
 
+  const handleOpenRenumberDialog = async () => {
+    setRenumberError(null);
+    setDryRunResult(null);
+    setIsDryRunLoading(true);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/regenerate-seat-map?dryRun=true`, { method: "POST" });
+      if (!res.ok) throw new Error("Erro ao carregar prévia.");
+      const data = await res.json() as { changes: { oldNumber: string; newNumber: string }[]; preserved: string[] };
+      setDryRunResult(data);
+    } catch {
+      setRenumberError("Erro ao carregar prévia da renumeração.");
+    } finally {
+      setIsDryRunLoading(false);
+    }
+    setShowRenumberDialog(true);
+  };
+
   const handleRenumber = async () => {
     setIsRenumbering(true);
     setRenumberError(null);
@@ -204,6 +223,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
       await regenerateSeatMap.mutateAsync({ id: tripId });
       await queryClient.invalidateQueries({ queryKey: getGetTripSeatMapQueryKey(tripId) });
       setOptimisticSeats({});
+      setDryRunResult(null);
       setShowRenumberDialog(false);
     } catch {
       setRenumberError("Erro ao renumerar. Tente novamente.");
@@ -273,8 +293,8 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
           </Select>
           <Button variant="outline" onClick={handlePassengersExport} disabled={!tripId}><Download className="w-4 h-4 mr-2" />Exportar Passageiros</Button>
           {isBrazilianLayout && (
-            <Button variant="outline" onClick={() => { setRenumberError(null); setShowRenumberDialog(true); }} disabled={!tripId}>
-              <RefreshCw className="w-4 h-4 mr-2" />🇧🇷 Renumerar (Padrão Brasileiro)
+            <Button variant="outline" onClick={handleOpenRenumberDialog} disabled={!tripId || isDryRunLoading}>
+              <RefreshCw className={`w-4 h-4 mr-2${isDryRunLoading ? " animate-spin" : ""}`} />🇧🇷 Renumerar (Padrão Brasileiro)
             </Button>
           )}
           <Link href={`/trips/${tripId}/passengers`}><Button variant="outline"><Users className="w-4 h-4 mr-2" />Lista ANTT</Button></Link>
@@ -440,34 +460,62 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
         </div>
       </div>
 
-      <Dialog open={showRenumberDialog} onOpenChange={v => { if (!isRenumbering) { setShowRenumberDialog(v); setRenumberError(null); } }}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showRenumberDialog} onOpenChange={v => { if (!isRenumbering) { setShowRenumberDialog(v); setRenumberError(null); setDryRunResult(null); } }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>🇧🇷 Renumerar Assentos (Padrão Brasileiro)</DialogTitle>
             <DialogDescription>
-              O mapa de assentos será re-gerado com a numeração correta para o padrão brasileiro (lado direito: corredor → janela).
+              Revise as mudanças abaixo antes de confirmar. Assentos confirmados são preservados com o número original.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5 text-sm">
-              {pendingSeatCount > 0 ? (
-                <div className="flex items-start gap-2">
-                  <span className="w-2 h-2 rounded-full bg-orange-400 mt-1.5 shrink-0" />
-                  <span><strong>{pendingSeatCount} assento{pendingSeatCount !== 1 ? "s" : ""} reservado{pendingSeatCount !== 1 ? "s" : ""} (pendente{pendingSeatCount !== 1 ? "s" : ""})</strong> — terão seus números atualizados para a nova numeração.</span>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
-                  <span>Nenhum assento reservado pendente.</span>
-                </div>
-              )}
-              {confirmedSeatCount > 0 ? (
-                <div className="flex items-start gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0" />
-                  <span><strong>{confirmedSeatCount} assento{confirmedSeatCount !== 1 ? "s" : ""} confirmado{confirmedSeatCount !== 1 ? "s" : ""}</strong> — serão preservados com o número original (bilhetes já emitidos).</span>
-                </div>
-              ) : null}
-            </div>
+            {dryRunResult && (
+              <>
+                {dryRunResult.changes.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-400">
+                      {dryRunResult.changes.length} assento{dryRunResult.changes.length !== 1 ? "s" : ""} pendente{dryRunResult.changes.length !== 1 ? "s" : ""} com número alterado
+                    </p>
+                    <div className="rounded-lg border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-muted/60 border-b">
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Assento antigo</th>
+                            <th className="text-center px-2 py-2 text-muted-foreground">→</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Assento novo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dryRunResult.changes.map((c, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              <td className="px-3 py-1.5 font-mono font-semibold text-orange-600">{c.oldNumber}</td>
+                              <td className="px-2 py-1.5 text-center text-muted-foreground">→</td>
+                              <td className="px-3 py-1.5 font-mono font-semibold text-green-600">{c.newNumber}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                    Nenhum assento pendente será renumerado.
+                  </div>
+                )}
+                {dryRunResult.preserved.length > 0 && (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Preservados ({dryRunResult.preserved.length} confirmado{dryRunResult.preserved.length !== 1 ? "s" : ""})
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {dryRunResult.preserved.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join(", ")}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Estes assentos mantêm o número original — bilhetes já emitidos não são afetados.</p>
+                  </div>
+                )}
+              </>
+            )}
             {renumberError && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-md p-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -476,7 +524,7 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowRenumberDialog(false); setRenumberError(null); }} disabled={isRenumbering}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setShowRenumberDialog(false); setRenumberError(null); setDryRunResult(null); }} disabled={isRenumbering}>Cancelar</Button>
             <Button onClick={handleRenumber} disabled={isRenumbering}>
               {isRenumbering ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Renumerando...</> : "Confirmar Renumeração"}
             </Button>

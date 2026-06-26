@@ -905,6 +905,28 @@ router.post("/trips/:id/regenerate-seat-map", async (req, res, next: NextFunctio
       }
     }
 
+    // Dry-run: return the diff without committing.
+    if (req.query.dryRun === "true") {
+      const changes: { oldNumber: string; newNumber: string }[] = [];
+      for (const { oldSeats, newSeats } of pendingUpdates) {
+        for (let i = 0; i < oldSeats.length; i++) {
+          const oldNum = oldSeats[i];
+          const newNum = newSeats[i];
+          if (oldNum !== newNum) {
+            changes.push({ oldNumber: oldNum, newNumber: newNum ?? oldNum });
+          }
+        }
+      }
+      const preserved: string[] = [];
+      for (const r of confirmedReservations) {
+        for (const s of r.seats) {
+          preserved.push(s);
+        }
+      }
+      res.json({ changes, preserved });
+      return;
+    }
+
     // Commit all changes atomically.
     await db.transaction(async (tx) => {
       for (const { id, oldSeats, newSeats } of pendingUpdates) {
