@@ -283,10 +283,13 @@ export function PassengersList({ tripId }: { tripId: string }) {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
+          <Select
+            value={exportStatusFilter === "" ? "active" : exportStatusFilter}
+            onValueChange={v => setExportStatusFilter(v === "active" ? "" : v)}
+          >
             <SelectTrigger className="w-36 h-8"><SelectValue placeholder="Ativos" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Ativos</SelectItem>
+              <SelectItem value="active">Ativos</SelectItem>
               <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmados</SelectItem>
               <SelectItem value={RESERVATION_STATUS.PENDING}>Pendentes</SelectItem>
               <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluídos</SelectItem>

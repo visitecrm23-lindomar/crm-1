@@ -573,7 +573,9 @@ function PixModal({ invoice, onClose, onPayWithCard }: PixModalProps) {
   );
 }
 
-const stripePromise = loadStripe(import.meta.env["VITE_STRIPE_PUBLIC_KEY"] ?? "");
+const stripePromise = import.meta.env["VITE_STRIPE_PUBLIC_KEY"]
+  ? loadStripe(import.meta.env["VITE_STRIPE_PUBLIC_KEY"] as string)
+  : null;
 
 interface CardPaymentFormProps {
   onSuccess: () => void;

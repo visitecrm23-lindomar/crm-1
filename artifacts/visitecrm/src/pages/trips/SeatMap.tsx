@@ -281,10 +281,13 @@ export function SeatMap({ tripId: initialTripId }: { tripId: string }) {
               ))}
             </SelectContent>
           </Select>
-          <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
+          <Select
+            value={exportStatusFilter === "" ? "active" : exportStatusFilter}
+            onValueChange={v => setExportStatusFilter(v === "active" ? "" : v)}
+          >
             <SelectTrigger className="w-36 h-9"><SelectValue placeholder="Ativos" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Ativos</SelectItem>
+              <SelectItem value="active">Ativos</SelectItem>
               <SelectItem value={RESERVATION_STATUS.CONFIRMED}>Confirmados</SelectItem>
               <SelectItem value={RESERVATION_STATUS.PENDING}>Pendentes</SelectItem>
               <SelectItem value={RESERVATION_STATUS.COMPLETED}>Concluídos</SelectItem>
