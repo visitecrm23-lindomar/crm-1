@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, AlertCircle, CheckCircle,
   Pencil, Trash2, ArrowUpRight, ArrowDownRight, BarChart2, ExternalLink,
@@ -140,6 +140,7 @@ const VALID_TABS = ["receivable", "payable", "expenses", "commissions", "rules"]
 
 export default function Financial() {
   const searchStr = useSearch();
+  const [, navigate] = useLocation();
   const initialTab = useMemo(() => {
     const params = new URLSearchParams(searchStr);
     const t = params.get("tab");
@@ -156,10 +157,21 @@ export default function Financial() {
       setTab(t);
     }
   }, [searchStr]);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useState(() => new URLSearchParams(searchStr).get("status") ?? "");
+  const [categoryFilter, setCategoryFilter] = useState(() => new URLSearchParams(searchStr).get("category") ?? "");
+  const [dateFrom, setDateFrom] = useState(() => new URLSearchParams(searchStr).get("dateFrom") ?? "");
+  const [dateTo, setDateTo] = useState(() => new URLSearchParams(searchStr).get("dateTo") ?? "");
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (statusFilter) params.set("status", statusFilter);
+    if (categoryFilter) params.set("category", categoryFilter);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    navigate(`?${params.toString()}`, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, statusFilter, categoryFilter, dateFrom, dateTo]);
   const [showUpcomingInstallments, setShowUpcomingInstallments] = useState(false);
   const [upcomingInstallments, setUpcomingInstallments] = useState<Array<{
     id: string; reservationId: string; installmentNumber: number; dueDate: string;

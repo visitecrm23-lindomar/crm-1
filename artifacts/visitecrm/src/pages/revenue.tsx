@@ -242,18 +242,31 @@ export default function Revenue() {
 
   function handleTabChange(value: string) {
     setTab(value);
-    const params = new URLSearchParams(searchStr);
-    params.set("tab", value);
-    navigate(`?${params.toString()}`, { replace: true });
   }
 
-  const [period, setPeriod] = useState<GetDashboardRevenueChartPeriod>("12m");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [period, setPeriod] = useState<GetDashboardRevenueChartPeriod>(() => {
+    const p = new URLSearchParams(searchStr).get("period");
+    return (["7d", "30d", "90d", "12m"].includes(p ?? "") ? p : "12m") as GetDashboardRevenueChartPeriod;
+  });
+  const [dateFrom, setDateFrom] = useState(() => new URLSearchParams(searchStr).get("dateFrom") ?? "");
+  const [dateTo, setDateTo] = useState(() => new URLSearchParams(searchStr).get("dateTo") ?? "");
   const [showFilters, setShowFilters] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterSeller, setFilterSeller] = useState("");
-  const [filterPaymentMethod, setFilterPaymentMethod] = useState("");
+  const [filterStatus, setFilterStatus] = useState(() => new URLSearchParams(searchStr).get("status") ?? "");
+  const [filterSeller, setFilterSeller] = useState(() => new URLSearchParams(searchStr).get("seller") ?? "");
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState(() => new URLSearchParams(searchStr).get("method") ?? "");
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (period !== "12m") params.set("period", period);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterSeller) params.set("seller", filterSeller);
+    if (filterPaymentMethod) params.set("method", filterPaymentMethod);
+    navigate(`?${params.toString()}`, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, period, dateFrom, dateTo, filterStatus, filterSeller, filterPaymentMethod]);
 
   const { data: chartData, isLoading: loadingChart } = useGetDashboardRevenueChart({ period });
   const { data: paymentSummary } = useGetPaymentsSummary();

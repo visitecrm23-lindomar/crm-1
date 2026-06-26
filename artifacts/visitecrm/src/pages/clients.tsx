@@ -1315,20 +1315,20 @@ function SortableHeader({ label, field, currentSort, currentOrder, onSort }: Sor
 export default function Clients() {
   const [, navigate] = useLocation();
   const searchStr = useSearch();
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterClassification, setFilterClassification] = useState<string>("all");
-  const [filterPipelineStage, setFilterPipelineStage] = useState<string>("all");
-  const [filterCity, setFilterCity] = useState<string>("");
-  const [filterTripId, setFilterTripId] = useState<string>("all");
-  const [filterSellerId, setFilterSellerId] = useState<string>("all");
-  const [filterOrigin, setFilterOrigin] = useState<string>("");
-  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
-  const [filterDateTo, setFilterDateTo] = useState<string>("");
-  const [filterScoreBand, setFilterScoreBand] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<SortField>("createdAt");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [search, setSearch] = useState(() => new URLSearchParams(searchStr).get("search") ?? "");
+  const [page, setPage] = useState(() => parseInt(new URLSearchParams(searchStr).get("page") ?? "1") || 1);
+  const [filterStatus, setFilterStatus] = useState<string>(() => new URLSearchParams(searchStr).get("status") ?? "all");
+  const [filterClassification, setFilterClassification] = useState<string>(() => new URLSearchParams(searchStr).get("classification") ?? "all");
+  const [filterPipelineStage, setFilterPipelineStage] = useState<string>(() => new URLSearchParams(searchStr).get("pipeline") ?? "all");
+  const [filterCity, setFilterCity] = useState<string>(() => new URLSearchParams(searchStr).get("city") ?? "");
+  const [filterTripId, setFilterTripId] = useState<string>(() => new URLSearchParams(searchStr).get("trip") ?? "all");
+  const [filterSellerId, setFilterSellerId] = useState<string>(() => new URLSearchParams(searchStr).get("seller") ?? "all");
+  const [filterOrigin, setFilterOrigin] = useState<string>(() => new URLSearchParams(searchStr).get("origin") ?? "");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>(() => new URLSearchParams(searchStr).get("dateFrom") ?? "");
+  const [filterDateTo, setFilterDateTo] = useState<string>(() => new URLSearchParams(searchStr).get("dateTo") ?? "");
+  const [filterScoreBand, setFilterScoreBand] = useState<string>(() => new URLSearchParams(searchStr).get("score") ?? "all");
+  const [sortBy, setSortBy] = useState<SortField>(() => (new URLSearchParams(searchStr).get("sortBy") as SortField) ?? "createdAt");
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => (new URLSearchParams(searchStr).get("sortOrder") as SortOrder) ?? "desc");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -1345,6 +1345,27 @@ export default function Clients() {
     const params = new URLSearchParams(searchStr);
     setBirthdayFilter(params.get("filter") === "birthday");
   }, [searchStr]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (page > 1) params.set("page", String(page));
+    if (filterStatus !== "all") params.set("status", filterStatus);
+    if (filterClassification !== "all") params.set("classification", filterClassification);
+    if (filterPipelineStage !== "all") params.set("pipeline", filterPipelineStage);
+    if (filterCity) params.set("city", filterCity);
+    if (filterTripId !== "all") params.set("trip", filterTripId);
+    if (filterSellerId !== "all") params.set("seller", filterSellerId);
+    if (filterOrigin) params.set("origin", filterOrigin);
+    if (filterDateFrom) params.set("dateFrom", filterDateFrom);
+    if (filterDateTo) params.set("dateTo", filterDateTo);
+    if (filterScoreBand !== "all") params.set("score", filterScoreBand);
+    if (sortBy !== "createdAt") params.set("sortBy", sortBy);
+    if (sortOrder !== "desc") params.set("sortOrder", sortOrder);
+    if (birthdayFilter) params.set("filter", "birthday");
+    navigate(`?${params.toString()}`, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, page, filterStatus, filterClassification, filterPipelineStage, filterCity, filterTripId, filterSellerId, filterOrigin, filterDateFrom, filterDateTo, filterScoreBand, sortBy, sortOrder, birthdayFilter]);
   const { toast } = useToast();
   const LIMIT = 12;
 
