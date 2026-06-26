@@ -96,12 +96,15 @@ function CardMarkModal({ deal, perdidoStageId, onClose, onConfirm }: CardMarkMod
         <div className="space-y-4 py-1">
           <div>
             <Label className="text-sm font-medium">Marcação</Label>
-            <Select value={marking} onValueChange={v => setMarking(v as "perdida" | "follow" | "")}>
+            <Select
+              value={marking === "" ? "none" : marking}
+              onValueChange={v => setMarking(v === "none" ? "" : v as "perdida" | "follow")}
+            >
               <SelectTrigger className="mt-1.5">
                 <SelectValue placeholder="Selecionar marcação..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhuma</SelectItem>
+                <SelectItem value="none">Nenhuma</SelectItem>
                 <SelectItem value="perdida">Perdida</SelectItem>
                 <SelectItem value="follow">Follow</SelectItem>
               </SelectContent>
