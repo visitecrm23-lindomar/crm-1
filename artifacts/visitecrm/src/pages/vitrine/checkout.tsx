@@ -375,7 +375,9 @@ export default function VitrineCheckout({
         // Silently fail — user can still enter it manually
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: runs once on mount to restore a saved
+  // referral code from localStorage. Omitting referralResult prevents an infinite loop (validate → set →
+  // revalidate); omitting slug/publicStoreApi avoids spurious re-runs on stable references.
   }, []);
 
   // Track checkout page visit for referral analytics funnel (once per session per code)
@@ -393,7 +395,9 @@ export default function VitrineCheckout({
       if (res.cookieId) localStorage.setItem("referral_server_cookie_id", res.cookieId);
       sessionStorage.setItem(sessionKey, "1");
     }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: fires once per session to record the
+  // checkout funnel entry. slug and publicStoreApi are stable within the component lifetime; re-running on
+  // every render would duplicate analytics events and defeat the sessionStorage dedup guard.
   }, []);
 
   function set(field: string, value: string) {

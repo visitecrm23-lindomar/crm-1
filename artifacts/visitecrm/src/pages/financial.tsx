@@ -144,7 +144,8 @@ export default function Financial() {
     const params = new URLSearchParams(searchStr);
     const t = params.get("tab");
     return VALID_TABS.includes(t ?? "") ? t! : "receivable";
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: runs once on mount to set the initial tab;
+  // subsequent URL changes are handled by the useEffect below (searchStr dep) to avoid resetting user-selected tabs.
   }, []);
   const [tab, setTab] = useState(initialTab);
 
