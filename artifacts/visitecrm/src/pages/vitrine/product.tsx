@@ -32,7 +32,9 @@ import {
   Images,
   Download,
   ShieldCheck,
+  Heart,
 } from "lucide-react";
+import { useFavorites } from "@/contexts/FavoritesContext";
 
 function GalleryThumb({
   src,
@@ -313,6 +315,7 @@ export default function VitrineProduct({
 }) {
   const [, navigate] = useLocation();
   const { colors } = useVitrineTheme();
+  const { isFavorited, toggleFavorite } = useFavorites();
   const [product, setProduct] = useState<(StoreProduct & { reviews: StoreReview[] }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -410,6 +413,10 @@ export default function VitrineProduct({
   const variants = product.variants ?? [];
   const isSoldOut =
     product.trackInventory && product.stockQuantity != null && product.stockQuantity <= 0;
+
+  const favItemType = product.tripId ? "trip" : "product";
+  const favItemId = product.tripId ?? product.id;
+  const isFav = isFavorited(favItemType, favItemId);
 
   function handleReserveNow() {
     navigate(`/loja/${slug}/reservar/${productSlug}`);
@@ -755,15 +762,28 @@ export default function VitrineProduct({
             </div>
 
             {/* CTA */}
-            <Button
-              className="w-full h-12 text-base font-bold"
-              style={{ backgroundColor: colors.accent, color: colors.accentForeground }}
-              onClick={handleReserveNow}
-              disabled={isSoldOut}
-            >
-              <Zap className="w-5 h-5 mr-2" />
-              {isSoldOut ? "Esgotado" : "Reservar Agora"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 h-12 text-base font-bold"
+                style={{ backgroundColor: colors.accent, color: colors.accentForeground }}
+                onClick={handleReserveNow}
+                disabled={isSoldOut}
+              >
+                <Zap className="w-5 h-5 mr-2" />
+                {isSoldOut ? "Esgotado" : "Reservar Agora"}
+              </Button>
+              <button
+                aria-label={isFav ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                onClick={() => toggleFavorite(favItemType, favItemId)}
+                className={`h-12 w-12 shrink-0 flex items-center justify-center rounded-lg border transition-colors ${
+                  isFav
+                    ? "bg-red-500 border-red-500 text-white"
+                    : "border-border text-muted-foreground hover:border-red-400 hover:text-red-500"
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${isFav ? "fill-current" : ""}`} />
+              </button>
+            </div>
 
             {store.contactWhatsapp && (
               <Button
