@@ -448,6 +448,32 @@ CONTEXTO DA AGÊNCIA:
 - Top destinos: ${exp.topDestinations.slice(0, 3).map((d) => `${d.name}(${d.count})`).join(", ") || "nenhum"}`;
 }
 
+// Appended to the full 7-pillar system prompt when the manager requests a
+// structured business summary report (POST /insights/ask with mode="report").
+const REPORT_FORMAT_INSTRUCTIONS = `
+
+MODO RELATÓRIO:
+Você deve gerar um relatório executivo estruturado e pronto para compartilhar com a diretoria, cobrindo TODOS os 7 pilares (Executivo, Comercial, Marketing, Financeiro, Operacional, Retenção e Expansão). Ignore o limite de palavras das instruções anteriores. Use markdown bem formatado, com a seguinte estrutura exata:
+
+# 📊 Relatório do Período
+
+## Resumo Executivo
+(2 a 4 frases sobre a saúde geral do negócio, citando os números mais relevantes)
+
+## Análise por Pilar
+(uma subseção curta para cada um dos 7 pilares, com os destaques e variações principais)
+
+## ⚠️ Principais Riscos
+(lista com os 3 maiores riscos identificados, cada um com causa raiz)
+
+## 🚀 Principais Oportunidades
+(lista com as 3 maiores oportunidades identificadas)
+
+## ✅ Ações Recomendadas
+(exatamente 3 ações concretas e priorizadas, numeradas de 1 a 3)
+
+Baseie-se exclusivamente nos dados fornecidos; nunca invente números. Quando faltar dado, diga claramente.`;
+
 const InsightsPeriodQuery = z.object({
   period: z.enum(["month", "quarter", "year"]).default("month"),
 });
@@ -484,6 +510,7 @@ const InsightsChatBody = z.object({
 });
 const InsightsAskBody = z.object({
   messages: z.array(ChatMessage).min(1),
+  mode: z.enum(["chat", "report"]).optional(),
 });
 const SimulatorBody = z.object({
   leadsChangePct: z.coerce.number().optional(),
@@ -955,11 +982,16 @@ router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void>
       next(new ValidationError(parsed.error.issues[0]?.message ?? "messages is required", "VALIDATION_ERROR"));
       return;
     }
-    const { messages } = parsed.data;
+    const { messages, mode } = parsed.data;
+    const isReport = mode === "report";
 
     const agencyName = await tenantName(me.tenantId);
     const summaryData = await buildInsightsSummary(me.tenantId, "quarter");
-    const systemPrompt = buildExecutiveAssistantPrompt(agencyName, summaryData);
+    // Report mode uses the full 7-pillar context prompt; the executive chat
+    // uses the leaner CFO/COO snapshot prompt for faster Q&A.
+    const systemPrompt = isReport
+      ? buildSystemPrompt(agencyName, "quarter", summaryData) + REPORT_FORMAT_INSTRUCTIONS
+      : buildExecutiveAssistantPrompt(agencyName, summaryData);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -974,7 +1006,7 @@ router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void>
       ...(useCompletionTokens ? { max_completion_tokens: 8192 } : { max_tokens: 8192 }),
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages,
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
       ],
       stream: true,
     });

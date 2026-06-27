@@ -21,7 +21,11 @@ import {
   ArrowUpRight, ArrowDownRight, Mail, Send, MousePointerClick, CheckCircle2,
   Repeat2, UserCheck, Award, Navigation, Bot, MessageCircle, X, ChevronUp,
   Sparkles, SlidersHorizontal, AlertTriangle, Loader2, RefreshCw, Plus,
+  FileText, Copy, Printer, Check,
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "@/lib/recharts-compat";
@@ -193,6 +197,31 @@ interface ChatMessage {
   content: string;
 }
 
+const REPORT_PROMPT =
+  "Gere um relatório executivo completo do período cobrindo todos os 7 pilares do negócio, com resumo executivo, principais riscos, principais oportunidades e 3 ações recomendadas.";
+
+function printReport(content: string) {
+  const win = window.open("", "_blank", "width=820,height=900");
+  if (!win) return;
+  const safe = content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  win.document.write(
+    `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />` +
+    `<title>Relatório do Período — VisiteCRM</title>` +
+    `<style>` +
+    `body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;` +
+    `color:#1a1a1a;max-width:760px;margin:40px auto;padding:0 24px;line-height:1.6;}` +
+    `pre{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:14px;margin:0;}` +
+    `@media print{body{margin:0;padding:24px;}}` +
+    `</style></head><body><pre>${safe}</pre>` +
+    `<script>window.onload=function(){window.print();}</script>` +
+    `</body></html>`,
+  );
+  win.document.close();
+}
+
 function StreamingChat({
   endpoint,
   extraBody,
@@ -202,6 +231,7 @@ function StreamingChat({
   suggestions,
   placeholder,
   heightClass = "h-[540px]",
+  enableReport = false,
 }: {
   endpoint: string;
   extraBody?: Record<string, unknown>;
@@ -211,6 +241,7 @@ function StreamingChat({
   suggestions: string[];
   placeholder: string;
   heightClass?: string;
+  enableReport?: boolean;
 }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
@@ -218,6 +249,8 @@ function StreamingChat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [reportContent, setReportContent] = useState<string | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -330,11 +363,27 @@ function StreamingChat({
     }
   }
 
+  function generateReport() {
+    if (isStreaming) return;
+    void sendMessage(REPORT_PROMPT, { mode: "report" });
+  }
+
+  async function copyMessage(content: string, idx: number) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedIdx(idx);
+      window.setTimeout(() => setCopiedIdx((cur) => (cur === idx ? null : cur)), 2000);
+      toast({ title: "Relatório copiado!" });
+    } catch {
+      toast({ title: "Não foi possível copiar", variant: "destructive" });
+    }
+  }
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isStreaming]);
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, overrideBody?: Record<string, unknown>) {
     if (!content.trim() || isStreaming) return;
 
     const userMsg: ChatMessage = { role: "user", content: content.trim() };
@@ -354,7 +403,7 @@ function StreamingChat({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ messages: nextMessages, ...(extraBody ?? {}) }),
+        body: JSON.stringify({ messages: nextMessages, ...(extraBody ?? {}), ...(overrideBody ?? {}) }),
       });
 
       if (response.status === 429) {
@@ -441,7 +490,19 @@ function StreamingChat({
   return (
     <div className={`flex flex-col ${heightClass}`}>
       {!isEmpty && (
-        <div className="flex justify-end border-b px-4 py-2">
+        <div className="flex justify-end gap-1 border-b px-4 py-2">
+          {enableReport && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={generateReport}
+              disabled={isStreaming}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Gerar relatório do período
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -463,6 +524,12 @@ function StreamingChat({
             <p className="text-base font-semibold">{emptyTitle}</p>
             <p className="text-sm text-muted-foreground mt-1">{emptySubtitle}</p>
           </div>
+          {enableReport && (
+            <Button onClick={generateReport} disabled={isStreaming} className="gap-2">
+              <FileText className="w-4 h-4" />
+              Gerar relatório do período
+            </Button>
+          )}
           <div className="flex flex-wrap gap-2 justify-center max-w-xl">
             {suggestions.map((q) => (
               <button
@@ -477,25 +544,49 @@ function StreamingChat({
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          {messages.map((msg, i) => (
+          {messages.map((msg, i) => {
+            const showActions =
+              msg.role === "assistant" && msg.content.trim().length > 0 &&
+              !(isStreaming && i === messages.length - 1);
+            return (
             <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               {msg.role === "assistant" && (
                 <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
                   <Bot className="w-4 h-4 text-primary" />
                 </div>
               )}
-              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-tr-sm"
-                  : "bg-muted text-foreground rounded-tl-sm"
-              }`}>
-                {msg.content || (isStreaming && i === messages.length - 1 ? (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </span>
-                ) : "")}
+              <div className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} max-w-[80%]`}>
+                <div className={`rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-tr-sm"
+                    : "bg-muted text-foreground rounded-tl-sm"
+                }`}>
+                  {msg.content || (isStreaming && i === messages.length - 1 ? (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                  ) : "")}
+                </div>
+                {showActions && (
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => void copyMessage(msg.content, i)}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 hover:bg-muted transition-colors"
+                    >
+                      {copiedIdx === i ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copiedIdx === i ? "Copiado" : "Copiar"}
+                    </button>
+                    <button
+                      onClick={() => setReportContent(msg.content)}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground rounded px-1.5 py-0.5 hover:bg-muted transition-colors"
+                    >
+                      <Printer className="w-3 h-3" />
+                      Imprimir / PDF
+                    </button>
+                  </div>
+                )}
               </div>
               {msg.role === "user" && (
                 <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0 mt-1">
@@ -503,7 +594,8 @@ function StreamingChat({
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
           <div ref={bottomRef} />
         </div>
       )}
@@ -545,6 +637,36 @@ function StreamingChat({
           <Send className="w-4 h-4" />
         </Button>
       </div>
+
+      <Dialog open={reportContent !== null} onOpenChange={(open) => { if (!open) setReportContent(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Relatório do Período
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto rounded-md border bg-muted/30 p-5">
+            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
+              {reportContent}
+            </pre>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => reportContent && void copyMessage(reportContent, -1)}
+              className="gap-1.5"
+            >
+              {copiedIdx === -1 ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copiedIdx === -1 ? "Copiado" : "Copiar"}
+            </Button>
+            <Button onClick={() => reportContent && printReport(reportContent)} className="gap-1.5">
+              <Printer className="w-4 h-4" />
+              Imprimir / Salvar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1502,6 +1624,7 @@ export default function Insights() {
                 suggestions={EXECUTIVE_QUESTIONS}
                 placeholder="Pergunte ao seu CFO/COO virtual..."
                 heightClass="h-[600px]"
+                enableReport
               />
             </CardContent>
           </Card>
