@@ -117,6 +117,7 @@ export const referralSettingsTable = pgTable("referral_settings", {
   expiryWarning1DayEnabled: boolean("expiry_warning_1_day_enabled").notNull().default(true),
   bonusReleaseEmailEnabled: boolean("bonus_release_email_enabled").notNull().default(true),
   pointsPerReferral: integer("points_per_referral").notNull().default(0),
+  loyaltyPointsEmailEnabled: boolean("loyalty_points_email_enabled").notNull().default(true),
   gracePeriodDays: integer("grace_period_days").notNull().default(30),
   bonusValidityDays: integer("bonus_validity_days").notNull().default(30),
   discountExpirationDays: integer("discount_expiration_days").notNull().default(30),

@@ -12,6 +12,7 @@ import { ReferralExpiringSoonEmail, type ReferralExpiringSoonEmailProps } from '
 import { ReferralBonusReleasedEmail, type ReferralBonusReleasedEmailProps } from './templates/referral-bonus-released';
 import { ReferralWelcomeEmail, type ReferralWelcomeEmailProps } from './templates/referral-welcome';
 import { ReferralTierUpgradeEmail, type ReferralTierUpgradeEmailProps } from './templates/referral-tier-upgrade';
+import { ReferralLoyaltyPointsEmail, type ReferralLoyaltyPointsEmailProps } from './templates/referral-loyalty-points';
 import { NpsSurveyEmail, type NpsSurveyEmailProps } from './templates/nps-survey';
 import { AgencySuspendedEmail, type AgencySuspendedEmailProps } from './templates/agency-suspended';
 import { AgencyReactivatedEmail, type AgencyReactivatedEmailProps } from './templates/agency-reactivated';
@@ -20,6 +21,7 @@ export type { FavoriteLowAvailabilityEmailProps };
 export type { ReferralWelcomeEmailProps };
 export type { AgencySuspendedEmailProps, AgencyReactivatedEmailProps };
 export type { ReferralTierUpgradeEmailProps };
+export type { ReferralLoyaltyPointsEmailProps };
 
 export type { ReservationCancellationEmailProps };
 
@@ -422,6 +424,35 @@ export async function sendReferralBonusReleasedEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending referral bonus released email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendReferralLoyaltyPointsEmail(
+  props: ReferralLoyaltyPointsEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.referrerEmail],
+      subject: `⭐ Você ganhou ${props.pointsEarned} pontos de fidelidade! — ${props.agencyName}`,
+      react: React.createElement(ReferralLoyaltyPointsEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send referral loyalty points email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending referral loyalty points email:', message);
     return { success: false, error: message };
   }
 }

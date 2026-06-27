@@ -2,12 +2,12 @@ import { db, emailLogsTable, reservationsTable, tripsTable, clientsTable, referr
 import { eq, and, inArray, isNull } from "drizzle-orm";
 import { generateId } from "../lib/id";
 import { getEmailQueue, getCancellationEmailQueue, getNewBookingNotificationEmailQueue, getReferralEmailQueue } from "./index";
-import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData } from "./index";
-import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail, sendAgencySuspendedEmail, sendAgencyReactivatedEmail } from "@workspace/email";
+import type { ReferralBonusPaidEmailJobData, ReferralConvertedEmailJobData, ReferralExpiredEmailJobData, ReferralExpiringSoonEmailJobData, ReferralBonusReleasedEmailJobData, ReferralLoyaltyPointsEmailJobData } from "./index";
+import { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendWelcomeCredentialsEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendReminderHtmlEmail, sendReferralCodeSuspendedEmail, sendAgencySuspendedEmail, sendAgencyReactivatedEmail, sendReferralLoyaltyPointsEmail } from "@workspace/email";
 import { ROLES } from "@workspace/permissions";
 import { formatBRL } from "@workspace/shared";
 import { logger } from "../lib/logger";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, WelcomeCredentialsEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralTierUpgradeEmailProps, ReferralLoyaltyPointsEmailProps } from "@workspace/email";
 import { insertClientNotification } from "../lib/client-notifications";
 import { areWorkersEnabled } from "../lib/redis";
 import { dispatchWhatsAppReferralReversed } from "./whatsapp-helpers.js";
@@ -1056,6 +1056,100 @@ export async function dispatchReferralBonusReleasedEmail(
   });
 
   return true;
+}
+
+// ── Referral: pontos de fidelidade creditados ─────────────────────────────────
+
+async function enqueueReferralLoyaltyPointsEmail(
+  props: ReferralLoyaltyPointsEmailProps,
+  tenantId: string,
+): Promise<void> {
+  const emailLogId = generateId();
+  const subject = `⭐ Você ganhou ${props.pointsEarned} pontos de fidelidade! — ${props.agencyName}`;
+  const queue = getReferralEmailQueue();
+
+  if (queue) {
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: "queued",
+    });
+
+    try {
+      const jobData: ReferralLoyaltyPointsEmailJobData = { ...props, emailLogId, tenantId };
+      await queue.add("referral-loyalty-points", jobData);
+      logger.info({ emailLogId, referrerEmail: props.referrerEmail }, "[email-queue] Referral loyalty-points email enqueued");
+    } catch (enqueueErr) {
+      logger.warn({ emailLogId, err: enqueueErr }, "[email-queue] Failed to enqueue referral loyalty-points — falling back to direct send");
+      const result = await sendReferralLoyaltyPointsEmail(props);
+      await db
+        .update(emailLogsTable)
+        .set({
+          status: result.success ? "sent" : "failed",
+          messageId: result.messageId ?? null,
+          errorMessage: result.error ?? null,
+        })
+        .where(eq(emailLogsTable.id, emailLogId));
+    }
+  } else {
+    if (!areWorkersEnabled()) {
+      logger.warn(
+        { tenantId, jobType: "referral-loyalty-points" },
+        "[workers-disabled] ENABLE_WORKERS=false — sending referral loyalty-points email directly instead of queuing. Set ENABLE_WORKERS=true to enable async processing.",
+      );
+    }
+    const result = await sendReferralLoyaltyPointsEmail(props);
+    await db.insert(emailLogsTable).values({
+      id: emailLogId,
+      tenantId,
+      reservationId: null,
+      recipient: props.referrerEmail,
+      subject,
+      status: result.success ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorMessage: result.error ?? null,
+    });
+    logger.info({ emailLogId, referrerEmail: props.referrerEmail, success: result.success }, "[email-queue] Referral loyalty-points email sent directly");
+  }
+}
+
+export async function dispatchReferralLoyaltyPointsEmail(
+  referrerId: string,
+  tenantId: string,
+  pointsEarned: number,
+  currentBalance: number,
+): Promise<void> {
+  const [referrer] = await db
+    .select({ name: clientsTable.name, email: clientsTable.email })
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, referrerId), eq(clientsTable.tenantId, tenantId)))
+    .limit(1);
+
+  if (!referrer?.email) {
+    logger.warn({ referrerId, tenantId }, "[email-queue] Referral loyalty-points: referrer has no email — skipping");
+    return;
+  }
+
+  const [tenant] = await db
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  await enqueueReferralLoyaltyPointsEmail(
+    {
+      referrerName: referrer.name ?? referrer.email,
+      referrerEmail: referrer.email,
+      pointsEarned,
+      currentBalance,
+      agencyName: tenant?.name ?? "Agência",
+      agencyLogo: tenant?.logoUrl ?? null,
+    },
+    tenantId,
+  );
 }
 
 // ── Referral: boas-vindas ao código de indicação ─────────────────────────────

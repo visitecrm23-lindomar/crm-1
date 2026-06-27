@@ -689,6 +689,7 @@ CREATE TABLE IF NOT EXISTS "referral_settings" (
         "expiry_warning_1_day_enabled" boolean DEFAULT true NOT NULL,
         "bonus_release_email_enabled" boolean DEFAULT true NOT NULL,
         "points_per_referral" integer DEFAULT 0 NOT NULL,
+        "loyalty_points_email_enabled" boolean DEFAULT true NOT NULL,
         "whatsapp_reversed_message" text,
         "discount_expiration_days" integer NOT NULL DEFAULT 30,
         "min_purchase_amount" numeric(10, 2) NOT NULL DEFAULT 0,

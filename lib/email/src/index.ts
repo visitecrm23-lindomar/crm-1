@@ -2,7 +2,7 @@ export { ReservationConfirmationEmail } from './templates/reservation-confirmati
 export type { ReservationConfirmationEmailProps } from './templates/reservation-confirmation';
 export { ReservationCancellationEmail } from './templates/reservation-cancellation';
 export type { ReservationCancellationEmailProps } from './templates/reservation-cancellation';
-export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendRedisAlertEmail, sendRedisRecoveryEmail, sendRedisDailyLimitAlertEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendNpsSurveyEmail } from './service';
+export { sendReservationConfirmationEmail, sendReservationCancellationEmail, sendBirthdayEmail, sendManifestEmail, sendWelcomeCredentialsEmail, sendReminderHtmlEmail, sendNewBookingNotificationEmail, sendReferralBonusPaidEmail, sendReferralConvertedEmail, sendReferralExpiredEmail, sendReferralExpiringSoonEmail, sendReferralBonusReleasedEmail, sendRedisAlertEmail, sendRedisRecoveryEmail, sendRedisDailyLimitAlertEmail, sendReferralWelcomeEmail, sendReferralTierUpgradeEmail, sendReferralReversedEmail, sendNpsSurveyEmail, sendReferralLoyaltyPointsEmail } from './service';
 export type { NpsSurveyEmailProps } from './service';
 export { NewBookingNotificationEmail } from './templates/new-booking-notification';
 export type { NewBookingNotificationEmailProps } from './templates/new-booking-notification';
@@ -31,3 +31,5 @@ export { AgencyReactivatedEmail } from './templates/agency-reactivated';
 export { sendFavoriteLowAvailabilityEmail } from './service';
 export type { FavoriteLowAvailabilityEmailProps } from './service';
 export { FavoriteLowAvailabilityEmail } from './templates/favorite-low-availability';
+export { ReferralLoyaltyPointsEmail } from './templates/referral-loyalty-points';
+export type { ReferralLoyaltyPointsEmailProps } from './service';

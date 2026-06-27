@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import { getBullMQQueueConnection } from "../lib/redis";
-import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps } from "@workspace/email";
+import type { ReservationConfirmationEmailProps, ReservationCancellationEmailProps, BirthdayEmailProps, NewBookingNotificationEmailProps, ReferralBonusPaidEmailProps, ReferralConvertedEmailProps, ReferralExpiredEmailProps, ReferralExpiringSoonEmailProps, ReferralBonusReleasedEmailProps, ReferralWelcomeEmailProps, ReferralLoyaltyPointsEmailProps } from "@workspace/email";
 
 export interface ReservationEmailJobData extends ReservationConfirmationEmailProps {
   emailLogId: string;
@@ -55,6 +55,11 @@ export interface ReferralBonusReleasedEmailJobData extends ReferralBonusReleased
 }
 
 export interface ReferralWelcomeEmailJobData extends ReferralWelcomeEmailProps {
+  emailLogId: string;
+  tenantId: string;
+}
+
+export interface ReferralLoyaltyPointsEmailJobData extends ReferralLoyaltyPointsEmailProps {
   emailLogId: string;
   tenantId: string;
 }

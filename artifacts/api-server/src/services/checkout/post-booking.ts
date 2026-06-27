@@ -6,7 +6,7 @@ import { ensurePortalAccount } from "./portal-account";
 import { generateAndAssignReferralCode } from "../../lib/referral-code";
 import { generateReferralCode } from "../../lib/id";
 import { applyDeferredOrderCredits } from "./deferred-referral-effects";
-import { dispatchReferralConvertedEmail, dispatchReferralTierUpgradeEmail } from "../../queues/email-helpers";
+import { dispatchReferralConvertedEmail, dispatchReferralTierUpgradeEmail, dispatchReferralLoyaltyPointsEmail } from "../../queues/email-helpers";
 import { dispatchWhatsAppReferralConverted } from "../../queues/whatsapp-helpers";
 
 /**
@@ -58,6 +58,20 @@ export async function runPostPaymentSideEffects(orderId: string): Promise<void> 
           deferred.conversion.bonusMultiplier,
         ).catch((err) =>
           logger.error({ err }, "[checkout/post-payment] Failed to dispatch referral tier-upgrade email"),
+        );
+      }
+      if (
+        deferred.conversion &&
+        deferred.conversion.loyaltyPointsGranted > 0 &&
+        deferred.conversion.loyaltyPointsEmailEnabled
+      ) {
+        dispatchReferralLoyaltyPointsEmail(
+          deferred.referrerId,
+          deferred.tenantId,
+          deferred.conversion.loyaltyPointsGranted,
+          deferred.conversion.loyaltyCurrentBalance,
+        ).catch((err) =>
+          logger.error({ err }, "[checkout/post-payment] Failed to dispatch referral loyalty-points email"),
         );
       }
       if (deferred.referralCode) {

@@ -44,6 +44,9 @@ export interface ReferralConversionResult {
   newTierLevel: string;
   newTierLabel: string;
   bonusMultiplier: number;
+  loyaltyPointsGranted: number;
+  loyaltyCurrentBalance: number;
+  loyaltyPointsEmailEnabled: boolean;
 }
 
 export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs): Promise<ReferralConversionResult> {
@@ -60,6 +63,7 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       tiersConfig: referralSettingsTable.tiersConfig,
       expirationDays: referralSettingsTable.expirationDays,
       pointsPerReferral: referralSettingsTable.pointsPerReferral,
+      loyaltyPointsEmailEnabled: referralSettingsTable.loyaltyPointsEmailEnabled,
       discountExpirationDays: referralSettingsTable.discountExpirationDays,
       maxReferralsPerUser: referralSettingsTable.maxReferralsPerUser,
     })
@@ -89,7 +93,15 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
 
   // Enforce maxReferralsPerUser cap — if limit is reached (and > 0), skip conversion gracefully
   if (maxReferralsPerUser > 0 && currentCompleted >= maxReferralsPerUser) {
-    return { tierUpgraded: false, newTierLevel: "bronze", newTierLabel: "Bronze", bonusMultiplier: 1 };
+    return {
+      tierUpgraded: false,
+      newTierLevel: "bronze",
+      newTierLabel: "Bronze",
+      bonusMultiplier: 1,
+      loyaltyPointsGranted: 0,
+      loyaltyCurrentBalance: 0,
+      loyaltyPointsEmailEnabled: refSettings?.loyaltyPointsEmailEnabled ?? true,
+    };
   }
 
   const { tier } = computeReferralTier(currentCompleted, refSettings?.tiersConfig ?? null);
@@ -212,13 +224,9 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
       ));
   }
 
-  // Return tier upgrade info for the caller to dispatch email outside the transaction
-  const conversionResult: ReferralConversionResult = {
-    tierUpgraded,
-    newTierLevel: tierAfter.tier.level,
-    newTierLabel: tierAfter.tier.label,
-    bonusMultiplier: tierAfter.tier.bonusMultiplier,
-  };
+  let loyaltyPointsGranted = 0;
+  let loyaltyCurrentBalance = 0;
+  const loyaltyPointsEmailEnabled = refSettings?.loyaltyPointsEmailEnabled ?? true;
 
   const pointsPerReferral = refSettings ? Number(refSettings.pointsPerReferral ?? 0) : 0;
   if (pointsPerReferral > 0) {
@@ -288,10 +296,21 @@ export async function recordReferralConversion(tx: Tx, args: RecordReferralArgs)
               lastActivityAt: new Date(),
             })
             .where(eq(loyaltyMembersTable.id, loyaltyMember.id));
+
+          loyaltyPointsGranted = pointsPerReferral;
+          loyaltyCurrentBalance = newAvailable;
         }
       }
     }
   }
 
-  return conversionResult;
+  return {
+    tierUpgraded,
+    newTierLevel: tierAfter.tier.level,
+    newTierLabel: tierAfter.tier.label,
+    bonusMultiplier: tierAfter.tier.bonusMultiplier,
+    loyaltyPointsGranted,
+    loyaltyCurrentBalance,
+    loyaltyPointsEmailEnabled,
+  };
 }

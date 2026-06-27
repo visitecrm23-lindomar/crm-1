@@ -1512,6 +1512,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
       expiryWarning1DayEnabled: z.boolean().optional(),
       bonusReleaseEmailEnabled: z.boolean().optional(),
       pointsPerReferral: z.number().int().min(0).optional(),
+      loyaltyPointsEmailEnabled: z.boolean().optional(),
       gracePeriodDays: z.number().int().min(0).optional(),
       bonusValidityDays: z.number().int().min(0).optional(),
       discountExpirationDays: z.number().int().min(0).optional(),
@@ -1540,6 +1541,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
     if (parsed.data.expiryWarning1DayEnabled != null) updates.expiryWarning1DayEnabled = parsed.data.expiryWarning1DayEnabled;
     if (parsed.data.bonusReleaseEmailEnabled != null) updates.bonusReleaseEmailEnabled = parsed.data.bonusReleaseEmailEnabled;
     if (parsed.data.pointsPerReferral != null) updates.pointsPerReferral = parsed.data.pointsPerReferral;
+    if (parsed.data.loyaltyPointsEmailEnabled != null) updates.loyaltyPointsEmailEnabled = parsed.data.loyaltyPointsEmailEnabled;
     if (parsed.data.gracePeriodDays != null) updates.gracePeriodDays = parsed.data.gracePeriodDays;
     if (parsed.data.bonusValidityDays != null) updates.bonusValidityDays = parsed.data.bonusValidityDays;
     if (parsed.data.discountExpirationDays != null) updates.discountExpirationDays = parsed.data.discountExpirationDays;
@@ -1580,6 +1582,7 @@ router.patch("/referral-settings", async (req, res, next: NextFunction): Promise
           expiryWarning7DaysEnabled: (updates.expiryWarning7DaysEnabled as boolean | undefined) ?? true,
           expiryWarning1DayEnabled: (updates.expiryWarning1DayEnabled as boolean | undefined) ?? true,
           bonusReleaseEmailEnabled: (updates.bonusReleaseEmailEnabled as boolean | undefined) ?? true,
+          loyaltyPointsEmailEnabled: (updates.loyaltyPointsEmailEnabled as boolean | undefined) ?? true,
         });
         [result] = await tx.select().from(referralSettingsTable)
           .where(eq(referralSettingsTable.id, id)).limit(1);

@@ -358,6 +358,7 @@ export default function Indicacoes() {
       expiryWarning7DaysEnabled: settings?.expiryWarning7DaysEnabled ?? true,
       expiryWarning1DayEnabled: settings?.expiryWarning1DayEnabled ?? true,
       bonusReleaseEmailEnabled: settings?.bonusReleaseEmailEnabled ?? true,
+      loyaltyPointsEmailEnabled: settings?.loyaltyPointsEmailEnabled ?? true,
       pointsPerReferral: settings?.pointsPerReferral ?? 0,
       gracePeriodDays: settings?.gracePeriodDays ?? 30,
       bonusValidityDays: settings?.bonusValidityDays ?? 30,
@@ -390,6 +391,7 @@ export default function Indicacoes() {
           expiryWarning7DaysEnabled: localSettings.expiryWarning7DaysEnabled,
           expiryWarning1DayEnabled: localSettings.expiryWarning1DayEnabled,
           bonusReleaseEmailEnabled: localSettings.bonusReleaseEmailEnabled,
+          loyaltyPointsEmailEnabled: localSettings.loyaltyPointsEmailEnabled,
           pointsPerReferral: localSettings.pointsPerReferral != null ? Number(localSettings.pointsPerReferral) : undefined,
           gracePeriodDays: (localSettings as Record<string, unknown>).gracePeriodDays != null ? Number((localSettings as Record<string, unknown>).gracePeriodDays) : undefined,
           bonusValidityDays: (localSettings as Record<string, unknown>).bonusValidityDays != null ? Number((localSettings as Record<string, unknown>).bonusValidityDays) : undefined,
@@ -2899,6 +2901,16 @@ export default function Indicacoes() {
                 <Switch
                   checked={localSettings.bonusReleaseEmailEnabled ?? true}
                   onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, bonusReleaseEmailEnabled: v }))}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-normal">Pontos de fidelidade creditados</Label>
+                  <p className="text-xs text-muted-foreground">Envia e-mail ao indicador quando pontos de fidelidade são creditados por uma indicação convertida</p>
+                </div>
+                <Switch
+                  checked={(localSettings as Record<string, unknown>).loyaltyPointsEmailEnabled !== false}
+                  onCheckedChange={(v) => setLocalSettings((s) => ({ ...s, loyaltyPointsEmailEnabled: v }))}
                 />
               </div>
             </div>
