@@ -28,6 +28,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@clerk/react";
+import { useToast } from "@/hooks/use-toast";
 
 const fmt = (v: number) => formatCurrency(v);
 const fmtCompact = (v: number) => {
@@ -212,6 +213,7 @@ function StreamingChat({
   heightClass?: string;
 }) {
   const { getToken } = useAuth();
+  const { toast } = useToast();
   const { data: me } = useGetMe();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -354,6 +356,25 @@ function StreamingChat({
         },
         body: JSON.stringify({ messages: nextMessages, ...(extraBody ?? {}) }),
       });
+
+      if (response.status === 429) {
+        const retryAfterSec = Number(response.headers.get("Retry-After"));
+        const minutes = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? Math.max(1, Math.ceil(retryAfterSec / 60))
+          : 1;
+        const limitMsg = `Limite de perguntas atingido. Tente novamente em ${minutes} minuto${minutes > 1 ? "s" : ""}.`;
+        toast({
+          title: "Limite de perguntas atingido",
+          description: `Você fez muitas perguntas em pouco tempo. Tente novamente em ${minutes} minuto${minutes > 1 ? "s" : ""}.`,
+          variant: "destructive",
+        });
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: `⚠️ ${limitMsg}` };
+          return updated;
+        });
+        return;
+      }
 
       if (!response.ok || !response.body) {
         throw new Error(`HTTP ${response.status}`);
