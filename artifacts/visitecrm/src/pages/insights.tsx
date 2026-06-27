@@ -220,7 +220,8 @@ function StreamingChat({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tenantId = me?.tenantId ?? "anon";
-  const storageKey = `visitecrm:insights-chat:${tenantId}:${endpoint}`;
+  const userId = me?.id ?? "anon-user";
+  const storageKey = `visitecrm:insights-chat:${tenantId}:${userId}:${endpoint}`;
   const loadedKeyRef = useRef<string | null>(null);
   const chatType = endpoint.includes("/ask") ? "executive" : "tourism";
 
@@ -231,7 +232,8 @@ function StreamingChat({
     let cancelled = false;
 
     async function loadHistory() {
-      // Try server when tenant is known
+      // Try server when tenant is known — treat OK response as authoritative
+      // (even empty array means "no history", so skip localStorage fallback)
       if (tenantId !== "anon") {
         try {
           const token = await getToken();
@@ -240,16 +242,16 @@ function StreamingChat({
           });
           if (res.ok && !cancelled) {
             const data = (await res.json()) as { messages: ChatMessage[] };
-            if (Array.isArray(data.messages) && data.messages.length > 0) {
-              setMessages(data.messages);
-              return;
-            }
+            // Server is authoritative: set whatever it returns (may be [])
+            setMessages(Array.isArray(data.messages) ? data.messages : []);
+            return; // do NOT fall back to localStorage when server responded
           }
+          // non-OK response — fall through to localStorage offline fallback
         } catch {
-          // server unavailable — fall through to localStorage
+          // server unavailable — fall through to localStorage offline fallback
         }
       }
-      // Fallback: localStorage
+      // Fallback: localStorage (only reached when server is unreachable or non-OK)
       if (!cancelled) {
         try {
           const saved = localStorage.getItem(storageKey);
