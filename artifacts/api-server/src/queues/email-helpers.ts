@@ -1134,10 +1134,13 @@ export async function dispatchReferralLoyaltyPointsEmail(
   }
 
   const [tenant] = await db
-    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl })
+    .select({ name: tenantsTable.name, logoUrl: tenantsTable.logoUrl, slug: tenantsTable.slug })
     .from(tenantsTable)
     .where(eq(tenantsTable.id, tenantId))
     .limit(1);
+
+  const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
+  const profileUrl = tenant?.slug ? `${STORE_PUBLIC_BASE}/loja/${tenant.slug}/perfil?tab=indicacoes` : undefined;
 
   await enqueueReferralLoyaltyPointsEmail(
     {
@@ -1147,6 +1150,7 @@ export async function dispatchReferralLoyaltyPointsEmail(
       currentBalance,
       agencyName: tenant?.name ?? "Agência",
       agencyLogo: tenant?.logoUrl ?? null,
+      profileUrl,
     },
     tenantId,
   );

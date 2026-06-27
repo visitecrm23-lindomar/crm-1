@@ -3,6 +3,8 @@ import {
   useGetNpsSummary,
   useListNpsResponses,
   useSendNpsSurvey,
+  useGetMe,
+  useGetTenant,
 } from "@workspace/api-client-react";
 import { useListTrips } from "@workspace/api-client-react";
 import { useListClients } from "@workspace/api-client-react";
@@ -229,6 +231,19 @@ export default function Nps() {
   const [sendMode, setSendMode] = useState<"all" | "select">("all");
   const [detailResponse, setDetailResponse] = useState<NpsResponse | null>(null);
   const [generatedLinks, setGeneratedLinks] = useState<NpsSendLink[]>([]);
+
+  const { data: me } = useGetMe();
+  const { data: tenantData } = useGetTenant(me?.tenantId ?? "", {
+    query: { enabled: !!me?.tenantId, queryKey: ["tenant", me?.tenantId ?? ""] },
+  });
+  const npsCategories = ((tenantData?.settings as Record<string, unknown> | null | undefined)
+    ?.npsCategories ?? null) as { transport?: boolean; service?: boolean; organization?: boolean; guide?: boolean } | null;
+
+  const enabledNpsCatKeys = new Set<string>(
+    (["transport", "service", "organization", "guide"] as const).filter(
+      key => !npsCategories || npsCategories[key] !== false,
+    ),
+  );
 
   const summaryParams = {
     tripId: filterTrip !== "all" ? filterTrip : undefined,
@@ -577,7 +592,12 @@ export default function Nps() {
             </Card>
           </div>
 
-          {[summary.avgTransport, summary.avgService, summary.avgOrganization, summary.avgGuide].some(v => v != null) && (
+          {[
+              { label: "Transporte", catKey: "transport", value: summary.avgTransport },
+              { label: "Atendimento", catKey: "service", value: summary.avgService },
+              { label: "Organização", catKey: "organization", value: summary.avgOrganization },
+              { label: "Guia", catKey: "guide", value: summary.avgGuide },
+            ].filter(c => enabledNpsCatKeys.has(c.catKey)).some(c => c.value != null) && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Satisfação por Categoria</CardTitle>
@@ -585,11 +605,11 @@ export default function Nps() {
               <CardContent className="pt-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
-                    { label: "Transporte", value: summary.avgTransport, icon: <Bus className="w-4 h-4" />, color: "text-blue-500" },
-                    { label: "Atendimento", value: summary.avgService, icon: <HeartHandshake className="w-4 h-4" />, color: "text-green-500" },
-                    { label: "Organização", value: summary.avgOrganization, icon: <ClipboardList className="w-4 h-4" />, color: "text-purple-500" },
-                    { label: "Guia", value: summary.avgGuide, icon: <PersonStanding className="w-4 h-4" />, color: "text-orange-500" },
-                  ].map(({ label, value, icon, color }) => (
+                    { label: "Transporte", catKey: "transport", value: summary.avgTransport, icon: <Bus className="w-4 h-4" />, color: "text-blue-500" },
+                    { label: "Atendimento", catKey: "service", value: summary.avgService, icon: <HeartHandshake className="w-4 h-4" />, color: "text-green-500" },
+                    { label: "Organização", catKey: "organization", value: summary.avgOrganization, icon: <ClipboardList className="w-4 h-4" />, color: "text-purple-500" },
+                    { label: "Guia", catKey: "guide", value: summary.avgGuide, icon: <PersonStanding className="w-4 h-4" />, color: "text-orange-500" },
+                  ].filter(c => enabledNpsCatKeys.has(c.catKey)).map(({ label, value, icon, color }) => (
                     <div key={label} className="flex flex-col items-center gap-1 p-3 rounded-lg bg-muted/50">
                       <span className={color}>{icon}</span>
                       <p className="text-xs text-muted-foreground font-medium">{label}</p>

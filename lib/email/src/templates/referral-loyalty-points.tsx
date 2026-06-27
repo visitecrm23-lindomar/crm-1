@@ -9,6 +9,7 @@ import {
   Text,
   Hr,
   Img,
+  Button,
 } from '@react-email/components'
 
 export interface ReferralLoyaltyPointsEmailProps {
@@ -18,6 +19,7 @@ export interface ReferralLoyaltyPointsEmailProps {
   currentBalance: number
   agencyName: string
   agencyLogo?: string | null
+  profileUrl?: string
 }
 
 export function ReferralLoyaltyPointsEmail({
@@ -26,6 +28,7 @@ export function ReferralLoyaltyPointsEmail({
   currentBalance,
   agencyName,
   agencyLogo,
+  profileUrl,
 }: ReferralLoyaltyPointsEmailProps) {
   const firstName = referrerName.split(' ')[0]
 
@@ -80,6 +83,11 @@ export function ReferralLoyaltyPointsEmail({
               Continue indicando amigos e acumulando pontos para resgatar recompensas
               incríveis. Cada indicação vale pontos!
             </Text>
+            {profileUrl && (
+              <Button style={ctaButton} href={profileUrl}>
+                🎒 Minhas Indicações
+              </Button>
+            )}
           </Section>
 
           {/* FOOTER */}
@@ -147,6 +155,18 @@ const headerSubtitle: React.CSSProperties = {
 
 const section: React.CSSProperties = {
   padding: '32px 24px',
+}
+
+const ctaButton: React.CSSProperties = {
+  backgroundColor: '#d97706',
+  color: '#ffffff',
+  padding: '12px 24px',
+  borderRadius: '6px',
+  fontSize: '15px',
+  fontWeight: 'bold',
+  textDecoration: 'none',
+  display: 'inline-block',
+  marginTop: '16px',
 }
 
 const sectionTitle: React.CSSProperties = {

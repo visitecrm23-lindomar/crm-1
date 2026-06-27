@@ -222,25 +222,57 @@ function StreamingChat({
   const tenantId = me?.tenantId ?? "anon";
   const storageKey = `visitecrm:insights-chat:${tenantId}:${endpoint}`;
   const loadedKeyRef = useRef<string | null>(null);
+  const chatType = endpoint.includes("/ask") ? "executive" : "tourism";
 
-  // Restore persisted history when the tenant/endpoint key becomes known.
+  // Restore persisted history: server first (cross-device), fallback to localStorage.
   useEffect(() => {
     if (loadedKeyRef.current === storageKey) return;
     loadedKeyRef.current = storageKey;
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved) as ChatMessage[];
-        if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
-      }
-    } catch {
-      // ignore corrupt or unavailable storage
-    }
-  }, [storageKey]);
+    let cancelled = false;
 
-  // Persist completed conversation per-tenant (skip mid-stream partials).
+    async function loadHistory() {
+      // Try server when tenant is known
+      if (tenantId !== "anon") {
+        try {
+          const token = await getToken();
+          const res = await fetch(`/api/insights/history/${chatType}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok && !cancelled) {
+            const data = (await res.json()) as { messages: ChatMessage[] };
+            if (Array.isArray(data.messages) && data.messages.length > 0) {
+              setMessages(data.messages);
+              return;
+            }
+          }
+        } catch {
+          // server unavailable — fall through to localStorage
+        }
+      }
+      // Fallback: localStorage
+      if (!cancelled) {
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved) as ChatMessage[];
+            if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
+          }
+        } catch {
+          // ignore corrupt or unavailable storage
+        }
+      }
+    }
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, tenantId, chatType, getToken]);
+
+  // Persist completed conversation (skip mid-stream partials).
   useEffect(() => {
     if (isStreaming) return;
+    // localStorage — offline fallback
     try {
       if (messages.length > 0) {
         localStorage.setItem(storageKey, JSON.stringify(messages));
@@ -250,7 +282,25 @@ function StreamingChat({
     } catch {
       // ignore storage quota / availability errors
     }
-  }, [messages, isStreaming, storageKey]);
+    // Server sync — fire-and-forget (cross-device persistence)
+    if (messages.length > 0 && tenantId !== "anon") {
+      void (async () => {
+        try {
+          const token = await getToken();
+          await fetch(`/api/insights/history/${chatType}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ messages }),
+          });
+        } catch {
+          // ignore — localStorage already has the data
+        }
+      })();
+    }
+  }, [messages, isStreaming, storageKey, tenantId, chatType, getToken]);
 
   function clearConversation() {
     setMessages([]);
@@ -259,6 +309,20 @@ function StreamingChat({
       localStorage.removeItem(storageKey);
     } catch {
       // ignore
+    }
+    // Server delete — fire-and-forget
+    if (tenantId !== "anon") {
+      void (async () => {
+        try {
+          const token = await getToken();
+          await fetch(`/api/insights/history/${chatType}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch {
+          // ignore
+        }
+      })();
     }
   }
 

@@ -96,6 +96,15 @@ function CardMarkModal({ deal, perdidoStageId, initialMarking, onClose, onConfir
           <DialogDescription>Defina o status e informações deste negócio.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-1">
+          {deal?.followUpNote && marking !== "follow" && (
+            <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-100">
+              <Bell className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-amber-700 mb-0.5">Nota de Follow Up registrada</p>
+                <p className="text-xs text-amber-600">{deal.followUpNote}</p>
+              </div>
+            </div>
+          )}
           <div>
             <Label className="text-sm font-medium">Marcação</Label>
             <Select
@@ -311,6 +320,18 @@ function ClientCardContent({ deal, tripsById, onEditClient, onView360, onDelete,
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
                 <ShoppingBag className="w-2.5 h-2.5" />
                 Loja
+              </span>
+            )}
+            {deal.marking === "follow" && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
+                <Bell className="w-2.5 h-2.5" />
+                Follow
+              </span>
+            )}
+            {deal.marking === "perdida" && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-100 shrink-0">
+                <XCircle className="w-2.5 h-2.5" />
+                Perdida
               </span>
             )}
           </div>

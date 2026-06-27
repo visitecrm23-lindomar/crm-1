@@ -16,6 +16,7 @@ import {
   referralsTable,
   passengersTable,
   tenantsTable,
+  insightsChatHistoryTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, lt, sql, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../lib/tenant";
@@ -995,6 +996,99 @@ router.post("/insights/ask", async (req, res, next: NextFunction): Promise<void>
       res.write(`data: ${JSON.stringify({ error: "Erro interno. Tente novamente." })}\n\n`);
       res.end();
     }
+  }
+});
+
+// GET /insights/history/:chatType — carrega histórico do usuário atual
+router.get("/insights/history/:chatType", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { chatType } = req.params;
+    if (chatType !== "executive" && chatType !== "tourism") {
+      next(new ValidationError("chatType inválido", "VALIDATION_ERROR"));
+      return;
+    }
+    const [row] = await db
+      .select({ messages: insightsChatHistoryTable.messages })
+      .from(insightsChatHistoryTable)
+      .where(
+        and(
+          eq(insightsChatHistoryTable.tenantId, me.tenantId),
+          eq(insightsChatHistoryTable.userId, me.id),
+          eq(insightsChatHistoryTable.chatType, chatType),
+        ),
+      )
+      .limit(1);
+    res.json({ messages: row?.messages ?? [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /insights/history/:chatType — salva/substitui histórico
+router.put("/insights/history/:chatType", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { chatType } = req.params;
+    if (chatType !== "executive" && chatType !== "tourism") {
+      next(new ValidationError("chatType inválido", "VALIDATION_ERROR"));
+      return;
+    }
+    const { messages } = z
+      .object({
+        messages: z.array(
+          z.object({ role: z.enum(["user", "assistant"]), content: z.string() }),
+        ),
+      })
+      .parse(req.body);
+    await db
+      .insert(insightsChatHistoryTable)
+      .values({
+        id: crypto.randomUUID(),
+        tenantId: me.tenantId,
+        userId: me.id,
+        chatType,
+        messages,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          insightsChatHistoryTable.tenantId,
+          insightsChatHistoryTable.userId,
+          insightsChatHistoryTable.chatType,
+        ],
+        set: { messages, updatedAt: new Date() },
+      });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /insights/history/:chatType — apaga histórico
+router.delete("/insights/history/:chatType", async (req, res, next: NextFunction): Promise<void> => {
+  try {
+    const me = await requireAuth(req, res);
+    if (!me) return;
+    const { chatType } = req.params;
+    if (chatType !== "executive" && chatType !== "tourism") {
+      next(new ValidationError("chatType inválido", "VALIDATION_ERROR"));
+      return;
+    }
+    await db
+      .delete(insightsChatHistoryTable)
+      .where(
+        and(
+          eq(insightsChatHistoryTable.tenantId, me.tenantId),
+          eq(insightsChatHistoryTable.userId, me.id),
+          eq(insightsChatHistoryTable.chatType, chatType),
+        ),
+      );
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
   }
 });
 
