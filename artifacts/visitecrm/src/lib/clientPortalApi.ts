@@ -69,6 +69,7 @@ export interface ClientReferral {
   bonusReleasesAt: string | null;
   bonusBlocked: boolean;
   reversalReason: string | null;
+  loyaltyPoints: number | null;
 }
 
 export interface ClientPortalProfile {

@@ -1224,6 +1224,29 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
       )
       .orderBy(desc(referralsTable.createdAt));
 
+    const referralIds = rows.map((r) => r.id);
+    const loyaltyPointsMap = new Map<string, number>();
+    if (referralIds.length > 0) {
+      const loyaltyTxRows = await db
+        .select({
+          referenceId: loyaltyTransactionsTable.referenceId,
+          points: loyaltyTransactionsTable.points,
+        })
+        .from(loyaltyTransactionsTable)
+        .where(
+          and(
+            eq(loyaltyTransactionsTable.tenantId, me.tenantId),
+            eq(loyaltyTransactionsTable.referenceType, "referral"),
+            inArray(loyaltyTransactionsTable.referenceId, referralIds),
+          ),
+        );
+      for (const tx of loyaltyTxRows) {
+        if (tx.referenceId) {
+          loyaltyPointsMap.set(tx.referenceId, (loyaltyPointsMap.get(tx.referenceId) ?? 0) + Number(tx.points));
+        }
+      }
+    }
+
     const completedCount = rows.filter(
       (r) => r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED,
     ).length;
@@ -1270,6 +1293,7 @@ router.get("/client/me/referrals", async (req, res, next: NextFunction): Promise
           bonusReleasesAt: bonusReleasesAt ? bonusReleasesAt.toISOString() : null,
           bonusBlocked,
           reversalReason: r.reversalReason ?? null,
+          loyaltyPoints: loyaltyPointsMap.get(r.id) ?? null,
         };
       }),
       tier: {

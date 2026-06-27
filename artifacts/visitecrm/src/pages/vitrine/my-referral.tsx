@@ -149,6 +149,12 @@ function ReferralHistoryRow({ r, primaryColor }: { r: ClientReferral; primaryCol
               : `⏳ Bônus de ${formatBRL(bonusValue)} aguardando pagamento`}
           </p>
         )}
+        {(r.status === REFERRAL_STATUS.COMPLETED || r.status === REFERRAL_STATUS.CONVERTED) && r.loyaltyPoints != null && r.loyaltyPoints > 0 && (
+          <p className="text-xs mt-0.5 font-medium text-indigo-600 inline-flex items-center gap-1">
+            <Coins className="w-3 h-3" />
+            {r.loyaltyPoints.toLocaleString("pt-BR")} pontos creditados
+          </p>
+        )}
       </div>
     </div>
   );

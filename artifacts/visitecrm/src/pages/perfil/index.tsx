@@ -2261,14 +2261,14 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; color: string }> = {
+const TRANSACTION_TYPE_MAP: Record<string, { label: string; sign: "+" | "-"; color: string; icon?: ReactElement }> = {
   earn:     { label: "Ganho",          sign: "+", color: "text-green-600" },
   redeem:   { label: "Resgate",        sign: "-", color: "text-red-600" },
   bonus:    { label: "Bônus",          sign: "+", color: "text-purple-600" },
   expire:   { label: "Expirado",       sign: "-", color: "text-orange-500" },
   refund:   { label: "Estorno",        sign: "+", color: "text-blue-600" },
   adjust:   { label: "Ajuste",         sign: "+", color: "text-slate-500" },
-  referral: { label: "Bônus indicação",sign: "+", color: "text-indigo-600" },
+  referral: { label: "Bônus indicação",sign: "+", color: "text-indigo-600", icon: <Users className="w-3.5 h-3.5" /> },
 };
 
 const TIER_BENEFITS_DEFAULT: Record<string, string[]> = {
@@ -2616,7 +2616,8 @@ function FidelidadeTab({
                   <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{t.description}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+                        {type.icon && <span className="inline-flex">{type.icon}</span>}
                         {type.label} · {new Date(t.createdAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </p>
                     </div>
