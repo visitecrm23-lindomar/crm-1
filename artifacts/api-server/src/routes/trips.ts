@@ -1642,6 +1642,9 @@ function generateManifestHtml(p: ManifestPanel): string {
     const bucket = anttBucket[pass.ageCategory] ?? "adulto";
     categoryCounts[bucket] = (categoryCounts[bucket] ?? 0) + 1;
   }
+  if (p.freePassengers.length > 0) {
+    categoryCounts["gratuidade"] = (categoryCounts["gratuidade"] ?? 0) + p.freePassengers.length;
+  }
 
   const rows = p.passengers.map((pass, i) => {
     const nome = e(pass.name);
@@ -1763,7 +1766,7 @@ function generateManifestHtml(p: ManifestPanel): string {
     <div class="meta-item"><label>Saída:</label>${depDate}${depTime ? ` às ${depTime}` : ""}</div>
     ${organizador ? `<div class="meta-item"><label>Organizador:</label>${organizador}</div>` : ""}
     ${cnpj ? `<div class="meta-item"><label>CNPJ:</label>${cnpj}</div>` : ""}
-    <div class="meta-item"><label>Total Passageiros:</label>${p.passengers.length}</div>
+    <div class="meta-item"><label>Total Passageiros:</label>${p.passengers.length + p.freePassengers.length}</div>
     <div class="meta-item"><label>Emitido em:</label>${emitidoEm}</div>
   </div>
 </div>
@@ -1850,7 +1853,7 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
     y += 12;
     if (p.tenantName) labelVal("Organizador:", p.tenantName, 0, y);
     if (p.tenantCnpj) labelVal("CNPJ:", p.tenantCnpj, colW, y);
-    labelVal("Total Passageiros:", String(p.passengers.length), colW * 2, y);
+    labelVal("Total Passageiros:", String(p.passengers.length + p.freePassengers.length), colW * 2, y);
     y += 12;
     labelVal("Emitido em:", emitidoEm, 0, y);
     y += 20;
@@ -1945,6 +1948,9 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
     for (const pass of p.passengers) {
       const bucket = anttBucket[pass.ageCategory] ?? "adulto";
       catCount[bucket] = (catCount[bucket] ?? 0) + 1;
+    }
+    if (p.freePassengers.length > 0) {
+      catCount["gratuidade"] = (catCount["gratuidade"] ?? 0) + p.freePassengers.length;
     }
     const totalsText = Object.entries(catCount).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join("  |  ");
     y += 4;
@@ -2182,7 +2188,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
         trip.manifestNumber ? `Nº Manifesto: ${trip.manifestNumber}` : null,
         panel.destinationCity ? `Destino: ${panel.destinationCity}${panel.destinationState ? `/${panel.destinationState}` : ""}` : null,
         depDate ? `Saída: ${depDate}` : null,
-        `Total de passageiros: ${manifestPassengers.length}`,
+        `Total de passageiros: ${manifestPassengers.length + panel.freePassengers.length}`,
         ``,
         `🔗 Acesso ao manifesto: ${manifestLink}`,
         ``,
