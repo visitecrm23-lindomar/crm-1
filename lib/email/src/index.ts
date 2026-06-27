@@ -28,3 +28,6 @@ export { sendAgencySuspendedEmail, sendAgencyReactivatedEmail } from './service'
 export type { AgencySuspendedEmailProps, AgencyReactivatedEmailProps } from './service';
 export { AgencySuspendedEmail } from './templates/agency-suspended';
 export { AgencyReactivatedEmail } from './templates/agency-reactivated';
+export { sendFavoriteLowAvailabilityEmail } from './service';
+export type { FavoriteLowAvailabilityEmailProps } from './service';
+export { FavoriteLowAvailabilityEmail } from './templates/favorite-low-availability';

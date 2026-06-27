@@ -15,6 +15,8 @@ import { ReferralTierUpgradeEmail, type ReferralTierUpgradeEmailProps } from './
 import { NpsSurveyEmail, type NpsSurveyEmailProps } from './templates/nps-survey';
 import { AgencySuspendedEmail, type AgencySuspendedEmailProps } from './templates/agency-suspended';
 import { AgencyReactivatedEmail, type AgencyReactivatedEmailProps } from './templates/agency-reactivated';
+import { FavoriteLowAvailabilityEmail, type FavoriteLowAvailabilityEmailProps } from './templates/favorite-low-availability';
+export type { FavoriteLowAvailabilityEmailProps };
 export type { ReferralWelcomeEmailProps };
 export type { AgencySuspendedEmailProps, AgencyReactivatedEmailProps };
 export type { ReferralTierUpgradeEmailProps };
@@ -904,6 +906,35 @@ export async function sendAgencyReactivatedEmail(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[email] Unexpected error sending agency-reactivated email:', message);
+    return { success: false, error: message };
+  }
+}
+
+export async function sendFavoriteLowAvailabilityEmail(
+  props: FavoriteLowAvailabilityEmailProps
+): Promise<SendEmailResult> {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      return { success: false, error: 'RESEND_API_KEY not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: `${props.agencyName} <reservas@resend.visitecrm.com>`,
+      to: [props.clientEmail],
+      subject: `⚠️ Últimas vagas! "${props.tripName}" está quase esgotada`,
+      react: React.createElement(FavoriteLowAvailabilityEmail, props),
+    });
+
+    if (error) {
+      console.error('[email] Failed to send favorite-low-availability email:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, messageId: data?.id };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Unexpected error sending favorite-low-availability email:', message);
     return { success: false, error: message };
   }
 }

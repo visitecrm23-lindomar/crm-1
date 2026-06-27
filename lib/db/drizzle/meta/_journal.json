@@ -190,6 +190,13 @@
       "when": 1802500000000,
       "tag": "0026_deal_follow_up_note",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1802600000000,
+      "tag": "0027_favorite_low_availability_notified_at",
+      "breakpoints": true
     }
   ]
 }

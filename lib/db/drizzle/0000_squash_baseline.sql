@@ -1507,7 +1507,8 @@ CREATE TABLE IF NOT EXISTS "client_favorites" (
         "client_id" text NOT NULL,
         "item_type" text NOT NULL,
         "item_id" text NOT NULL,
-        "created_at" timestamp with time zone DEFAULT now() NOT NULL
+        "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+        "low_availability_notified_at" timestamp with time zone
 );;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "ai_integration_logs" (

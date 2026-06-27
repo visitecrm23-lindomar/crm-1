@@ -15,6 +15,7 @@ export const clientFavoritesTable = pgTable(
     itemType: text("item_type").notNull(),
     itemId: text("item_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lowAvailabilityNotifiedAt: timestamp("low_availability_notified_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("client_favorites_unique_idx").on(table.clientId, table.itemType, table.itemId),
