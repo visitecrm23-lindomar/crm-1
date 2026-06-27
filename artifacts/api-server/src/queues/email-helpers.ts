@@ -437,6 +437,8 @@ export async function buildEmailPropsFromReservation(
       balance: reservationsTable.balance,
       paymentMethod: reservationsTable.paymentMethod,
       seats: reservationsTable.seats,
+      discountReferralAmount: reservationsTable.discountReferralAmount,
+      discountCouponAmount: reservationsTable.discountCouponAmount,
       clientName: clientsTable.name,
       clientEmail: clientsTable.email,
       clientCpf: clientsTable.cpf,
@@ -452,11 +454,14 @@ export async function buildEmailPropsFromReservation(
       agencyEmail: tenantsTable.email,
       agencyWebsite: tenantsTable.website,
       tenantSlug: tenantsTable.slug,
+      referralDiscountType: referralSettingsTable.discountType,
+      referralDiscountValue: referralSettingsTable.discountValue,
     })
     .from(reservationsTable)
     .innerJoin(clientsTable, eq(reservationsTable.clientId, clientsTable.id))
     .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
     .innerJoin(tenantsTable, eq(reservationsTable.tenantId, tenantsTable.id))
+    .leftJoin(referralSettingsTable, eq(referralSettingsTable.tenantId, tenantsTable.id))
     .where(and(eq(reservationsTable.id, reservationId), eq(reservationsTable.tenantId, tenantId)))
     .limit(1);
 
@@ -490,6 +495,13 @@ export async function buildEmailPropsFromReservation(
   const consultUrl = `${publicBase}/reservas`;
   const profileUrl = `${publicBase}/perfil?tab=reservas`;
 
+  const discountReferralAmt = Number(row.discountReferralAmount ?? 0);
+  const discountCouponAmt = Number(row.discountCouponAmount ?? 0);
+  const discountReferralPercent =
+    discountReferralAmt > 0 && row.referralDiscountType === "percentage" && row.referralDiscountValue
+      ? Number(row.referralDiscountValue)
+      : undefined;
+
   return {
     reservationNumber: row.reservationNumber ?? row.voucherCode ?? "",
     voucherCode: row.voucherCode ?? "",
@@ -507,6 +519,9 @@ export async function buildEmailPropsFromReservation(
     amountPending: balanceVal,
     paymentMethod: row.paymentMethod ?? "pix",
     paymentStatus,
+    discountReferralAmount: discountReferralAmt > 0 ? discountReferralAmt : undefined,
+    discountReferralPercent,
+    discountCouponAmount: discountCouponAmt > 0 ? discountCouponAmt : undefined,
     agencyName: row.agencyName,
     agencyLogo: row.agencyLogo ?? "",
     agencyPhone,

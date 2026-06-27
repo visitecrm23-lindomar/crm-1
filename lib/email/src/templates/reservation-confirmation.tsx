@@ -39,6 +39,12 @@ export interface ReservationConfirmationEmailProps {
   amountPending: number
   paymentMethod: string
   paymentStatus: 'pending' | 'partial' | 'paid'
+  /** Referral discount amount applied to this reservation (> 0 when present). */
+  discountReferralAmount?: number
+  /** Percentage value of the referral discount (e.g. 5 for 5%), only set when the discount type is "percentage". */
+  discountReferralPercent?: number
+  /** Coupon discount amount applied to this reservation (> 0 when present). */
+  discountCouponAmount?: number
   agencyName: string
   agencyLogo: string
   agencyPhone: string
@@ -70,6 +76,9 @@ export function ReservationConfirmationEmail({
   amountPending,
   paymentMethod,
   paymentStatus,
+  discountReferralAmount,
+  discountReferralPercent,
+  discountCouponAmount,
   agencyName,
   agencyLogo,
   agencyPhone,
@@ -181,6 +190,24 @@ export function ReservationConfirmationEmail({
 
             <table style={financialTable}>
               <tbody>
+                {(discountReferralAmount ?? 0) > 0 && (
+                  <tr>
+                    <td style={financialLabel}>
+                      Desconto de Indicação{discountReferralPercent ? ` (${discountReferralPercent}%)` : ''}:
+                    </td>
+                    <td style={financialValueDiscount}>
+                      -R$ {discountReferralAmount!.toFixed(2).replace('.', ',')}
+                    </td>
+                  </tr>
+                )}
+                {(discountCouponAmount ?? 0) > 0 && (
+                  <tr>
+                    <td style={financialLabel}>Desconto de Cupom:</td>
+                    <td style={financialValueDiscount}>
+                      -R$ {discountCouponAmount!.toFixed(2).replace('.', ',')}
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td style={financialLabel}>Valor Total:</td>
                   <td style={financialValue}>R$ {totalAmount.toFixed(2).replace('.', ',')}</td>
@@ -567,6 +594,14 @@ const financialValue: React.CSSProperties = {
 }
 
 const financialValuePaid: React.CSSProperties = {
+  fontSize: '16px',
+  color: '#10b981',
+  fontWeight: '600',
+  textAlign: 'right',
+  padding: '12px 0',
+}
+
+const financialValueDiscount: React.CSSProperties = {
   fontSize: '16px',
   color: '#10b981',
   fontWeight: '600',
