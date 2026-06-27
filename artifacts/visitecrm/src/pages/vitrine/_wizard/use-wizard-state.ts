@@ -424,6 +424,16 @@ export function useWizardState({
         createdAt: order.createdAt,
         reservationExpiresAt: order.reservationExpiresAt,
       });
+      const tok = order.paymentToken as string | null ?? null;
+      if (tok) {
+        try {
+          localStorage.setItem("pending_order_lookup", JSON.stringify({
+            orderNumber: order.orderNumber,
+            token: tok,
+            storeSlug: slug,
+          }));
+        } catch { /* ignore quota errors */ }
+      }
       localStorage.removeItem("referral_code");
       localStorage.removeItem("referral_code_expiry");
       localStorage.removeItem("referral_referrer_name");

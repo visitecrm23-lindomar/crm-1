@@ -1089,6 +1089,7 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
       completedAt: storeOrdersTable.completedAt,
       cancelledAt: storeOrdersTable.cancelledAt,
       createdAt: storeOrdersTable.createdAt,
+      pendingReferral: storeOrdersTable.pendingReferral,
       storedPaymentToken: storeOrdersTable.paymentToken,
     }).from(storeOrdersTable)
       .where(and(
@@ -1131,9 +1132,42 @@ router.get("/public/store/:slug/orders/:orderNumber", async (req, res, next: Nex
         variantLabel,
       };
     });
+
+    // Derive discount breakdown from pendingReferral JSON.
+    // Coupon and referral code are mutually exclusive per business logic.
+    const referralData = order.pendingReferral as {
+      discountValue?: number;
+      discountType?: string;
+      code?: string;
+    } | null;
+    const subtotalNum = parseFloat(order.subtotal ?? "0");
+    let referralDiscountAmount = 0;
+    let referralDiscountType: string | null = null;
+    let referralDiscountPct: number | null = null;
+    if (referralData?.discountType && referralData?.discountValue != null) {
+      referralDiscountType = referralData.discountType;
+      if (referralData.discountType === "percentage") {
+        referralDiscountPct = referralData.discountValue;
+        referralDiscountAmount = Math.round(subtotalNum * (referralData.discountValue / 100) * 100) / 100;
+      } else {
+        referralDiscountAmount = Math.min(referralData.discountValue, subtotalNum);
+      }
+    }
+    const totalDiscountNum = parseFloat(order.discountAmount ?? "0");
+    const couponDiscountAmount = order.couponCode
+      ? Math.max(0, totalDiscountNum - referralDiscountAmount)
+      : 0;
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { storedPaymentToken: _tok, ...safeOrder } = order;
-    res.json({ ...safeOrder, items });
+    const { storedPaymentToken: _tok, pendingReferral: _pr, ...safeOrder } = order;
+    res.json({
+      ...safeOrder,
+      items,
+      referralDiscountType,
+      referralDiscountPct,
+      referralDiscountAmount,
+      couponDiscountAmount,
+    });
   } catch (err) {
     next(err);
   }

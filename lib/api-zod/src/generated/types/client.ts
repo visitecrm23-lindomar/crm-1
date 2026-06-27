@@ -66,6 +66,11 @@ export interface Client {
   companyNps?: number | null;
   travelInterests: string[];
   /** @nullable */
+  travelPreference?: string | null;
+  preferredDestinationTypes?: string[];
+  /** @nullable */
+  likesPhotosVideos?: boolean | null;
+  /** @nullable */
   ambassadorOptIn?: boolean | null;
   /** @nullable */
   customerCode?: string | null;

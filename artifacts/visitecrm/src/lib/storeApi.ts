@@ -536,6 +536,10 @@ export interface StoreOrder {
   items: StoreOrderItem[];
   paymentToken?: string | null;
   reservationExpiresAt?: string | null;
+  referralDiscountType?: string | null;
+  referralDiscountPct?: number | null;
+  referralDiscountAmount?: number | null;
+  couponDiscountAmount?: number | null;
 }
 
 export interface StoreCoupon {

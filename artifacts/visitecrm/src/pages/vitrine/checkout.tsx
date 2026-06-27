@@ -497,7 +497,17 @@ export default function VitrineCheckout({
         notes: form.notes || undefined,
       });
       setOrderNumber(order.orderNumber);
-      setPaymentToken(order.paymentToken as string ?? null);
+      const tok = order.paymentToken as string ?? null;
+      setPaymentToken(tok);
+      if (tok) {
+        try {
+          localStorage.setItem("pending_order_lookup", JSON.stringify({
+            orderNumber: order.orderNumber,
+            token: tok,
+            storeSlug: slug,
+          }));
+        } catch { /* ignore quota errors */ }
+      }
       if (order.reservationExpiresAt) {
         setReservationExpiresAt(order.reservationExpiresAt);
         localStorage.setItem("pending_order", JSON.stringify({
