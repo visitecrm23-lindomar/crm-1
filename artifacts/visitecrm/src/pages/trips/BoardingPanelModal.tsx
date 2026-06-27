@@ -4,7 +4,7 @@ import {
   useGetTripBoardingPanel, useListReservations, useCheckInPassenger, useUndoCheckInPassenger,
   useSyncTripPassengers, useUpdatePassengerBoarding, useCheckInFreePassenger, useUndoCheckInFreePassenger,
 } from "@workspace/api-client-react";
-import type { BoardingPassenger } from "@workspace/api-client-react";
+import type { BoardingPassenger, FreePassenger } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -162,13 +162,39 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
   }, [passengers, search, boardingFilter]);
 
   const filteredFree = useMemo(() => {
-    if (!search) return freePassengers;
-    const q = search.toLowerCase();
-    return freePassengers.filter(fp =>
-      fp.name.toLowerCase().includes(q) ||
-      (fp.seatNumber ?? "").toLowerCase().includes(q)
-    );
-  }, [freePassengers, search]);
+    let list = freePassengers;
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(fp =>
+        fp.name.toLowerCase().includes(q) ||
+        (fp.seatNumber ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (boardingFilter !== "__all__") {
+      list = boardingFilter === "__none__" ? list : [];
+    }
+    return list;
+  }, [freePassengers, search, boardingFilter]);
+
+  const combinedList = useMemo(() => {
+    const rows: ({ kind: "paid"; p: BoardingPassenger } | { kind: "free"; fp: FreePassenger })[] = [
+      ...filtered.map(p => ({ kind: "paid" as const, p })),
+      ...filteredFree.map(fp => ({ kind: "free" as const, fp })),
+    ];
+    const seatNum = (s: string | null | undefined) => {
+      const n = s ? parseInt(s, 10) : NaN;
+      return isNaN(n) ? null : n;
+    };
+    rows.sort((a, b) => {
+      const na = seatNum(a.kind === "paid" ? a.p.seatNumber : a.fp.seatNumber);
+      const nb = seatNum(b.kind === "paid" ? b.p.seatNumber : b.fp.seatNumber);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return 0;
+    });
+    return rows;
+  }, [filtered, filteredFree]);
 
   const boardingCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -356,7 +382,60 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                   <p className="text-sm">{passengers.length === 0 && freePassengers.length === 0 ? "Nenhum passageiro cadastrado nesta viagem" : "Nenhum resultado encontrado"}</p>
                 </div>
               ) : (<>
-              {filtered.map(p => {
+              {combinedList.map(row => {
+                if (row.kind === "free") {
+                  const fp = row.fp;
+                  const roleLabel = fp.role === "organizer" ? "Organizador" : fp.role === "guide" ? "Guia" : fp.role;
+                  const isFreeCheckedIn = !!fp.checkedInAt;
+                  return (
+                    <div key={`free-${fp.id}`} className={`p-3 rounded-lg border ${isFreeCheckedIn ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {fp.seatNumber && (
+                              <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}{seatPositionLabel(fp.seatNumber, panel?.numberingType)}</span>
+                            )}
+                            <span className="font-medium text-sm">{fp.name}</span>
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
+                              <Star className="w-3 h-3" />
+                              Gratuidade
+                            </span>
+                            {isFreeCheckedIn && (
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
+                                <CheckCircle className="w-3 h-3" />
+                                {new Date(fp.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
+                            {fp.cpf && <span>CPF: {fp.cpf}</span>}
+                            <span>{roleLabel}</span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 ml-2">
+                          {isFreeCheckedIn ? (
+                            <Button
+                              size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
+                              onClick={() => handleFreeUndoCheckIn(fp)}
+                              disabled={undoCheckInFree.isPending}
+                            >
+                              <RotateCcw className="w-3 h-3" /> Desfazer
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                              onClick={() => handleFreeCheckIn(fp)}
+                              disabled={checkInFree.isPending}
+                            >
+                              <LogIn className="w-3 h-3" /> Embarcar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                const p = row.p;
                 const isCheckedIn = !!p.checkedInAt;
                 const currentLocationId = p.boardingLocationId ?? "";
                 const isUpdatingThis = updatingLocationId === p.id;
@@ -457,66 +536,6 @@ export function BoardingPanelModal({ tripId, tripName, open, onClose }: { tripId
                   </div>
                 );
               })}
-              {filteredFree.length > 0 && (
-                <>
-                  <div className="flex items-center gap-2 pt-2 pb-1">
-                    <Star className="w-3.5 h-3.5 text-purple-500" />
-                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Gratuidades</span>
-                    <span className="text-xs text-muted-foreground">({filteredFree.length})</span>
-                  </div>
-                  {filteredFree.map(fp => {
-                    const roleLabel = fp.role === "organizer" ? "Organizador" : fp.role === "guide" ? "Guia" : fp.role;
-                    const isFreeCheckedIn = !!fp.checkedInAt;
-                    return (
-                      <div key={fp.id} className={`p-3 rounded-lg border ${isFreeCheckedIn ? "bg-green-50 border-green-200" : "bg-purple-50 border-purple-200"}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {fp.seatNumber && (
-                                <span className="font-mono text-xs bg-gray-100 border border-gray-300 px-2 py-0.5 rounded font-bold">{fp.seatNumber}{seatPositionLabel(fp.seatNumber, panel?.numberingType)}</span>
-                              )}
-                              <span className="font-medium text-sm">{fp.name}</span>
-                              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-semibold border border-purple-200">
-                                <Star className="w-3 h-3" />
-                                Gratuidade
-                              </span>
-                              {isFreeCheckedIn && (
-                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold border border-green-200">
-                                  <CheckCircle className="w-3 h-3" />
-                                  {new Date(fp.checkedInAt!).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex gap-3 mt-0.5 flex-wrap text-xs text-muted-foreground">
-                              {fp.cpf && <span>CPF: {fp.cpf}</span>}
-                              <span>{roleLabel}</span>
-                            </div>
-                          </div>
-                          <div className="shrink-0 ml-2">
-                            {isFreeCheckedIn ? (
-                              <Button
-                                size="sm" variant="outline" className="h-8 text-xs text-muted-foreground gap-1"
-                                onClick={() => handleFreeUndoCheckIn(fp)}
-                                disabled={undoCheckInFree.isPending}
-                              >
-                                <RotateCcw className="w-3 h-3" /> Desfazer
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
-                                onClick={() => handleFreeCheckIn(fp)}
-                                disabled={checkInFree.isPending}
-                              >
-                                <LogIn className="w-3 h-3" /> Embarcar
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
               </>)}
             </div>
           </>
