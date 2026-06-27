@@ -63,6 +63,7 @@ import {
   Camera,
   Crown,
   Medal,
+  Sparkles,
 } from "lucide-react";
 import { formatCurrencyBRL as fmtCurrency, formatDateShort } from "@/lib/utils";
 import { formatBRL } from "@workspace/shared";
@@ -816,6 +817,118 @@ function BirthdayGreetingCard({
   );
 }
 
+function hasAnyPreference(client: ClientPortalProfile["client"]): boolean {
+  if (!client) return false;
+  return !!(
+    client.musicalPreferences ||
+    client.favoriteDrink ||
+    client.dreamDestinations.length > 0 ||
+    client.foodPreferences ||
+    client.travelPreference ||
+    client.travelInterests.length > 0 ||
+    client.likesPhotosVideos !== null ||
+    client.preferredDestinationTypes.length > 0
+  );
+}
+
+function PreferencesSummaryCard({
+  client,
+  onGoToPreferences,
+}: {
+  client: ClientPortalProfile["client"];
+  onGoToPreferences: () => void;
+}) {
+  const filled = hasAnyPreference(client);
+
+  if (!filled) {
+    return (
+      <button
+        type="button"
+        className="w-full text-left flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 hover:bg-violet-100 transition-colors"
+        onClick={onGoToPreferences}
+      >
+        <Sparkles className="w-5 h-5 text-violet-500 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-violet-800">Personalize sua experiência</p>
+          <p className="text-xs text-violet-600 mt-0.5">
+            Conte-nos seus destinos dos sonhos e preferências de viagem para recomendações personalizadas.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+      </button>
+    );
+  }
+
+  const destinations = client?.dreamDestinations ?? [];
+  const travelPreference = client?.travelPreference ?? null;
+  const destinationTypes = client?.preferredDestinationTypes ?? [];
+  const interests = client?.travelInterests ?? [];
+
+  const visibleDestinations = destinations.slice(0, 4);
+  const extraDestinations = destinations.length - visibleDestinations.length;
+
+  return (
+    <button
+      type="button"
+      className="w-full text-left rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 hover:bg-violet-100 transition-colors"
+      onClick={onGoToPreferences}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
+          <p className="text-sm font-semibold text-violet-800">Suas preferências</p>
+        </div>
+        <span className="text-xs text-violet-500 flex items-center gap-0.5">
+          Editar <ArrowRight className="w-3 h-3" />
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {visibleDestinations.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs text-violet-600 shrink-0">
+              <Globe className="w-3 h-3 inline mr-0.5" />
+              Sonhos:
+            </span>
+            {visibleDestinations.map((d) => (
+              <span
+                key={d}
+                className="inline-flex items-center px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium border border-violet-200"
+              >
+                {d}
+              </span>
+            ))}
+            {extraDestinations > 0 && (
+              <span className="text-xs text-violet-500">+{extraDestinations}</span>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-violet-600">
+          {travelPreference && (
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {travelPreference}
+            </span>
+          )}
+          {destinationTypes.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Map className="w-3 h-3" />
+              {destinationTypes.slice(0, 2).join(", ")}
+              {destinationTypes.length > 2 ? ` +${destinationTypes.length - 2}` : ""}
+            </span>
+          )}
+          {interests.length > 0 && (
+            <span className="flex items-center gap-1">
+              <Heart className="w-3 h-3" />
+              {interests.slice(0, 2).join(", ")}
+              {interests.length > 2 ? ` +${interests.length - 2}` : ""}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function InicioTab({
   profile,
   primaryColor,
@@ -1000,6 +1113,11 @@ function InicioTab({
           ))}
         </div>
       )}
+
+      <PreferencesSummaryCard
+        client={profile.client}
+        onGoToPreferences={() => onTabChange("preferencias")}
+      />
 
       {nextTrip && (
         <div>
