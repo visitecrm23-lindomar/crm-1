@@ -4,6 +4,7 @@ import {
   useGetRevenueForecast,
   useGetOccupancyRisk,
   useRunSimulator,
+  useGetMe,
 } from "@workspace/api-client-react";
 import type { GetInsightsSummaryPeriod } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import {
   ShoppingCart, Zap, Package, Heart, Globe,
   ArrowUpRight, ArrowDownRight, Mail, Send, MousePointerClick, CheckCircle2,
   Repeat2, UserCheck, Award, Navigation, Bot, MessageCircle, X, ChevronUp,
-  Sparkles, SlidersHorizontal, AlertTriangle, Loader2, RefreshCw,
+  Sparkles, SlidersHorizontal, AlertTriangle, Loader2, RefreshCw, Plus,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -211,11 +212,55 @@ function StreamingChat({
   heightClass?: string;
 }) {
   const { getToken } = useAuth();
+  const { data: me } = useGetMe();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const tenantId = me?.tenantId ?? "anon";
+  const storageKey = `visitecrm:insights-chat:${tenantId}:${endpoint}`;
+  const loadedKeyRef = useRef<string | null>(null);
+
+  // Restore persisted history when the tenant/endpoint key becomes known.
+  useEffect(() => {
+    if (loadedKeyRef.current === storageKey) return;
+    loadedKeyRef.current = storageKey;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChatMessage[];
+        if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
+      }
+    } catch {
+      // ignore corrupt or unavailable storage
+    }
+  }, [storageKey]);
+
+  // Persist completed conversation per-tenant (skip mid-stream partials).
+  useEffect(() => {
+    if (isStreaming) return;
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem(storageKey, JSON.stringify(messages));
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // ignore storage quota / availability errors
+    }
+  }, [messages, isStreaming, storageKey]);
+
+  function clearConversation() {
+    setMessages([]);
+    setInput("");
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -308,6 +353,20 @@ function StreamingChat({
 
   return (
     <div className={`flex flex-col ${heightClass}`}>
+      {!isEmpty && (
+        <div className="flex justify-end border-b px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearConversation}
+            disabled={isStreaming}
+            className="gap-1.5 text-muted-foreground"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Nova conversa
+          </Button>
+        </div>
+      )}
       {isEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
           <div className="p-4 rounded-full bg-primary/10">
