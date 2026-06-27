@@ -322,13 +322,13 @@ function ClientCardContent({ deal, tripsById, onEditClient, onView360, onDelete,
                 Loja
               </span>
             )}
-            {deal.marking === "follow" && (
+            {!!deal.followUpNote && !deal.lostReason && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
                 <Bell className="w-2.5 h-2.5" />
                 Follow
               </span>
             )}
-            {deal.marking === "perdida" && (
+            {!!deal.lostReason && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-100 shrink-0">
                 <XCircle className="w-2.5 h-2.5" />
                 Perdida
