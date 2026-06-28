@@ -1566,6 +1566,7 @@ type ManifestPassenger = {
 type ManifestPanel = {
   tripName: string;
   departureDate: string;
+  departureTime: string | null;
   tenantName: string;
   tenantCnpj: string | null;
   manifestNumber: string | null;
@@ -1613,8 +1614,7 @@ function generateManifestHtml(p: ManifestPanel): string {
   const tripName = e(p.tripName);
   const destination = p.destinationCity && p.destinationState ? e(`${p.destinationCity}/${p.destinationState}`) : "";
   const depDate = p.departureDate ? format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }) : "";
-  const depTimeRaw = p.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
-  const depTime = depTimeRaw && depTimeRaw !== "00:00" ? e(depTimeRaw) : "";
+  const depTime = p.departureTime ? e(p.departureTime) : "";
   const emitidoEm = e(new Date().toLocaleString("pt-BR"));
   const organizador = e(p.tenantName ?? "");
   const cnpj = e(p.tenantCnpj ?? "");
@@ -1827,8 +1827,7 @@ function generateManifestPdf(p: ManifestPanel): Promise<Buffer> {
     const bpMap = new Map(p.boardingPoints.map(bp => [bp.id, bp.name]));
     const getBpName = (id: string | null | undefined) => (id ? bpMap.get(id) ?? id : "—");
     const depDate = p.departureDate ? format(parseISO(p.departureDate), "dd/MM/yyyy", { locale: ptBR }) : "";
-    const depTimeRaw = p.departureDate ? format(parseISO(p.departureDate), "HH:mm") : "";
-    const depTime = depTimeRaw && depTimeRaw !== "00:00" ? ` às ${depTimeRaw}` : "";
+    const depTime = p.departureTime ? ` às ${p.departureTime}` : "";
     const emitidoEm = new Date().toLocaleString("pt-BR");
     const pageWidth = 595 - 72;
 
@@ -2092,6 +2091,7 @@ router.post("/trips/:id/manifest/send", async (req, res, next: NextFunction): Pr
     const panel: ManifestPanel = {
       tripName: trip.name,
       departureDate: trip.departureDate.toISOString(),
+      departureTime: trip.departureTime ?? null,
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
       manifestNumber: trip.manifestNumber ?? null,
@@ -2273,6 +2273,7 @@ router.get("/trips/:id/manifest/pdf", async (req, res, next: NextFunction): Prom
     const panel: ManifestPanel = {
       tripName: trip.name,
       departureDate: trip.departureDate.toISOString(),
+      departureTime: trip.departureTime ?? null,
       tenantName: tenant?.name ?? "",
       tenantCnpj: tenant?.cnpj ?? null,
       manifestNumber: trip.manifestNumber ?? null,
