@@ -116,7 +116,16 @@ const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 // Replit preview domain changes per session so it can never be registered.
 // Clerk v6 handles cross-site iframe auth via localStorage fallback without a proxy.
 // Empty in dev (Clerk hits dev FAPI directly), auto-set by Replit in prod.
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+// If VITE_CLERK_PROXY_URL contains multiple comma-separated entries (one per custom domain),
+// pick the one whose origin matches the current window hostname. Falls back to the first entry.
+const clerkProxyUrl = (() => {
+  const raw: string = import.meta.env.VITE_CLERK_PROXY_URL ?? "";
+  if (!raw) return undefined;
+  const entries = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (entries.length <= 1) return entries[0];
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  return entries.find((u) => u.startsWith(currentOrigin)) ?? entries[0];
+})();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
