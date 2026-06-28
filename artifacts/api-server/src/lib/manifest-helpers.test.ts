@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import PDFDocument from "pdfkit";
 import {
   generateManifestHtml,
   generateManifestPdf,
@@ -143,6 +144,10 @@ describe("generateManifestHtml", () => {
 // ─── generateManifestPdf ─────────────────────────────────────────────────────
 
 describe("generateManifestPdf", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("resolves with a non-empty Buffer", async () => {
     const buf = await generateManifestPdf(basePanel());
     expect(buf).toBeInstanceOf(Buffer);
@@ -154,9 +159,36 @@ describe("generateManifestPdf", () => {
     expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
 
-  it("resolves without error when departureTime is null", async () => {
+  it("renders departure date as dd/MM/yyyy in the PDF", async () => {
+    const spy = vi.spyOn(PDFDocument.prototype as any, "text");
+    const buf = await generateManifestPdf(basePanel());
+    expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    const rendered = spy.mock.calls
+      .map(call => (typeof call[0] === "string" ? call[0] : ""))
+      .join(" ");
+    expect(rendered).toContain("04/07/2026");
+  });
+
+  it("renders departureTime from the stored field, not extracted from the ISO timestamp", async () => {
+    const spy = vi.spyOn(PDFDocument.prototype as any, "text");
+    const buf = await generateManifestPdf(basePanel());
+    expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    const rendered = spy.mock.calls
+      .map(call => (typeof call[0] === "string" ? call[0] : ""))
+      .join(" ");
+    expect(rendered).toContain("08:30");
+    expect(rendered).not.toContain("15:00");
+  });
+
+  it("omits time suffix in PDF when departureTime is null", async () => {
+    const spy = vi.spyOn(PDFDocument.prototype as any, "text");
     const buf = await generateManifestPdf({ ...basePanel(), departureTime: null });
     expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    const rendered = spy.mock.calls
+      .map(call => (typeof call[0] === "string" ? call[0] : ""))
+      .join(" ");
+    expect(rendered).toContain("04/07/2026");
+    expect(rendered).not.toContain("às");
   });
 
   it("resolves without error when passengers list is empty", async () => {
