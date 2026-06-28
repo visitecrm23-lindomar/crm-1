@@ -30,6 +30,10 @@ import { parseTripStatus } from "../lib/status-validators";
 
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from "../lib/errors";
 
+function parseBrazilDate(dateStr: string): Date {
+  return new Date(dateStr + "T12:00:00.000-03:00");
+}
+
 const ListTripsQuery = z.object({
   search: z.string().optional(),
   status: z.enum(["draft", "published", "active", "confirmed", "cancelled", "completed"]).optional(),
@@ -376,8 +380,8 @@ router.post("/trips", async (req, res, next: NextFunction): Promise<void> => {
       destinationState: parsed.data.destinationState,
       type: parsed.data.type,
       category: parsed.data.category,
-      departureDate: new Date(parsed.data.departureDate),
-      returnDate: parsed.data.returnDate ? new Date(parsed.data.returnDate) : null,
+      departureDate: parseBrazilDate(parsed.data.departureDate),
+      returnDate: parsed.data.returnDate ? parseBrazilDate(parsed.data.returnDate) : null,
       totalCapacity,
       availableSeats: totalCapacity,
       priceAdult: String(parsed.data.priceAdult),
@@ -461,8 +465,8 @@ router.patch("/trips/:id", async (req, res, next: NextFunction): Promise<void> =
     if (parsed.data.status != null) updates.status = parseTripStatus(parsed.data.status);
     if (parsed.data.isPublic != null) updates.isPublic = parsed.data.isPublic;
     if (parsed.data.isFeatured != null) updates.isFeatured = parsed.data.isFeatured;
-    if (parsed.data.departureDate != null) updates.departureDate = new Date(parsed.data.departureDate);
-    if (parsed.data.returnDate !== undefined) updates.returnDate = parsed.data.returnDate ? new Date(parsed.data.returnDate) : null;
+    if (parsed.data.departureDate != null) updates.departureDate = parseBrazilDate(parsed.data.departureDate);
+    if (parsed.data.returnDate !== undefined) updates.returnDate = parsed.data.returnDate ? parseBrazilDate(parsed.data.returnDate) : null;
     if (parsed.data.priceAdult != null) updates.priceAdult = String(parsed.data.priceAdult);
     if (parsed.data.priceChild !== undefined) updates.priceChild = parsed.data.priceChild ? String(parsed.data.priceChild) : null;
     if (parsed.data.priceSenior !== undefined) updates.priceSenior = parsed.data.priceSenior ? String(parsed.data.priceSenior) : null;

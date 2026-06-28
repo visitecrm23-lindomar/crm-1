@@ -211,6 +211,13 @@
       "when": 1802800000000,
       "tag": "0029_insights_chat_history",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1802900000000,
+      "tag": "0030_fix_trip_dates_timezone",
+      "breakpoints": true
     }
   ]
 }
