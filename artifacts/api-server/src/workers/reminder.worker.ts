@@ -76,6 +76,8 @@ async function processBoardingReminders(): Promise<void> {
       clientEmail: clientsTable.email,
       clientExpoPushToken: clientsTable.expoPushToken,
       agencyName: tenantsTable.name,
+      agencySlug: tenantsTable.slug,
+      agencyWebsite: tenantsTable.website,
     })
     .from(reservationsTable)
     .innerJoin(tripsTable, eq(reservationsTable.tripId, tripsTable.id))
@@ -123,6 +125,16 @@ async function processBoardingReminders(): Promise<void> {
   <h3 style="color:#374151">Pontos de Embarque:</h3>
   <ul style="line-height:1.8">${boardingHtml}</ul>
   <p>Não esqueça de levar seu documento de identidade e o voucher de reserva.</p>
+  ${(() => {
+    const STORE_PUBLIC_BASE = (process.env["STORE_PUBLIC_URL"] ?? "https://visitecrm.com").replace(/\/$/, "");
+    const rawBase = (row.agencyWebsite ?? `${STORE_PUBLIC_BASE}/loja/${row.agencySlug}`).replace(/\/$/, "");
+    if (!/^https?:\/\//i.test(rawBase)) return "";
+    const safeBase = rawBase.replace(/"/g, "%22");
+    const profileUrl = `${safeBase}/perfil?tab=reservas`;
+    return `<p style="text-align:center;margin:24px 0;">
+    <a href="${profileUrl}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;display:inline-block;font-size:14px;">🎒 Minhas Reservas</a>
+  </p>`;
+  })()}
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
   <p style="font-size:13px;color:#6b7280">
     <strong>${escapeHtml(row.agencyName)}</strong><br>

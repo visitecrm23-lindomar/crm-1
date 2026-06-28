@@ -289,7 +289,8 @@ function buildApp() {
  */
 function setupManifestDbMocks(trip = FAKE_TRIP, tenant = FAKE_TENANT) {
   mockWhere.mockReturnValueOnce({ limit: mockLimit });   // call 1: trips → .limit()
-  mockWhere.mockResolvedValueOnce([] as unknown[]);      // call 2: reservations (no .limit())
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (mockWhere as any).mockResolvedValueOnce([]);          // call 2: reservations (no .limit())
   mockWhere.mockReturnValueOnce({ limit: mockLimit });   // call 3: tenants → .limit()
   mockLimit.mockResolvedValueOnce([trip]);
   mockLimit.mockResolvedValueOnce([tenant]);
@@ -462,7 +463,8 @@ describe("POST /api/trips/:id/manifest/send — manifest send route wiring", () 
     requireAuthMock.mockResolvedValue(FAKE_ADMIN as never);
     // whatsapp path: trip + reservations (no audit after — actually it does insert audit)
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
-    mockWhere.mockResolvedValueOnce([] as unknown[]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (mockWhere as any).mockResolvedValueOnce([]);
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
     mockLimit.mockResolvedValueOnce([FAKE_TRIP]);
     mockLimit.mockResolvedValueOnce([FAKE_TENANT]);
