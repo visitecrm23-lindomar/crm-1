@@ -288,13 +288,11 @@ function buildApp() {
  *   3. tenants (with .limit(1))
  */
 function setupManifestDbMocks(trip = FAKE_TRIP, tenant = FAKE_TENANT) {
-  mockWhere
-    .mockReturnValueOnce({ limit: mockLimit })  // call 1: trips → .limit()
-    .mockResolvedValueOnce([])                   // call 2: reservations (no .limit())
-    .mockReturnValueOnce({ limit: mockLimit }); // call 3: tenants → .limit()
-  mockLimit
-    .mockResolvedValueOnce([trip])
-    .mockResolvedValueOnce([tenant]);
+  mockWhere.mockReturnValueOnce({ limit: mockLimit });   // call 1: trips → .limit()
+  mockWhere.mockResolvedValueOnce([] as unknown[]);      // call 2: reservations (no .limit())
+  mockWhere.mockReturnValueOnce({ limit: mockLimit });   // call 3: tenants → .limit()
+  mockLimit.mockResolvedValueOnce([trip]);
+  mockLimit.mockResolvedValueOnce([tenant]);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -463,13 +461,11 @@ describe("POST /api/trips/:id/manifest/send — manifest send route wiring", () 
   it("returns whatsapp URL for whatsapp channel", async () => {
     requireAuthMock.mockResolvedValue(FAKE_ADMIN as never);
     // whatsapp path: trip + reservations (no audit after — actually it does insert audit)
-    mockWhere
-      .mockReturnValueOnce({ limit: mockLimit })
-      .mockResolvedValueOnce([])
-      .mockReturnValueOnce({ limit: mockLimit });
-    mockLimit
-      .mockResolvedValueOnce([FAKE_TRIP])
-      .mockResolvedValueOnce([FAKE_TENANT]);
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockWhere.mockResolvedValueOnce([] as unknown[]);
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([FAKE_TRIP]);
+    mockLimit.mockResolvedValueOnce([FAKE_TENANT]);
 
     const res = await request(buildApp())
       .post("/api/trips/trip-001/manifest/send")
