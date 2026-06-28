@@ -116,9 +116,14 @@ const replitDomains = (process.env["REPLIT_DOMAINS"] ?? "")
   .filter(Boolean)
   .map((d) => (d.startsWith("https://") || d.startsWith("http://") ? d : `https://${d}`));
 
+const frontendUrls = (process.env["FRONTEND_URL"] ?? "")
+  .split(",")
+  .map((u) => u.trim())
+  .filter(Boolean);
+
 const ALLOWED_ORIGINS = new Set(
   [
-    process.env["FRONTEND_URL"],
+    ...frontendUrls,
     process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
     ...replitDomains,
     ...additionalOrigins,
@@ -204,7 +209,7 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
 });
 
 const authorizedParties = [
-  process.env["FRONTEND_URL"],
+  ...frontendUrls,
   process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : undefined,
   ...replitDomains,
   ...additionalOrigins,
